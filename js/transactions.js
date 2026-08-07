@@ -364,8 +364,6 @@ function init() {
     heading: "Transactions",
     subtitle: "Every buy, sell, dividend and cash movement, dated and sourced.",
   });
-  initOwnerAccessModal();
-  initOwnerAccessButton($("owner-access-slot"));
   initAuthModal();
   initAuthButton($("auth-slot"));
   initTransactionModal();

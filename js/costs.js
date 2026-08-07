@@ -303,8 +303,6 @@ function init() {
     heading: "Costs",
     subtitle: "TERs, custody fees, commissions — every recurring cost, dated and sourced.",
   });
-  initOwnerAccessModal();
-  initOwnerAccessButton($("owner-access-slot"));
   initAuthModal();
   initAuthButton($("auth-slot"));
   initCostModal();

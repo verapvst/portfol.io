@@ -255,8 +255,6 @@ function init() {
     heading: "Valuations",
     subtitle: "Dated value observations — the record every performance number is built from.",
   });
-  initOwnerAccessModal();
-  initOwnerAccessButton($("owner-access-slot"));
   initAuthModal();
   initAuthButton($("auth-slot"));
   initValuationModal();

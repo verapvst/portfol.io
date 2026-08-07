@@ -272,8 +272,6 @@ function init() {
     heading: "Accounts",
     subtitle: "Every brokerage, bank and pension account, in one place.",
   });
-  initOwnerAccessModal();
-  initOwnerAccessButton($("owner-access-slot"));
   initAuthModal();
   initAuthButton($("auth-slot"));
   initAccountModal();

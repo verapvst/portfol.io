@@ -59,7 +59,7 @@ function initAuthButton(container) {
   if (!container) return;
   const btn = document.createElement("button");
   btn.id = "auth-btn";
-  btn.className = "owner-access-btn glass-quiet";
+  btn.className = "topbar-pill-btn glass-quiet";
   btn.type = "button";
 
   const render = () => {

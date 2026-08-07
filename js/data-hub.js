@@ -572,8 +572,6 @@ function init() {
     heading: "Data Hub",
     subtitle: "Every piece of data enters Portfol.io through here.",
   });
-  initOwnerAccessModal();
-  initOwnerAccessButton($("owner-access-slot"));
   initAuthModal();
   initAuthButton($("auth-slot"));
 

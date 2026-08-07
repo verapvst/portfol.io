@@ -7,154 +7,53 @@
    targets to drawer content.
    ============================================================ */
 
-/* ---------- Owner Access ----------
-   There is one website, one dashboard, one set of components. The only
-   thing that ever changes is whether monetary values are visible - the
-   public site should feel like the complete product, not a restricted
-   demo, so nothing here hides sections, swaps layouts, or renders a
-   different page. It reveals one axis: money.
+/* ---------- Owner Access -> retired, collapsed into real auth ----------
+   This used to be an independent client-side password toggle - its own
+   comment used to say plainly it wasn't real access control. Reviewing
+   the navigation shell against docs/information-architecture.md §1
+   ("one application, not three products stapled together") surfaced a
+   real inconsistency: Owner Access and Supabase sign-in were two
+   INDEPENDENT flags - you could be signed in with money still masked, or
+   signed out with the old password unlocking mock data. The IA doc
+   describes exactly one Showcase<->Private continuum. Fixed by deleting
+   the password/modal/button entirely and making isOwnerMode() derive
+   straight from real auth state - every existing formatMoney()/
+   isOwnerMode() call site (KPIs, holdings rows, drill-downs) is
+   unchanged; only what backs the answer changed. */
 
-   isOwnerMode()/setOwnerMode()/onOwnerModeChange() are the actual
-   primitives - deliberately generic, not "hide money" specific, because
-   Owner Mode is meant to grow into an access LEVEL, not stay a single
-   toggle. Later owner-only surfaces (transactions, import tools,
-   portfolio editing, AI config, settings, export, historical snapshots)
-   gate themselves the same way formatMoney does here: check
-   isOwnerMode() at the one call site that needs it, nothing to touch
-   in this file. formatMoney()/indexValueSeries() are just the first,
-   money-specific consumers of that primitive.
-
-   In-memory only, on purpose: no localStorage, no cookies. A refresh
-   always relocks - this is a client-side UI gate, not real access
-   control, and the password below ships in this file's plain-text
-   source to anyone who opens dev tools. That's an accepted tradeoff for
-   a personal site with no backend, not an oversight.
-
-   Every component that renders money calls formatMoney() (or, for
-   charts, uses indexValueSeries() + a formatter built from
-   isOwnerMode()) instead of checking the flag itself - that's what
-   "centralised" means here: one flag, a handful of call sites, no
-   component owns its own copy of the public/owner decision. */
-
-let ownerModeState = false;
-const OWNER_PASSWORD = "837202";
 const MONEY_MASK = "······";
-const ownerModeListeners = [];
 
+/** Showcase (signed out) masks money; Private (signed in) shows it -
+    the real mechanism now, not a separate toggle. No separate
+    onOwnerModeChange listener exists anymore - every page already
+    re-renders on onAuthChange (auth.js) for its data, which covers
+    money-sensitive sections too since they read this same function. */
 function isOwnerMode() {
-  return ownerModeState;
-}
-
-function onOwnerModeChange(fn) {
-  ownerModeListeners.push(fn);
-}
-
-function setOwnerMode(value) {
-  if (ownerModeState === value) return;
-  ownerModeState = value;
-  ownerModeListeners.forEach((fn) => fn(ownerModeState));
+  return !!currentUser();
 }
 
 /** The one place every absolute money value in the app should be
-    formatted through. Public mode masks it; owner mode is a plain
-    fmtEUR passthrough - same signature, so call sites don't change
-    shape when switching between the two. The mask is wrapped in its
-    own span so it can be styled lighter/smaller than whatever context
-    it's dropped into (a KPI's big headline number vs. a small table
-    cell) - see .money-mask in components.css. Callers that assign via
-    .textContent (not .innerHTML) need to switch to .innerHTML to render
-    this correctly instead of the tag as literal text. */
+    formatted through. Showcase masks it; Private is a plain fmtEUR
+    passthrough - same signature, so call sites don't change shape
+    between the two. The mask is wrapped in its own span so it can be
+    styled lighter/smaller than whatever context it's dropped into (a
+    KPI's big headline number vs. a small table cell) - see .money-mask
+    in components.css. Callers that assign via .textContent (not
+    .innerHTML) need to switch to .innerHTML to render this correctly
+    instead of the tag as literal text. */
 function formatMoney(value, opts) {
   return isOwnerMode() ? fmtEUR(value, opts) : `<span class="money-mask">${MONEY_MASK}</span>`;
 }
 
 /** Rebases a value series to the first point = 100, preserving the
     curve's shape while discarding the absolute scale - used for charts
-    in public mode, where the number that matters is "how has it
+    in Showcase mode, where the number that matters is "how has it
     evolved", not "how much". Never used to decide whether to render
     the chart, only what scale to render it at (see charts.js /
     initPerformanceCard - the chart itself never disappears). */
 function indexValueSeries(series) {
   const base = series[0]?.value || 1;
   return series.map((p) => ({ date: p.date, value: (p.value / base) * 100 }));
-}
-
-function initOwnerAccessButton(container, user) {
-  const btn = document.createElement("button");
-  btn.id = "owner-access-btn";
-  btn.className = "owner-access-btn glass-quiet";
-  btn.type = "button";
-
-  const render = () => {
-    const owner = isOwnerMode();
-    btn.innerHTML = owner
-      ? `🔓 <span class="label">Owner Mode</span>`
-      : `🔒 <span class="label">Owner Access</span>`;
-    btn.classList.toggle("is-owner", owner);
-    btn.setAttribute("aria-label", owner ? "Relock owner mode" : "Unlock owner mode");
-  };
-  render();
-
-  btn.addEventListener("click", () => {
-    if (isOwnerMode()) setOwnerMode(false);
-    else window.openOwnerModal();
-  });
-
-  onOwnerModeChange(render);
-  container.appendChild(btn);
-}
-
-function initOwnerAccessModal() {
-  if (document.getElementById("owner-modal-root")) return;
-
-  const root = document.createElement("div");
-  root.id = "owner-modal-root";
-  root.innerHTML = `
-    <div id="owner-modal-backdrop"></div>
-    <div id="owner-modal" class="glass" role="dialog" aria-modal="true" aria-label="Owner Access">
-      <h2 class="owner-modal-title">Owner Access</h2>
-      <p class="owner-modal-label">Enter password</p>
-      <input id="owner-password-input" class="owner-modal-input" type="password" autocomplete="off" spellcheck="false"/>
-      <p class="owner-modal-error" id="owner-modal-error"></p>
-      <button id="owner-modal-submit" class="owner-modal-submit" type="button">Unlock</button>
-    </div>`;
-  document.body.appendChild(root);
-
-  const input = root.querySelector("#owner-password-input");
-  const errorEl = root.querySelector("#owner-modal-error");
-
-  const close = () => {
-    root.classList.remove("open");
-    input.value = "";
-    errorEl.textContent = "";
-    document.removeEventListener("keydown", onKey);
-  };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-
-  const open = () => {
-    root.classList.add("open");
-    document.addEventListener("keydown", onKey);
-    setTimeout(() => input.focus(), 50);
-  };
-
-  const attempt = () => {
-    if (input.value === OWNER_PASSWORD) {
-      setOwnerMode(true);
-      close();
-      return;
-    }
-    errorEl.textContent = "Incorrect password.";
-    input.value = "";
-    input.focus();
-  };
-
-  root.querySelector("#owner-modal-backdrop").addEventListener("click", close);
-  root.querySelector("#owner-modal-submit").addEventListener("click", attempt);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") attempt(); });
-  input.addEventListener("input", () => { errorEl.textContent = ""; });
-
-  window.openOwnerModal = open;
-  window.closeOwnerModal = close;
 }
 
 /* ---------- Navigation: persistent sidebar (desktop) / overlay drawer (mobile) ----------
@@ -214,11 +113,13 @@ const NAV_GROUPS = [
   {
     group: "Operations",
     private: true,
+    editOnly: true,
     items: [{ label: "Data Hub", icon: "upload", href: "data-hub.html" }],
   },
   {
     group: "Administration",
     private: true,
+    editOnly: true,
     items: [{ label: "Settings", icon: "settings", href: "#" }],
   },
 ];
@@ -240,10 +141,18 @@ function navItemHTML(item) {
     </a>`;
 }
 
+/** editOnly groups (Operations/Administration) are shown to any signed-in
+    user today, not gated on real Edit Mode - edit_sessions doesn't exist
+    as working code yet (docs/information-architecture.md §2 specifies
+    Edit-only for these two). The "· Edit" tag makes that gap visible in
+    the UI itself rather than hiding a known simplification silently -
+    remove the tag the same day edit_sessions ships and this becomes the
+    real thing it's currently standing in for. */
 function navGroupHTML(group) {
   if (group.private && !currentUser()) return "";
+  const tag = group.editOnly ? ` <span class="nav-group-tag">· Edit</span>` : "";
   return `
-    <div class="nav-group-label">${group.group}</div>
+    <div class="nav-group-label">${group.group}${tag}</div>
     ${group.items.map(navItemHTML).join("")}`;
 }
 
@@ -341,7 +250,6 @@ function renderTopbar(container, user, { heading = "Portfolio Overview", subtitl
     <div class="topbar-actions">
       <div class="search-box glass-quiet">${icon("search")}<span>Search anything…</span><kbd>⌘K</kbd></div>
       <div id="auth-slot"></div>
-      <div id="owner-access-slot"></div>
       <button class="icon-btn glass-quiet" aria-label="Notifications">${icon("bell")}</button>
     </div>`;
 }
@@ -744,12 +652,8 @@ function initDrillDown() {
 }
 
 window.isOwnerMode = isOwnerMode;
-window.setOwnerMode = setOwnerMode;
-window.onOwnerModeChange = onOwnerModeChange;
 window.formatMoney = formatMoney;
 window.indexValueSeries = indexValueSeries;
-window.initOwnerAccessButton = initOwnerAccessButton;
-window.initOwnerAccessModal = initOwnerAccessModal;
 window.initNavigation = initNavigation;
 window.renderTopbar = renderTopbar;
 window.initDrawer = initDrawer;

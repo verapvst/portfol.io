@@ -107,17 +107,19 @@ function initPerformanceCard(data) {
 }
 
 /** Everything below reads from `data`, captured in this closure so a
-    later re-fetch (sign-in/sign-out - see init()) can redraw the whole
-    page in place, the same way Owner Access already redraws the 3
-    money-sensitive sections in place on every unlock/relock. */
+    later re-fetch (sign-in/sign-out - see init()) redraws the whole page
+    in place. isOwnerMode() now derives straight from auth state (see
+    shell.js), and this whole function already re-runs on every auth
+    change via init()'s own onAuthChange listener - so money-sensitive
+    sections re-render for free every time this runs, no separate
+    onOwnerModeChange registration needed here. (A previous version of
+    this function registered one on every call, which - now that
+    renderAll() itself runs on every auth change - would have piled up a
+    new listener each time instead of just re-running the same one.) */
 function renderAll(data) {
-  const renderMoneySensitiveSections = () => {
-    renderSnapshot($("kpi-grid"), buildKpiViewModels(data));
-    initPerformanceCard(data);
-    renderHoldingsTable($("holdings-table"), data.portfolio.holdings);
-  };
-  renderMoneySensitiveSections();
-  onOwnerModeChange(renderMoneySensitiveSections);
+  renderSnapshot($("kpi-grid"), buildKpiViewModels(data));
+  initPerformanceCard(data);
+  renderHoldingsTable($("holdings-table"), data.portfolio.holdings);
 
   renderAllocationTabs($("allocation-tabs"), data);
 
@@ -141,8 +143,6 @@ async function init() {
 
   initNavigation(user);
   renderTopbar($("topbar"), user);
-  initOwnerAccessModal();
-  initOwnerAccessButton($("owner-access-slot"));
   initAuthModal();
   initAuthButton($("auth-slot"));
 

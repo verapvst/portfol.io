@@ -4,11 +4,12 @@
    (layout.css) or design tokens (theme.css) lives here.
    ============================================================ */
 
-/* ========== Owner Access (button + unlock modal) ========== */
-/* Deliberately quiet - an advanced feature, not a call to action. No
-   brand gradient, no bright colour; same glass-quiet chrome as the
-   search box and icon buttons next to it. */
-.owner-access-btn {
+/* ========== Topbar pill button (Sign In / signed-in state) ==========
+   Was Owner Access's button class - Owner Access itself is retired (see
+   js/shell.js), the class survives because Sign In (js/auth.js) always
+   shared its styling. Deliberately quiet - same glass-quiet chrome as
+   the search box and icon buttons next to it, not a call to action. */
+.topbar-pill-btn {
   height: 44px;
   padding: 0 var(--sp-4);
   border-radius: var(--r-2xl);
@@ -17,12 +18,8 @@
   white-space: nowrap;
   transition: color 0.2s ease, border-color 0.2s ease;
 }
-.owner-access-btn:hover { color: var(--ink); }
-.owner-access-btn:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
-
-/* Unlocked state: a whisper of the positive colour on the border, not
-   a fill - "active", not "primary action". */
-.owner-access-btn.is-owner { border-color: color-mix(in oklab, var(--positive) 45%, var(--glass-quiet-border)); }
+.topbar-pill-btn:hover { color: var(--ink); }
+.topbar-pill-btn:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
 
 /* Public-mode money mask - sized relative to whatever it's dropped into
    (em, not px) so it never outweighs its surroundings: a whisper next
@@ -39,34 +36,11 @@
   vertical-align: middle;
 }
 
-#owner-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
-
-#owner-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(23, 21, 26, 0.32);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-}
-
-#owner-modal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(360px, 90vw);
-  padding: var(--sp-8);
-  border-radius: var(--r-3xl);
-  opacity: 0;
-  transform: translate(-50%, -46%);
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-#owner-modal-root.open { pointer-events: auto; }
-#owner-modal-root.open #owner-modal-backdrop { opacity: 1; }
-#owner-modal-root.open #owner-modal { opacity: 1; transform: translate(-50%, -50%); }
-
+/* Shared form-modal vocabulary - named after Owner Access (retired, see
+   js/shell.js) but not specific to it. Every modal in the app (Sign In,
+   Add Account/Transaction/Valuation/Cost) reuses these class names for
+   visual consistency; only the structural #owner-modal-* IDs were
+   Owner-Access-specific, and those are gone with it. */
 .owner-modal-title { font-size: 1.1rem; font-weight: 400; letter-spacing: -0.02em; }
 .owner-modal-label { margin-top: var(--sp-4); font-size: 13px; color: var(--muted); }
 
@@ -96,17 +70,17 @@
 }
 
 @media (max-width: 480px) {
-  .owner-access-btn span.label { display: none; }
+  .topbar-pill-btn span.label { display: none; }
 }
 
-/* ========== Auth (real Supabase sign-in, separate from Owner Access) ==========
-   Owner Access above is a client-side money-visibility toggle - it gates
-   what you SEE, and says plainly in shell.js that it isn't real security.
-   This is real, server-enforced auth: the session it creates is what every
-   RLS policy in supabase/migrations/0001_initial_schema.sql checks before
-   allowing a write. Reuses the owner-modal structural rules by mirroring
-   their IDs under #auth-modal-*, and reuses .owner-modal-title/-label/
-   -error/-submit directly since the visual language is identical. */
+/* ========== Auth (real Supabase sign-in) ==========
+   Real, server-enforced auth: the session it creates is what every RLS
+   policy in supabase/migrations/0001_initial_schema.sql checks before
+   allowing a write, and (as of this review pass) is also what
+   isOwnerMode() derives from directly - signed in shows money, signed
+   out masks it. Reuses .owner-modal-title/-label/-input/-error/-submit
+   for its own structure under #auth-modal-* IDs, same shared vocabulary
+   noted above. */
 #auth-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
 
 #auth-modal-backdrop {
@@ -270,6 +244,15 @@ body.nav-open #nav-drawer { transform: translateX(0); }
   padding: var(--sp-4) 12px 6px;
 }
 .nav-group-label:first-child { padding-top: var(--sp-1); }
+
+/* Marks Operations/Administration as standing in for real Edit Mode -
+   see the comment on navGroupHTML() in shell.js for why this exists. */
+.nav-group-tag {
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--coral-2);
+  opacity: 1;
+}
 
 .nav-item {
   display: flex;
