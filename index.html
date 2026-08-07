@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=40">
+<link rel="stylesheet" href="css/layout.css?v=40">
+<link rel="stylesheet" href="css/components.css?v=40">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <!-- Two-column hierarchy: LEFT = primary analytical views, RIGHT =
+         supporting summary cards. See css/layout.css .overview-columns. -->
+    <div class="overview-columns">
+
+      <div class="overview-left">
+
+        <!-- 1. Portfolio Snapshot - compact 2x2 -->
+        <div id="kpi-grid" class="kpi-grid"></div>
+
+        <!-- 2. Investment Performance - primary visualization, full width of left column -->
+        <section class="card glass interactive" id="performance-card">
+          <div class="card-header">
+            <div class="card-header-title" data-info="investment-performance" tabindex="0" role="button" aria-label="About this metric">
+              <h2 class="section-title">Investment Performance</h2>
+            </div>
+            <div id="perf-filters" class="filter-pills glass-quiet"></div>
+          </div>
+          <div class="perf-value-row">
+            <span class="perf-value" id="perf-value"></span>
+          </div>
+          <p class="perf-secondary" id="perf-secondary"></p>
+          <div class="perf-stat-row" id="perf-investor-return" data-drill-type="kpi" data-drill-id="investorReturn" tabindex="0" role="button" aria-label="Investor Return details">
+            <span class="perf-stat-label">Investor Return (XIRR)</span>
+            <span class="perf-stat-value" id="perf-investor-return-value"></span>
+          </div>
+          <div id="linechart-container"></div>
+        </section>
+
+        <!-- 3. Exposure -->
+        <section class="card glass interactive" id="exposure-card">
+          <div class="card-header">
+            <div class="card-header-title" data-info="exposure-country" tabindex="0" role="button" aria-label="About this metric">
+              <h2 class="section-title">Exposure</h2>
+            </div>
+            <div id="exposure-tabs" class="tab-bar glass-quiet"></div>
+          </div>
+          <p class="section-hint" id="exposure-hint">Where the portfolio is invested, by country</p>
+          <div id="exposure-viz"></div>
+        </section>
+
+        <!-- 4. Portfolio Insights -->
+        <section class="card glass interactive" id="insights-card">
+          <div class="card-header">
+            <div class="card-header-title" data-info="portfolio-insights" tabindex="0" role="button" aria-label="About this metric">
+              <h2 class="section-title">Portfolio Insights</h2>
+            </div>
+          </div>
+          <p class="section-hint">Rule-based, not AI-generated</p>
+          <div id="portfolio-insights"></div>
+        </section>
+
+      </div>
+
+      <div class="overview-right">
+
+        <!-- 5. Portfolio Allocation -->
+        <section class="card glass interactive" id="allocation-card">
+          <div class="card-header">
+            <div class="card-header-title" data-info="portfolio-allocation" tabindex="0" role="button" aria-label="About this metric">
+              <h2 class="section-title">Portfolio Allocation</h2>
+            </div>
+          </div>
+          <p class="section-hint">By asset class, product or account</p>
+          <div id="allocation-tabs"></div>
+        </section>
+
+        <!-- 6. Top Holdings - directly under Allocation, both describe composition -->
+        <section class="card glass interactive" id="holdings-card">
+          <div class="card-header">
+            <div class="card-header-title" data-info="top-holdings" tabindex="0" role="button" aria-label="About this metric">
+              <h2 class="section-title">Top Holdings</h2>
+            </div>
+          </div>
+          <p class="section-hint">Top 5 positions by weight</p>
+          <div id="holdings-table"></div>
+        </section>
+
+        <!-- 7. Portfolio Health -->
+        <section class="card glass interactive" id="health-card">
+          <div class="card-header">
+            <div class="card-header-title" data-info="portfolio-health" tabindex="0" role="button" aria-label="About this metric">
+              <h2 class="section-title">Portfolio Health</h2>
+            </div>
+          </div>
+          <p class="section-hint">Objective structural facts</p>
+          <div id="portfolio-health"></div>
+        </section>
+
+      </div>
+
+    </div>
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=40"></script>
+<script src="js/supabaseClient.js?v=40"></script>
+
+<script src="js/utils.js?v=40"></script>
+<script src="js/repository.js?v=40"></script>
+
+<script src="vendor/d3.min.js?v=40"></script>
+<script src="vendor/topojson-client.min.js?v=40"></script>
+
+<script src="js/charts.js?v=40"></script>
+<script src="js/shell.js?v=40"></script>
+<script src="js/auth.js?v=40"></script>
+<script src="js/db.js?v=40"></script>
+<script src="js/analytics.js?v=40"></script>
+<script src="js/ui.js?v=40"></script>
+<script src="js/app.js?v=40"></script>
+</body>
+</html>

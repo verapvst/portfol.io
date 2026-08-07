@@ -1,0 +1,23 @@
+# Portfolio.io — Netlify deployment config.
+# See docs/production-architecture.md §3 for why Netlify was chosen
+# (custom response headers, specifically — the deciding factor once
+# Showcase Mode is a real public surface, not GitHub Pages/Vercel per se).
+#
+# publish points at 01_Portfolio AI/ because that's still the app's real
+# location today. Update this the same day 01_Portfolio AI/ becomes src/
+# (docs/production-architecture.md §2, deliberately not done yet).
+
+[build]
+  publish = "01_Portfolio AI"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # script-src needs 'unsafe-inline' for the app's own inline <script>
+    # blocks (pdf.worker.min.js's src assignment in each HTML head) and
+    # jsdelivr for the Supabase client CDN load - not a placeholder,
+    # matches what index.html/data-hub.html/etc. actually load today.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co"

@@ -1,0 +1,141 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* overflow-x:hidden on exactly one of html/body (not both - setting it on
+   both, combined with height:100% on both, makes each its own independent
+   scroll container and breaks normal single-scrollbar page scrolling). */
+html { overflow-x: hidden; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02" on, "cv03" on, "cv04" on, "ss01" on;
+  letter-spacing: -0.011em;
+}
+
+img { display: block; max-width: 100%; }
+
+button, input {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; background: none; border: none; }
+a { color: inherit; text-decoration: none; }
+
+/* ---------- Glass utilities - ported from the reference's @utility rules ---------- */
+.glass {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-float);
+}
+
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.9), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glass-quiet {
+  background: var(--glass-quiet-bg);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--glass-quiet-border);
+}
+
+.bg-brand-gradient { background: var(--gradient-brand); }
+
+.up { color: var(--positive); }
+.down { color: var(--negative); }
+
+/* Icon stroke-width: 1.5 everywhere, matching lucide-react's default. */
+svg.icon { stroke-width: 1.5; }
+
+/* padding-left clears the fixed LogoButton (see navigation.css) - the
+   drawer itself is an overlay and never affects this layout. */
+#app {
+  max-width: 1900px;
+  margin: 0 auto;
+  padding: var(--sp-6) clamp(16px, 3vw, 28px);
+  padding-left: 76px;
+  min-height: 100vh;
+}
+
+#main {
+  min-width: 0;
+  max-width: 100%;
+  padding-bottom: var(--sp-12);
+}
+
+/* ---------- Overview page columns ----------
+   Two-column hierarchy, not a symmetric grid of equal-weight sections:
+   LEFT (~62.5%) carries the primary analytical views (KPIs, Investment
+   Performance, Exposure, Insights); RIGHT (~37.5%) carries supporting
+   summary cards (Allocation, Top Holdings, Health). This is intentional
+   information hierarchy, not a layout accident - component size and
+   column placement communicate importance, so don't rebalance the
+   fractions or move a card to the other column without a reason.
+
+   align-items: start (not stretch) - the two columns hold a different
+   number of cards with genuinely different content, so there's no
+   "paired row" to keep level the way there was in the old symmetric
+   grid; each column is exactly as tall as its own content. */
+.overview-columns {
+  display: grid;
+  grid-template-columns: 5fr 3fr;
+  gap: var(--sp-8);
+  align-items: start;
+}
+
+.overview-left, .overview-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+
+.mt-6 { margin-top: var(--sp-6); }
+.min-w-0 { min-width: 0; }
+.flex-1 { flex: 1; min-width: 0; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+::selection { background: rgba(255, 141, 99, 0.22); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(43,39,36,0.12); border-radius: var(--r-pill); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Entrance fade for KPI cards, matching the reference's "rise" utility. */
+.rise { animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Tablet: the 62.5/37.5 column split gets cramped for chart/table-heavy
+   cards before it gets cramped for plain KPI tiles - single column
+   (left column's content, then right column's) reads better here than
+   a forced narrow squeeze. */
+@media (max-width: 1023px) {
+  .overview-columns { grid-template-columns: 1fr; }
+}
+
+/* Mobile: single column everywhere, tighter outer padding. */
+@media (max-width: 767px) {
+  #app { padding: var(--sp-4) var(--sp-3); padding-left: 68px; }
+  #main { padding-bottom: var(--sp-8); }
+  .overview-columns, .overview-left, .overview-right { gap: var(--sp-4); }
+}

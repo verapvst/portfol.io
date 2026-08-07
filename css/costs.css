@@ -1,0 +1,164 @@
+/* ============================================================
+   costs.css - the Costs page. Same insert-only pattern as
+   valuations.css: a cost row is a dated observation, valid from that
+   date until superseded by a later row for the same security/cost name
+   (workbook Costs sheet philosophy) - not something you edit in place.
+   ============================================================ */
+
+.costs-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.add-cost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border-radius: var(--r-pill);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  transition: transform 0.2s ease;
+}
+.add-cost-btn:hover { transform: translateY(-2px); }
+.add-cost-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.costs-signin-note {
+  margin-top: var(--sp-6);
+  padding: var(--sp-6);
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--muted);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-lg);
+}
+.costs-signin-note button {
+  display: inline-block;
+  margin-top: var(--sp-3);
+  color: var(--coral-2);
+  font-weight: 500;
+}
+
+.costs-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+.costs-toolbar select {
+  padding: 8px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.costs-table-scroll { margin-top: var(--sp-4); overflow-x: auto; }
+
+.costs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.costs-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 var(--sp-3) 10px 0;
+  white-space: nowrap;
+}
+.costs-table td {
+  padding: 12px var(--sp-3) 12px 0;
+  border-top: 1px solid var(--card-border);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.costs-table td.amount-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.costs-table td.notes-cell { white-space: normal; color: var(--muted); font-size: 12.5px; max-width: 200px; }
+
+.category-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--glass-quiet-bg);
+}
+
+.costs-empty { font-size: 13px; color: var(--muted); margin-top: var(--sp-5); }
+.costs-error { font-size: 13px; color: var(--negative); margin-top: var(--sp-5); }
+
+/* ---------- Add modal - same skeleton as #valuation-modal ---------- */
+#cost-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+
+#cost-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#cost-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(440px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#cost-modal-root.open { pointer-events: auto; }
+#cost-modal-root.open #cost-modal-backdrop { opacity: 1; }
+#cost-modal-root.open #cost-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.cost-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-4); }
+.cost-form-field { grid-column: span 2; }
+.cost-form-field.half { grid-column: span 1; }
+
+.cost-form-field label { display: block; margin-top: var(--sp-4); font-size: 13px; color: var(--muted); }
+.cost-form-field input,
+.cost-form-field select {
+  margin-top: var(--sp-2);
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-family: inherit;
+}
+.cost-form-field input:focus-visible,
+.cost-form-field select:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+
+.cost-form-actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
+.cost-form-cancel,
+.cost-form-submit {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  font-weight: 500;
+  font-size: 14px;
+}
+.cost-form-cancel { background: var(--glass-quiet-bg); border: 1px solid var(--glass-quiet-border); color: var(--ink); }
+.cost-form-submit { background: var(--ink); color: #fff; }
+.cost-form-submit:disabled { opacity: 0.5; }
+
+.cost-form-error { margin-top: var(--sp-3); font-size: 12.5px; color: var(--negative); min-height: 16px; }
+
+@media (max-width: 560px) {
+  .cost-form-field.half { grid-column: span 2; }
+}

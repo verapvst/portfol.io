@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Transactions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=40">
+<link rel="stylesheet" href="css/layout.css?v=40">
+<link rel="stylesheet" href="css/components.css?v=40">
+<link rel="stylesheet" href="css/transactions.css?v=40">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <section class="card glass" id="transactions-card">
+      <div class="card-header transactions-card-header-row">
+        <div class="card-header-title">
+          <h2 class="section-title">Transactions</h2>
+        </div>
+        <button class="add-transaction-btn" id="add-transaction-btn" type="button">+ Add Transaction</button>
+      </div>
+      <p class="section-hint">Every buy, sell, dividend and cash movement — reads and writes Supabase directly.</p>
+      <div class="transactions-toolbar">
+        <label><input type="checkbox" id="show-voided-toggle" /> Show voided</label>
+      </div>
+      <div id="transactions-table-container"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=40"></script>
+<script src="js/supabaseClient.js?v=40"></script>
+
+<script src="js/utils.js?v=40"></script>
+<script src="js/shell.js?v=40"></script>
+<script src="js/auth.js?v=40"></script>
+<script src="js/db.js?v=40"></script>
+<script src="js/transactions.js?v=40"></script>
+</body>
+</html>

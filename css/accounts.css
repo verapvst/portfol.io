@@ -1,0 +1,166 @@
+/* ============================================================
+   accounts.css - the Accounts CRUD page. First page in Portfol.io
+   that reads/writes Supabase directly instead of repository.js's
+   workbook mirror - see js/accounts.js.
+   ============================================================ */
+
+.accounts-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.add-account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border-radius: var(--r-pill);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  transition: transform 0.2s ease;
+}
+.add-account-btn:hover { transform: translateY(-2px); }
+.add-account-btn svg { width: 15px; height: 15px; }
+.add-account-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.accounts-signin-note {
+  margin-top: var(--sp-6);
+  padding: var(--sp-6);
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--muted);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-lg);
+}
+.accounts-signin-note button {
+  display: inline-block;
+  margin-top: var(--sp-3);
+  color: var(--coral-2);
+  font-weight: 500;
+}
+
+.accounts-table-scroll { margin-top: var(--sp-5); overflow-x: auto; }
+
+.accounts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.accounts-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 var(--sp-3) 10px 0;
+  white-space: nowrap;
+}
+.accounts-table td {
+  padding: 12px var(--sp-3) 12px 0;
+  border-top: 1px solid var(--card-border);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.accounts-table td.notes-cell { white-space: normal; color: var(--muted); font-size: 12.5px; max-width: 220px; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 500;
+}
+.status-badge.active { color: var(--positive); background: color-mix(in oklab, var(--positive) 14%, transparent); }
+.status-badge.closed { color: var(--muted); background: var(--glass-quiet-bg); }
+
+.row-actions { display: flex; gap: var(--sp-2); }
+.row-action-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  border: 1px solid var(--glass-quiet-border);
+  background: var(--glass-quiet-bg);
+}
+.row-action-btn svg { width: 14px; height: 14px; }
+.row-action-btn:hover { color: var(--ink); }
+
+.accounts-empty { font-size: 13px; color: var(--muted); margin-top: var(--sp-5); }
+.accounts-error { font-size: 13px; color: var(--negative); margin-top: var(--sp-5); }
+
+/* ---------- Add/Edit modal - mirrors #owner-modal / #auth-modal structure ---------- */
+#account-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+
+#account-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#account-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(440px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#account-modal-root.open { pointer-events: auto; }
+#account-modal-root.open #account-modal-backdrop { opacity: 1; }
+#account-modal-root.open #account-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.account-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-4); }
+.account-form-field { grid-column: span 2; }
+.account-form-field.half { grid-column: span 1; }
+
+.account-form-field label { display: block; margin-top: var(--sp-4); font-size: 13px; color: var(--muted); }
+.account-form-field input,
+.account-form-field select,
+.account-form-field textarea {
+  margin-top: var(--sp-2);
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-family: inherit;
+}
+.account-form-field input:focus-visible,
+.account-form-field select:focus-visible,
+.account-form-field textarea:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+.account-form-field textarea { resize: vertical; min-height: 60px; }
+
+.account-form-actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
+.account-form-cancel,
+.account-form-submit {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  font-weight: 500;
+  font-size: 14px;
+}
+.account-form-cancel { background: var(--glass-quiet-bg); border: 1px solid var(--glass-quiet-border); color: var(--ink); }
+.account-form-submit { background: var(--ink); color: #fff; }
+.account-form-submit:disabled { opacity: 0.5; }
+
+.account-form-error { margin-top: var(--sp-3); font-size: 12.5px; color: var(--negative); min-height: 16px; }
+
+@media (max-width: 560px) {
+  .account-form-field.half { grid-column: span 2; }
+}

@@ -1,0 +1,935 @@
+/* ============================================================
+   components.css - merged: navigation + navbar + cards + charts
+   + drawer/popover. Everything that isn't the reset/shell
+   (layout.css) or design tokens (theme.css) lives here.
+   ============================================================ */
+
+/* ========== Owner Access (button + unlock modal) ========== */
+/* Deliberately quiet - an advanced feature, not a call to action. No
+   brand gradient, no bright colour; same glass-quiet chrome as the
+   search box and icon buttons next to it. */
+.owner-access-btn {
+  height: 44px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-2xl);
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.owner-access-btn:hover { color: var(--ink); }
+.owner-access-btn:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
+
+/* Unlocked state: a whisper of the positive colour on the border, not
+   a fill - "active", not "primary action". */
+.owner-access-btn.is-owner { border-color: color-mix(in oklab, var(--positive) 45%, var(--glass-quiet-border)); }
+
+/* Public-mode money mask - sized relative to whatever it's dropped into
+   (em, not px) so it never outweighs its surroundings: a whisper next
+   to a KPI's huge headline number, barely there in a small table cell.
+   Deliberately quieter than real text - it should read as "hidden", not
+   as a bold black wall of dots competing with the rest of the page. */
+.money-mask {
+  display: inline-block;
+  color: var(--muted);
+  opacity: 0.45;
+  font-size: 0.55em;
+  letter-spacing: 0.2em;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+#owner-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+
+#owner-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#owner-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(360px, 90vw);
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#owner-modal-root.open { pointer-events: auto; }
+#owner-modal-root.open #owner-modal-backdrop { opacity: 1; }
+#owner-modal-root.open #owner-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.owner-modal-title { font-size: 1.1rem; font-weight: 400; letter-spacing: -0.02em; }
+.owner-modal-label { margin-top: var(--sp-4); font-size: 13px; color: var(--muted); }
+
+.owner-modal-input {
+  margin-top: var(--sp-2);
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+  letter-spacing: 0.3em;
+}
+.owner-modal-input:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+
+.owner-modal-error { margin-top: var(--sp-2); font-size: 12px; color: var(--negative); min-height: 16px; }
+
+.owner-modal-submit {
+  margin-top: var(--sp-4);
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .owner-access-btn span.label { display: none; }
+}
+
+/* ========== Auth (real Supabase sign-in, separate from Owner Access) ==========
+   Owner Access above is a client-side money-visibility toggle - it gates
+   what you SEE, and says plainly in shell.js that it isn't real security.
+   This is real, server-enforced auth: the session it creates is what every
+   RLS policy in supabase/migrations/0001_initial_schema.sql checks before
+   allowing a write. Reuses the owner-modal structural rules by mirroring
+   their IDs under #auth-modal-*, and reuses .owner-modal-title/-label/
+   -error/-submit directly since the visual language is identical. */
+#auth-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+
+#auth-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#auth-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(360px, 90vw);
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#auth-modal-root.open { pointer-events: auto; }
+#auth-modal-root.open #auth-modal-backdrop { opacity: 1; }
+#auth-modal-root.open #auth-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+/* Email/password fields read as normal text, not a PIN - override the
+   owner modal's wide letter-spacing (tuned for a 6-digit code). */
+#auth-modal .owner-modal-input { letter-spacing: normal; }
+
+.auth-modal-toggle {
+  margin-top: var(--sp-3);
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.auth-modal-toggle:hover { color: var(--ink); }
+
+/* ========== Navigation shell (LogoButton/Backdrop/Drawer) ========== */
+/* ============================================================
+   Navigation overlay - LogoButton + Backdrop + Drawer.
+   None of this participates in #app's layout at any breakpoint:
+   every piece here is position:fixed, so #main always gets the
+   full available width whether the drawer is open or closed.
+   ============================================================ */
+
+/* ---------- LogoButton: the only thing visible when closed ---------- */
+.nav-logo-btn {
+  position: fixed;
+  top: var(--sp-6);
+  left: var(--sp-6);
+  z-index: 60;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-2xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.nav-logo-btn img { width: 24px; height: 24px; object-fit: contain; }
+.nav-logo-btn:hover { transform: scale(1.06); }
+.nav-logo-btn:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
+
+/* Logo button disappears once the drawer is open - the wordmark inside
+   the drawer is the only logo on screen at that point. */
+body.nav-open .nav-logo-btn { opacity: 0; pointer-events: none; transform: scale(0.92); }
+
+/* ---------- Backdrop ---------- */
+#nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+body.nav-open #nav-backdrop { opacity: 1; pointer-events: auto; }
+
+/* ---------- Drawer ---------- */
+#nav-drawer {
+  position: fixed;
+  top: var(--sp-4);
+  left: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 56;
+  width: 300px;
+  padding: var(--sp-6);
+  border-radius: var(--r-3xl);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(calc(-100% - var(--sp-4)));
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.nav-open #nav-drawer { transform: translateX(0); }
+
+.nav-drawer-logo {
+  display: block;
+  padding: var(--sp-2) var(--sp-2) 0 var(--sp-2);
+  margin-bottom: var(--sp-8);
+  align-self: flex-start;
+}
+
+.nav-drawer-logo img { width: 150px; mix-blend-mode: multiply; }
+
+.sb-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-2xl);
+  margin-bottom: var(--sp-6);
+}
+
+.sb-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gradient-brand);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.sb-name { font-weight: 500; font-size: 14px; }
+.sb-role { font-size: 12px; color: var(--muted); }
+
+.sb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-2xl);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.nav-item .nav-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-item .nav-icon svg { width: 100%; height: 100%; }
+
+.nav-item:hover {
+  background: color-mix(in oklab, white 60%, transparent);
+  color: var(--ink);
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(255,208,106,0.32), rgba(245,109,154,0.24));
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.nav-item.active .nav-icon { color: var(--coral-2); }
+
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(135deg, var(--purple-1), var(--purple-2));
+  color: #fff;
+}
+
+.sb-footer .nav-item { color: var(--muted); }
+
+/* ---------- Tablet ---------- */
+@media (max-width: 1023px) {
+  #nav-drawer { width: 280px; }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 767px) {
+  .nav-logo-btn { top: var(--sp-4); left: var(--sp-4); }
+  #nav-drawer {
+    top: var(--sp-3);
+    left: var(--sp-3);
+    bottom: var(--sp-3);
+    width: min(85vw, 320px);
+  }
+  .nav-item { min-height: 44px; }
+}
+
+/* ========== Topbar ========== */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-8);
+}
+
+.topbar-heading-group { display: flex; align-items: flex-start; min-width: 0; }
+
+.topbar-heading .greeting { font-size: 14px; color: var(--muted); }
+
+.topbar-heading h1 {
+  margin-top: 4px;
+  font-size: var(--fs-h1);
+  line-height: 1.1;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.topbar-heading p {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--muted);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  width: 320px;
+  height: 44px;
+  border-radius: var(--r-2xl);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.search-box svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
+.search-box span { flex: 1; }
+
+.search-box kbd {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.75);
+  color: var(--muted);
+}
+
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-2xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+
+.icon-btn:hover { color: var(--ink); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+@media (max-width: 1023px) {
+  .search-box { width: 220px; }
+}
+
+@media (max-width: 767px) {
+  .topbar { flex-direction: column; align-items: stretch; gap: var(--sp-4); }
+  .topbar-actions { width: 100%; }
+  .search-box { width: 100%; }
+}
+
+/* ========== Cards ========== */
+/* ---------- GlassCard ---------- */
+/* Every card shares the same padding, and is a flex column so its own
+   content can fill whatever natural height the card ends up at (see the
+   per-section flex-fill rules below) - each card in .overview-left /
+   .overview-right sizes to its own content now, not a paired sibling's. */
+.card {
+  border-radius: var(--r-3xl);
+  padding: var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.22,1,0.36,1), box-shadow 0.5s cubic-bezier(0.22,1,0.36,1);
+}
+
+/* .interactive gives every card the hover-lift (a general "glass" feel) -
+   but cursor:pointer is reserved for elements that are actually whole-
+   card click targets ([data-drill-type] directly on the card, e.g. KPI
+   cards and the Performance card). Cards whose click targets are
+   granular rows inside them (.drill-row) don't get a misleading
+   pointer cursor over their empty padding. */
+.card.interactive:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+.card.interactive:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
+.card.interactive[data-drill-type] { cursor: pointer; }
+
+.card-header {
+  margin-bottom: var(--sp-6);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+/* A header followed by a hint tightens up - the hint reads as part of
+   the header block, not a separate paragraph with its own big gap. */
+.card-header:has(+ .section-hint) { margin-bottom: var(--sp-2); }
+
+.card-header-title { display: flex; align-items: center; }
+
+/* Titles are themselves the info-popover trigger now - no (i) icon.
+   Affordance is deliberately quiet: a soft underline fading in on
+   hover/focus, nothing that reads as a button or a link. */
+.card-header-title[data-info],
+.kpi-label[data-info] {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.card-header-title[data-info] .section-title,
+.kpi-label[data-info] {
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.card-header-title[data-info]:hover .section-title,
+.card-header-title[data-info]:focus-visible .section-title,
+.kpi-label[data-info]:hover,
+.kpi-label[data-info]:focus-visible {
+  text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
+}
+
+.card-header-title[data-info]:focus-visible,
+.kpi-label[data-info]:focus-visible {
+  outline: 2px solid var(--coral-2);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+
+.section-title { font-size: var(--fs-card-title); font-weight: 500; letter-spacing: -0.025em; color: var(--ink); }
+.section-hint { margin-top: 4px; margin-bottom: var(--sp-4); font-size: 12px; color: var(--muted); }
+
+.pill-action {
+  border-radius: var(--r-pill);
+  padding: 6px var(--sp-3);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* margin-top:auto (not a fixed gap): pins the link to the bottom of
+   #holdings-table's box (see below) whatever height the row-stretch
+   gives that card - content top, action bottom, a normal card pattern
+   instead of a void under a short table. */
+.link-more {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--coral-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: var(--sp-6);
+}
+.link-more svg { width: 14px; height: 14px; }
+
+/* ---------- Portfolio Snapshot ----------
+   A compact, fixed 2x2 - independent cards, not tiles inside one merged
+   block, each a real .card.glass.interactive (same chrome as every
+   other section, #8 card consistency), each documenting itself through
+   its own kpi-label info popover. Deliberately always 2 columns (not a
+   count-driven responsive step): this grid lives inside the ~62.5%
+   left column now, not the full page width, so it doesn't need to
+   widen out at desktop the way a full-width row would. No sparkline:
+   Performance already shows the trend, repeating it here was noise. */
+.kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-6); }
+
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* Icon sits immediately before the title, forming one horizontal header
+   row - not floating in a corner competing with the numbers below it. */
+.kpi-top { display: flex; align-items: center; gap: var(--sp-2); }
+.kpi-label { font-size: 13px; color: var(--muted); font-weight: 400; }
+
+/* Same colour/weight as every other icon in the product (#11 icon
+   consistency) - no extra opacity dimming that icon-btn/nav-icon/
+   drawer-icon don't also carry. */
+.kpi-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--coral-2);
+}
+
+.kpi-icon svg { width: 15px; height: 15px; }
+
+.kpi-value {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-kpi-value);
+  line-height: 1;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+}
+
+.kpi-sub { margin-top: var(--sp-2); font-size: var(--fs-caption); color: var(--muted); }
+
+/* ---------- Legend rows (donut) ---------- */
+.legend-list { display: flex; flex-direction: column; gap: var(--sp-3); width: 100%; }
+.legend-row { display: flex; align-items: center; gap: var(--sp-3); font-size: 14px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend-name { flex: 1; color: color-mix(in oklab, var(--ink) 80%, transparent); font-weight: 300; }
+.legend-value { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Tab bar (Portfolio Allocation) ---------- */
+/* #allocation-tabs fills the card (row-stretch); the tab bar itself
+   stays pinned at the top, only the donut+legend below it centers in
+   whatever extra height the row gives this card. */
+#allocation-tabs { flex: 1; display: flex; flex-direction: column; }
+#allocation-donut { flex: 1; display: flex; align-items: center; justify-content: center; }
+
+.tab-bar { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
+
+.tab-btn {
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  color: var(--muted);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Glass-grey, not the brand gradient (UI/UX Roadmap v1.1 #5/#7) - the
+   gradient is reserved for the logo, the main performance line, the
+   active nav indicator and hero highlights. A selected tab is a state
+   change, not a call to action. */
+.tab-btn.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow-float);
+}
+
+/* ---------- Filter pills (Portfolio Performance time range) ---------- */
+.filter-pills { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
+
+.filter-pill {
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.filter-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-float); }
+
+/* ---------- Horizontal bar-fill primitive ----------
+   Not rendered by anything live right now (Currency Exposure moved to
+   the map, see EXPOSURE_GROUPINGS in ui.js) - kept because it's shared
+   by archive/components/accountBars.js and archive/components/goals.js,
+   both real Phase-2 features waiting to be wired in. */
+.bar-track {
+  margin-top: 8px;
+  height: 6px;
+  width: 100%;
+  border-radius: var(--r-pill);
+  background: color-mix(in oklab, var(--border) 70%, transparent);
+  overflow: hidden;
+}
+
+.bar-fill { height: 100%; border-radius: var(--r-pill); }
+
+/* ---------- Exposure (world map) ----------
+   A hex grid tiled over real landmass, not a political map: no country
+   borders, but each country's real shape reads as a small cluster of
+   hexagons (brand-gradient colour by weight) instead of collapsing to
+   one dot. Ocean gets no hexes at all; unexposed land gets a faint
+   neutral grey cluster (see charts.js for how each hex's country is
+   determined - a canvas raster of the real topojson geometry, sampled
+   once per hex). One <g class="country-shape"> per country, holding
+   all of that country's hexes as children - hover/click targets the
+   whole cluster, not individual cells. */
+.geo-layout { display: grid; grid-template-columns: 1fr 1.15fr; gap: var(--sp-8); align-items: center; }
+.map-wrap { position: relative; min-width: 0; }
+#worldmap { width: 100%; height: auto; display: block; }
+.geo-legend-row { cursor: default; }
+.country-shape { transition: filter 0.15s ease; cursor: default; }
+.country-shape polygon { transition: opacity 0.15s ease; }
+.country-shape:hover, .country-shape.is-highlighted { filter: brightness(1.18); }
+
+.map-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transform: translate(-50%, -120%);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  z-index: 5;
+}
+.map-tooltip.visible { opacity: 1; }
+
+@media (max-width: 767px) {
+  .geo-layout { grid-template-columns: 1fr; }
+}
+
+/* ---------- Holdings table ---------- */
+/* Scrolls inside its own box on narrow screens instead of the whole page. */
+/* #holdings-table fills the card (row-stretch); the table stays at its
+   natural height, .link-more's margin-top:auto absorbs the rest. */
+#holdings-table { flex: 1; display: flex; flex-direction: column; }
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.holdings-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+.holdings-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  padding: 0 var(--sp-2) var(--sp-3) 0;
+}
+
+.holdings-table td {
+  padding: var(--sp-6) var(--sp-2) var(--sp-6) 0;
+  border-top: 1px solid var(--card-border);
+  vertical-align: middle;
+}
+
+.holdings-table tbody tr { cursor: pointer; transition: background 0.15s ease; }
+.holdings-table tbody tr:hover { background: color-mix(in oklab, white 50%, transparent); }
+
+.holdings-table th:not(:first-child), .holdings-table td:not(:first-child) { text-align: right; }
+.holdings-table th:nth-child(2), .holdings-table td:nth-child(2) { text-align: left; }
+
+.asset-name { font-weight: 300; }
+.asset-ticker { margin-top: 2px; font-size: 12px; color: var(--muted); }
+
+.type-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------- Portfolio Health ----------
+   Compact by design (small tiles, dense content) - not a smaller card,
+   a denser one; padding and header rhythm match every other section.
+   4 columns holds up at the right column's ~37.5% width or full-width
+   (tablet, once .overview-columns collapses to one column) - only true
+   mobile needs fewer columns. */
+#portfolio-health { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.health-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); }
+
+.health-tile {
+  padding: var(--sp-3);
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+
+.health-value { font-size: 1.1rem; font-weight: 300; letter-spacing: -0.02em; }
+.health-label { margin-top: 3px; font-size: 11px; color: var(--muted); }
+
+/* ---------- Portfolio Insights - dense content, same rhythm as Health ---------- */
+#portfolio-insights { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.insight-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.insight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  font-size: 13.5px;
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--card-border);
+}
+.insight-row:first-child { border-top: none; padding-top: 0; }
+
+.insight-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.insight-text { color: color-mix(in oklab, var(--ink) 85%, transparent); font-weight: 300; }
+.insight-text b { font-weight: 500; color: var(--ink); }
+
+/* Every card shares the same padding, header height and header-to-
+   content spacing (see .card, .card-header) - tertiary sections (Health,
+   Insights) read as lighter through denser, smaller content, never
+   through a smaller card shell. Scanning down the page, every header
+   sits on the same rhythm. */
+
+@media (max-width: 767px) {
+  .card { padding: var(--sp-6); }
+  .kpi-card { padding: var(--sp-4); }
+  .card-header { margin-bottom: var(--sp-4); }
+  .holdings-table { min-width: 480px; } /* forces horizontal scroll instead of illegible squeezed columns */
+  .health-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ========== Charts ========== */
+/* Performance is a primary section, read at a glance - big headline
+   number, legible axis labels, not a dense analyst chart. */
+.perf-value-row { display: flex; align-items: baseline; gap: var(--sp-3); }
+.perf-value { font-size: var(--fs-perf-value); line-height: 1; font-weight: 300; letter-spacing: -0.03em; }
+.perf-secondary { margin-top: var(--sp-2); font-size: 16px; font-weight: 300; color: var(--positive); }
+
+/* Investor Return (XIRR) - a sibling stat to the TWR headline above,
+   not a KPI tile of its own (see ui.js buildKpiViewModels). Deliberately
+   quiet chrome (glass-quiet pill) so it reads as supporting detail, not
+   competing with the big TWR number for attention. */
+.perf-stat-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+  padding: 6px var(--sp-3);
+  border-radius: var(--r-pill);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.perf-stat-row:hover, .perf-stat-row:focus-visible { background: color-mix(in oklab, white 60%, transparent); }
+.perf-stat-row:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
+.perf-stat-label { color: var(--muted); }
+.perf-stat-value { font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* #linechart-container fills the card (row-stretch); the chart itself
+   stays a fixed height and centers in whatever extra space that gives it. */
+#linechart-container { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+#linechart { width: 100%; height: 240px; display: block; overflow: visible; margin-top: var(--sp-6); flex-shrink: 0; }
+.linechart-axis text { font-size: 14px; fill: var(--muted); font-family: var(--font); }
+.linechart-grid line { stroke: color-mix(in oklab, var(--border) 70%, transparent); }
+.chart-hit { cursor: pointer; }
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -130%);
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-float);
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  z-index: 5;
+}
+
+.chart-tooltip.visible { opacity: 1; }
+
+/* Container query, not a viewport breakpoint (UI/UX Stabilisation #4):
+   Portfolio Allocation now lives in the ~37.5% right column, so what
+   matters is the CARD's own available width, not the viewport's - a
+   card in a narrow column at a wide viewport still needs the stacked
+   layout, and vice versa if the column ratio ever changes again. */
+#allocation-card { container-type: inline-size; }
+
+.donut-wrap { display: flex; flex-direction: column; align-items: center; gap: var(--sp-6); }
+
+/* Legend to the right of the donut once the card has room - 196px
+   donut + gap + a legend that's still readable, not squeezed. Narrower
+   cards (or the stacked layout) keep the legend underneath. */
+@container (min-width: 420px) {
+  .donut-wrap { flex-direction: row; justify-content: center; }
+  .donut-wrap .legend-list { flex: 1; max-width: 220px; }
+}
+.donut-figure { position: relative; width: 196px; height: 196px; flex-shrink: 0; }
+.donut-figure svg { display: block; }
+
+.donut-hole {
+  position: absolute;
+  inset: 26px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donut-hole .amt { font-size: 20px; font-weight: 300; letter-spacing: -0.025em; }
+.donut-hole .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* Segments are clickable exactly like their legend row - same drill
+   target, same affordance philosophy (subtle, not a button). */
+.donut-segment { transition: opacity 0.15s ease; }
+.donut-segment.drill-row { cursor: pointer; }
+.donut-segment.drill-row:hover,
+.donut-segment.drill-row:focus-visible { opacity: 0.82; }
+.donut-segment:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 3px; }
+
+.chart-empty {
+  height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.chart-empty-icon {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--grey-1);
+  color: var(--muted);
+}
+
+.chart-empty-icon svg { width: 16px; height: 16px; }
+.chart-empty-text { font-size: 12.5px; max-width: 320px; line-height: 1.5; }
+
+/* ========== Drill-down drawer + info popover ========== */
+/* ---------- Drill-down drawer ---------- */
+#drawer-root { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+
+#drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#drawer-panel {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  width: min(420px, 90vw);
+  border-radius: var(--r-3xl);
+  padding: var(--sp-6);
+  overflow-y: auto;
+  transform: translateX(calc(100% + var(--sp-4)));
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#drawer-root.open { pointer-events: auto; }
+#drawer-root.open #drawer-backdrop { opacity: 1; }
+#drawer-root.open #drawer-panel { transform: translateX(0); }
+
+#drawer-close { position: absolute; top: var(--sp-6); right: var(--sp-6); width: 36px; height: 36px; }
+#drawer-close svg { width: 14px; height: 14px; }
+
+.drawer-header { display: flex; align-items: flex-start; gap: var(--sp-3); padding-right: 44px; }
+.drawer-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--coral-2); flex-shrink: 0; }
+.drawer-icon svg { width: 18px; height: 18px; }
+.drawer-title { font-size: 1.15rem; font-weight: 400; letter-spacing: -0.02em; }
+.drawer-subtitle { margin-top: 4px; font-size: 13px; color: var(--muted); }
+
+.drawer-content { margin-top: var(--sp-6); }
+
+.drawer-rows { display: flex; flex-direction: column; gap: var(--sp-3); }
+.drawer-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--card-border); }
+.drawer-row span:first-child { font-weight: 300; color: color-mix(in oklab, var(--ink) 80%, transparent); }
+.drawer-row span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.drawer-coming-soon { margin-top: var(--sp-6); padding: var(--sp-4); border-radius: var(--r-lg); background: color-mix(in oklab, var(--grey-1) 60%, transparent); }
+.drawer-hint { font-size: 12px; color: var(--muted); }
+.drawer-coming-soon ul { margin-top: var(--sp-2); padding-left: 18px; }
+.drawer-coming-soon li { font-size: 13px; color: color-mix(in oklab, var(--ink) 75%, transparent); font-weight: 300; margin-top: 4px; }
+
+@media (max-width: 480px) {
+  #drawer-panel { top: 0; right: 0; bottom: 0; width: 100vw; border-radius: 0; }
+}
+
+/* ---------- Info popover ---------- */
+.info-popover {
+  position: absolute;
+  width: 280px;
+  border-radius: var(--r-lg);
+  padding: var(--sp-4);
+  z-index: 200;
+  box-shadow: var(--shadow-hover);
+}
+
+.info-popover-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: var(--sp-3); }
+.info-popover-label:first-child { margin-top: 0; }
+.info-popover-text { margin-top: 2px; font-size: 13px; line-height: 1.45; color: color-mix(in oklab, var(--ink) 85%, transparent); font-weight: 300; }
+
+/* ---------- Drill-down affordance on non-card clickable rows ---------- */
+.drill-row { cursor: pointer; transition: background 0.15s ease; border-radius: var(--r-md); }
+.drill-row:hover { background: color-mix(in oklab, white 55%, transparent); }

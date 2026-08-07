@@ -1,0 +1,145 @@
+/* ============================================================
+   valuations.css - the Valuations page. Same visual language as
+   accounts.css/transactions.css, but the page itself is simpler on
+   purpose: valuations are insert-only (see js/valuations.js), so there's
+   no edit modal, no status toggle - just quick entry and a filtered list.
+   ============================================================ */
+
+.valuations-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.add-valuation-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border-radius: var(--r-pill);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  transition: transform 0.2s ease;
+}
+.add-valuation-btn:hover { transform: translateY(-2px); }
+.add-valuation-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.valuations-signin-note {
+  margin-top: var(--sp-6);
+  padding: var(--sp-6);
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--muted);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-lg);
+}
+.valuations-signin-note button {
+  display: inline-block;
+  margin-top: var(--sp-3);
+  color: var(--coral-2);
+  font-weight: 500;
+}
+
+.valuations-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+.valuations-toolbar select {
+  padding: 8px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.valuations-table-scroll { margin-top: var(--sp-4); overflow-x: auto; }
+
+.valuations-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.valuations-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 var(--sp-3) 10px 0;
+  white-space: nowrap;
+}
+.valuations-table td {
+  padding: 12px var(--sp-3) 12px 0;
+  border-top: 1px solid var(--card-border);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.valuations-table td.amount-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.valuations-table td.notes-cell { white-space: normal; color: var(--muted); font-size: 12.5px; max-width: 220px; }
+
+.valuations-empty { font-size: 13px; color: var(--muted); margin-top: var(--sp-5); }
+.valuations-error { font-size: 13px; color: var(--negative); margin-top: var(--sp-5); }
+
+/* ---------- Quick-entry modal - same skeleton as #account-modal/#transaction-modal ---------- */
+#valuation-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+
+#valuation-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#valuation-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(400px, 92vw);
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#valuation-modal-root.open { pointer-events: auto; }
+#valuation-modal-root.open #valuation-modal-backdrop { opacity: 1; }
+#valuation-modal-root.open #valuation-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.val-form-field { margin-top: var(--sp-4); }
+.val-form-field label { display: block; font-size: 13px; color: var(--muted); }
+.val-form-field input,
+.val-form-field select {
+  margin-top: var(--sp-2);
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-family: inherit;
+}
+.val-form-field input:focus-visible,
+.val-form-field select:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+
+.val-form-actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
+.val-form-cancel,
+.val-form-submit {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  font-weight: 500;
+  font-size: 14px;
+}
+.val-form-cancel { background: var(--glass-quiet-bg); border: 1px solid var(--glass-quiet-border); color: var(--ink); }
+.val-form-submit { background: var(--ink); color: #fff; }
+.val-form-submit:disabled { opacity: 0.5; }
+
+.val-form-error { margin-top: var(--sp-3); font-size: 12.5px; color: var(--negative); min-height: 16px; }

@@ -1,0 +1,85 @@
+:root {
+  /* ============================================================
+     Portfol.io design system - ported 1:1 from the Lovable
+     reference's styles.css. The only intentional deviation in the
+     whole product is --bg: white instead of the reference's peach
+     "ambient canvas" background.
+     ============================================================ */
+
+  --radius: 1.25rem;
+
+  /* Palette: 8 pastel families, each a two-stop gradient. */
+  --amber-1: #FFD06A;  --amber-2: #FFB34A;
+  --orange-1: #FFB35F; --orange-2: #FF9447;
+  --coral-1: #FF8E73;  --coral-2: #FF6D63;
+  --pink-1: #FF97B5;   --pink-2: #F56D9A;
+  --blue-1: #8BC5FF;   --blue-2: #67A7F5;
+  --green-1: #BFE8B8;  --green-2: #8FD59C;
+  --purple-1: #C8BBFF; --purple-2: #9F92F6;
+  --grey-1: #EFEFEF;   --grey-2: #DADADA;
+
+  /* Brand gradient: Amber -> Orange -> Coral -> Pink. */
+  --gradient-brand: linear-gradient(135deg, var(--amber-1) 0%, var(--orange-2) 34%, var(--coral-2) 66%, var(--pink-2) 100%);
+
+  /* Neutrals - identical to the reference except --bg (see note above). */
+  --bg: #FFFFFF;
+  --ink: #2B2724;
+  --card: #FFFFFF;
+  --muted: #8A807A;
+  --border: var(--grey-1);
+  --primary-foreground: #FFFAF7;
+
+  --positive: #6FBF83;
+  --negative: var(--coral-2);
+
+  --glass-bg: linear-gradient(150deg, rgba(255,255,255,0.88), rgba(255,255,255,0.58));
+  --glass-quiet-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-quiet-border: rgba(255, 255, 255, 0.6);
+  --card-border: color-mix(in oklab, var(--border) 60%, transparent);
+
+  --shadow-float: 0 1px 2px rgba(80,60,50,0.04), 0 12px 32px -12px rgba(80,60,50,0.10), 0 32px 64px -32px rgba(80,60,50,0.12);
+  --shadow-hover: 0 1px 2px rgba(80,60,50,0.05), 0 20px 44px -14px rgba(80,60,50,0.14), 0 44px 80px -36px rgba(80,60,50,0.16);
+
+  /* Radius scale, derived from --radius exactly like the reference's
+     Tailwind theme (sm=r-8, md=r-4, lg=r, xl=r+4, 2xl=r+8, 3xl=r+12). */
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 20px;
+  --r-xl: 24px;
+  --r-2xl: 28px;
+  --r-3xl: 32px;
+  --r-pill: 999px;
+
+  /* Spacing scale - explicit 4/8/12/16/24/32/48 steps (UI/UX Roadmap
+     v1.1 #9). Deliberately no 20/28/56 in-between values - fewer choices,
+     easier to keep every card's rhythm identical. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+
+  /* Typography hierarchy (UI/UX Roadmap v1.1 #10): Page Title 32 / Section
+     Title 20 (reserved - no multi-card grouping uses it yet) / Card Title
+     15 / Main KPI 34 / Body 14 / Caption 12. The two display numbers stay
+     fluid (mobile needs room to breathe) but are capped at their scale
+     value instead of growing past it. */
+  --fs-page-title: clamp(1.5rem, 1.2rem + 1.5vw, 2rem);       /* 24px -> 32px */
+  --fs-section-title: 1.25rem;                                 /* 20px */
+  --fs-card-title: 15px;
+  --fs-kpi-value: clamp(1.5rem, 1.2rem + 1.6vw, 2.125rem);     /* 24px -> 34px */
+  --fs-body: 14px;
+  --fs-caption: 12px;
+  /* Kept separate from --fs-kpi-value on purpose: Performance is the one
+     "read at a glance" number allowed to read larger than the Main KPI
+     scale, since it summarises all four KPIs at once. */
+  --fs-perf-value: clamp(2.2rem, 1.6rem + 2.8vw, 3.2rem);
+
+  /* Back-compat alias - --fs-h1 was the old name for the page title. */
+  --fs-h1: var(--fs-page-title);
+}

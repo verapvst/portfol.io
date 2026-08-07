@@ -1,0 +1,275 @@
+/* ============================================================
+   data-hub.css - page-specific styles for the Data Hub. Everything
+   generic (glass cards, buttons, info popover, drawer, nav) is already
+   in theme.css/layout.css/components.css and reused unchanged - this
+   file only has the pieces unique to the import workflow.
+   ============================================================ */
+
+.datahub-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+/* ---------- Drop zone ---------- */
+.drop-zone {
+  margin-top: var(--sp-6);
+  border: 1.5px dashed var(--card-border);
+  border-radius: var(--r-2xl);
+  padding: var(--sp-8) var(--sp-6);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.drop-zone:hover, .drop-zone:focus-visible { border-color: var(--coral-2); }
+.drop-zone.drag-active { border-color: var(--coral-2); background: color-mix(in oklab, white 70%, transparent); }
+
+.drop-zone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--glass-quiet-bg);
+  color: var(--coral-2);
+  margin-bottom: var(--sp-3);
+}
+.drop-zone-icon svg { width: 20px; height: 20px; }
+
+.drop-zone-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+.drop-zone-sub { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+
+/* ---------- Source chips (supported + future report types) ---------- */
+.source-chip-list {
+  margin-top: var(--sp-6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  color: var(--ink);
+}
+
+.source-chip svg { width: 12px; height: 12px; }
+.source-chip.is-supported { color: var(--positive); }
+.source-chip.is-future { color: var(--muted); opacity: 0.7; }
+.source-chip.is-future .chip-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+
+/* ---------- Processing timeline ---------- */
+.processing-list { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.processing-card { padding: var(--sp-6) var(--sp-6); }
+.processing-file-name { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+.processing-file-meta { margin-top: 2px; font-size: 12px; color: var(--muted); }
+
+.processing-steps {
+  margin-top: var(--sp-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.processing-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.processing-step .step-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--faint, var(--muted)); }
+.processing-step.is-done { color: var(--ink); }
+.processing-step.is-done .step-icon { color: var(--positive); }
+.processing-step.is-active { color: var(--coral-2); }
+.processing-step.is-active .step-icon { color: var(--coral-2); animation: pulse 1s ease-in-out infinite; }
+.processing-step.is-error .step-icon, .processing-step.is-error { color: var(--negative); }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ---------- Fund group card (Preview + Import) ---------- */
+.fund-group-card { padding: var(--sp-6); }
+
+.fund-group-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
+.fund-group-name { font-size: 1.1rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); }
+.fund-group-period { font-size: 13px; color: var(--muted); }
+
+.fund-group-meta { margin-top: var(--sp-2); display: flex; gap: var(--sp-6); flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.fund-group-meta b { color: var(--ink); font-weight: 500; }
+
+.detected-data-list { margin-top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.detected-data-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+}
+
+.detected-data-row input[type="checkbox"] { accent-color: var(--coral-2); width: 15px; height: 15px; }
+.detected-data-row .dd-icon { width: 16px; height: 16px; color: var(--positive); flex-shrink: 0; }
+.detected-data-row.is-missing .dd-icon { color: var(--faint, var(--muted)); }
+.detected-data-row.is-missing { opacity: 0.55; }
+.detected-data-label { flex: 1; font-size: 13.5px; color: var(--ink); }
+.detected-data-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.fund-group-notice {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg);
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: color-mix(in oklab, var(--orange-1) 18%, white);
+  color: var(--ink);
+}
+
+/* ---------- Unclassified Securities (geoClassifier.js Unknown fallback) ---------- */
+.unclassified-block {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  background: color-mix(in oklab, var(--grey-1) 60%, transparent);
+}
+
+.unclassified-title { display: flex; align-items: center; gap: var(--sp-2); font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.unclassified-title svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
+
+.unclassified-list { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.unclassified-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.unclassified-name { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.unclassified-select {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+}
+
+.fund-group-actions { margin-top: var(--sp-6); display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+
+/* Glass-grey, not the brand gradient (UI/UX Roadmap v1.1 #5) - doubly
+   fitting here since the button isn't wired to anything yet. */
+.import-btn {
+  border-radius: var(--r-pill);
+  padding: 10px 22px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  box-shadow: var(--shadow-float);
+  transition: transform 0.3s ease;
+}
+.import-btn:hover { transform: translateY(-2px); }
+
+.import-not-wired-note { font-size: 12px; color: var(--muted); max-width: 340px; }
+
+/* ---------- Load to Database (real - writes Costs via Supabase) ---------- */
+.db-load-block {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: var(--glass-quiet-bg);
+}
+.db-load-title { font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.db-load-row { margin-top: var(--sp-3); display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+.db-load-field { flex: 1; min-width: 180px; }
+.db-load-field label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.db-load-select {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+}
+.load-db-btn {
+  margin-top: var(--sp-3);
+  border-radius: var(--r-pill);
+  padding: 10px 22px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--ink);
+  transition: transform 0.2s ease;
+}
+.load-db-btn:hover { transform: translateY(-2px); }
+.load-db-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+.load-db-status { margin-top: var(--sp-2); font-size: 12px; min-height: 16px; }
+.load-db-status.is-success { color: var(--positive); }
+.load-db-status.is-error { color: var(--negative); }
+.db-load-signedout { font-size: 12.5px; color: var(--muted); }
+.db-load-signedout button { color: var(--coral-2); font-weight: 500; }
+
+/* ---------- Raw tables (the real, preserved "copy to Excel" mechanism) ---------- */
+.raw-tables-toggle {
+  margin-top: var(--sp-6);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--coral-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.raw-tables { margin-top: var(--sp-4); display: none; flex-direction: column; gap: var(--sp-6); }
+.raw-tables.open { display: flex; }
+
+.raw-table-block { border-top: 1px solid var(--card-border); padding-top: var(--sp-4); }
+
+.raw-table-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.raw-table-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+
+.copy-btn {
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  transition: color 0.15s ease;
+}
+.copy-btn:hover:not(:disabled) { color: var(--coral-2); }
+.copy-btn:disabled { opacity: 0.4; cursor: default; }
+
+.raw-table-scroll { margin-top: var(--sp-3); overflow-x: auto; }
+
+.raw-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.raw-table th { text-align: left; font-weight: 400; color: var(--muted); padding: 0 var(--sp-3) 8px 0; }
+.raw-table td { padding: 6px var(--sp-3) 6px 0; border-top: 1px solid var(--card-border); color: var(--ink); }
+.raw-table-empty { font-size: 12.5px; color: var(--muted); margin-top: var(--sp-3); }
+
+@media (max-width: 767px) {
+  .drop-zone { padding: var(--sp-6) var(--sp-4); }
+  .fund-group-actions { flex-direction: column; align-items: stretch; }
+  .import-btn { width: 100%; text-align: center; }
+}

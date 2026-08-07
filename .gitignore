@@ -1,0 +1,14 @@
+.DS_Store
+**/.DS_Store
+
+# Portfolio.io — the Lovable-generated design reference has already been
+# fully extracted into "Portfolio Management/01_Portfolio AI/css/*.css"
+# (see 00_README.md); it isn't part of the app's codebase and its
+# node_modules alone is ~330MB. Never tracked so far - this makes that
+# permanent instead of relying on nobody running `git add -A` by accident.
+lovable-project-*/
+node_modules/
+
+# Local server logs (Open Portfol.io.command already writes to /tmp, this
+# is defensive in case that ever changes)
+*.log
