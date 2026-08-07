@@ -7,9 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=42">
-<link rel="stylesheet" href="css/layout.css?v=42">
-<link rel="stylesheet" href="css/components.css?v=42">
+<link rel="stylesheet" href="css/theme.css?v=43">
+<link rel="stylesheet" href="css/layout.css?v=43">
+<link rel="stylesheet" href="css/components.css?v=43">
 </head>
 <body>
 <div id="app">
@@ -26,13 +26,17 @@
         <!-- 1. Portfolio Snapshot - compact 2x2 -->
         <div id="kpi-grid" class="kpi-grid"></div>
 
-        <!-- 2. Investment Performance - primary visualization, full width of left column -->
+        <!-- 2. Investment Performance - a SUMMARY now, not the full
+             interactive chart: docs/information-architecture.md gives
+             Performance its own dedicated page (range filters, benchmark
+             comparison, cumulative/annualised breakdown all live there
+             once it's built - this card exists to headline the number
+             and hand off, not duplicate that page's content). -->
         <section class="card glass interactive" id="performance-card">
           <div class="card-header">
             <div class="card-header-title" data-info="investment-performance" tabindex="0" role="button" aria-label="About this metric">
               <h2 class="section-title">Investment Performance</h2>
             </div>
-            <div id="perf-filters" class="filter-pills glass-quiet"></div>
           </div>
           <div class="perf-value-row">
             <span class="perf-value" id="perf-value"></span>
@@ -43,21 +47,10 @@
             <span class="perf-stat-value" id="perf-investor-return-value"></span>
           </div>
           <div id="linechart-container"></div>
+          <div id="perf-more-link"></div>
         </section>
 
-        <!-- 3. Exposure -->
-        <section class="card glass interactive" id="exposure-card">
-          <div class="card-header">
-            <div class="card-header-title" data-info="exposure-country" tabindex="0" role="button" aria-label="About this metric">
-              <h2 class="section-title">Exposure</h2>
-            </div>
-            <div id="exposure-tabs" class="tab-bar glass-quiet"></div>
-          </div>
-          <p class="section-hint" id="exposure-hint">Where the portfolio is invested, by country</p>
-          <div id="exposure-viz"></div>
-        </section>
-
-        <!-- 4. Portfolio Insights -->
+        <!-- 3. Portfolio Insights -->
         <section class="card glass interactive" id="insights-card">
           <div class="card-header">
             <div class="card-header-title" data-info="portfolio-insights" tabindex="0" role="button" aria-label="About this metric">
@@ -72,18 +65,24 @@
 
       <div class="overview-right">
 
-        <!-- 5. Portfolio Allocation -->
+        <!-- 4. Portfolio Allocation - asset-class summary only now.
+             Geography, sector, currency, style and the Product/Account
+             breakdowns all move to the dedicated Allocation page
+             (docs/information-architecture.md) - this card headlines the
+             single most important split and a geography highlight, then
+             hands off instead of duplicating that page's full tab set. -->
         <section class="card glass interactive" id="allocation-card">
           <div class="card-header">
             <div class="card-header-title" data-info="portfolio-allocation" tabindex="0" role="button" aria-label="About this metric">
               <h2 class="section-title">Portfolio Allocation</h2>
             </div>
           </div>
-          <p class="section-hint">By asset class, product or account</p>
-          <div id="allocation-tabs"></div>
+          <p class="section-hint">By asset class</p>
+          <div id="allocation-summary"></div>
         </section>
 
-        <!-- 6. Top Holdings - directly under Allocation, both describe composition -->
+        <!-- 5. Top Holdings - a preview of Portfolio Detail, not a
+             duplicate of it. -->
         <section class="card glass interactive" id="holdings-card">
           <div class="card-header">
             <div class="card-header-title" data-info="top-holdings" tabindex="0" role="button" aria-label="About this metric">
@@ -94,7 +93,7 @@
           <div id="holdings-table"></div>
         </section>
 
-        <!-- 7. Portfolio Health -->
+        <!-- 6. Portfolio Health -->
         <section class="card glass interactive" id="health-card">
           <div class="card-header">
             <div class="card-header-title" data-info="portfolio-health" tabindex="0" role="button" aria-label="About this metric">
@@ -113,21 +112,21 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=42"></script>
-<script src="js/supabaseClient.js?v=42"></script>
+<script src="js/supabaseConfig.js?v=43"></script>
+<script src="js/supabaseClient.js?v=43"></script>
 
-<script src="js/utils.js?v=42"></script>
-<script src="js/repository.js?v=42"></script>
+<script src="js/utils.js?v=43"></script>
+<script src="js/repository.js?v=43"></script>
 
-<script src="vendor/d3.min.js?v=42"></script>
-<script src="vendor/topojson-client.min.js?v=42"></script>
+<script src="vendor/d3.min.js?v=43"></script>
+<script src="vendor/topojson-client.min.js?v=43"></script>
 
-<script src="js/charts.js?v=42"></script>
-<script src="js/shell.js?v=42"></script>
-<script src="js/auth.js?v=42"></script>
-<script src="js/db.js?v=42"></script>
-<script src="js/analytics.js?v=42"></script>
-<script src="js/ui.js?v=42"></script>
-<script src="js/app.js?v=42"></script>
+<script src="js/charts.js?v=43"></script>
+<script src="js/shell.js?v=43"></script>
+<script src="js/auth.js?v=43"></script>
+<script src="js/db.js?v=43"></script>
+<script src="js/analytics.js?v=43"></script>
+<script src="js/ui.js?v=43"></script>
+<script src="js/app.js?v=43"></script>
 </body>
 </html>

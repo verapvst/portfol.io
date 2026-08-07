@@ -570,13 +570,27 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 .legend-name { flex: 1; color: color-mix(in oklab, var(--ink) 80%, transparent); font-weight: 300; }
 .legend-value { color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* ---------- Tab bar (Portfolio Allocation) ---------- */
-/* #allocation-tabs fills the card (row-stretch); the tab bar itself
-   stays pinned at the top, only the donut+legend below it centers in
-   whatever extra height the row gives this card. */
-#allocation-tabs { flex: 1; display: flex; flex-direction: column; }
+/* ---------- Overview's Allocation summary card ---------- */
+#allocation-summary { flex: 1; display: flex; flex-direction: column; }
 #allocation-donut { flex: 1; display: flex; align-items: center; justify-content: center; }
 
+/* Two small facts, not a map - the full geography breakdown lives on the
+   dedicated Allocation page (see renderAllocationSummary in ui.js). */
+.allocation-geo-highlight {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--card-border);
+  font-size: 13px;
+  color: var(--muted);
+}
+.allocation-geo-highlight b { color: var(--ink); font-weight: 500; }
+
+/* ---------- Tab bar (reused by future pages - Data Hub today, Product
+   Library / Allocation / Simulator once built; not rendered on Overview
+   anymore, see renderExposure in ui.js) ---------- */
 .tab-bar { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
 
 .tab-btn {
@@ -596,20 +610,6 @@ body.nav-open #nav-drawer { transform: translateX(0); }
   color: var(--ink);
   box-shadow: var(--shadow-float);
 }
-
-/* ---------- Filter pills (Portfolio Performance time range) ---------- */
-.filter-pills { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
-
-.filter-pill {
-  padding: 8px 16px;
-  border-radius: var(--r-pill);
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--muted);
-  transition: all 0.2s ease;
-}
-
-.filter-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-float); }
 
 /* ---------- Horizontal bar-fill primitive ----------
    Not rendered by anything live right now (Currency Exposure moved to

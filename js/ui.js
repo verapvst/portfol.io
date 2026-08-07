@@ -85,39 +85,34 @@ function renderSnapshot(container, kpis) {
   container.innerHTML = kpis.map(kpiCardHTML).join("");
 }
 
-/* ---------- Portfolio Allocation ----------
-   One donut, three switchable datasets (asset class / product / account).
-   Re-renders the donut in place - no separate chart instance per tab. */
+/* ---------- Portfolio Allocation summary (Overview card) ----------
+   Asset-class donut + a geography highlight - a headline, not the full
+   breakdown. Product/Account tabs and the full geography/sector/currency/
+   style dimensions all move to the dedicated Allocation page
+   (docs/information-architecture.md); duplicating them here would be
+   exactly what this redesign pass exists to stop doing. The old
+   3-tab renderAllocationTabs is gone; EXPOSURE_GROUPINGS/renderExposure
+   below are untouched and still real, working code - just not called
+   from Overview anymore, ready for the Allocation page to call instead. */
 
-function renderAllocationTabs(container, data) {
-  const tabs = [
-    { key: "assetClass", label: "Asset Class", items: data.analytics.assetClassAllocation, drillType: "assetClass" },
-    { key: "product", label: "Product", items: data.analytics.productAllocation, drillType: "holding" },
-    { key: "account", label: "Account", items: data.analytics.accountAllocation, drillType: "account" },
-  ];
+function renderAllocationSummary(container, data) {
+  const items = data.analytics.assetClassAllocation;
+  const total = items.reduce((s, it) => s + it.weight, 0);
+
+  const regions = data.analytics.regions.filter((r) => r.name !== "Unknown");
+  const topRegion = [...regions].sort((a, b) => b.weight - a.weight)[0];
+  const topCountry = [...data.analytics.countries].sort((a, b) => b.weight - a.weight)[0];
 
   container.innerHTML = `
-    <div class="tab-bar glass-quiet" role="tablist">
-      ${tabs.map((t, i) => `<button class="tab-btn${i === 0 ? " active" : ""}" data-tab="${t.key}" role="tab" aria-selected="${i === 0}">${t.label}</button>`).join("")}
-    </div>
-    <div id="allocation-donut" class="mt-6"></div>`;
+    <div id="allocation-donut"></div>
+    ${topCountry || topRegion ? `
+      <div class="allocation-geo-highlight">
+        ${topRegion ? `<span>${topRegion.name} <b>${topRegion.weight.toFixed(1)}%</b></span>` : ""}
+        ${topCountry ? `<span>${topCountry.name} <b>${topCountry.weight.toFixed(1)}%</b></span>` : ""}
+      </div>` : ""}
+    <a class="link-more" href="#">View Allocation ${icon("arrowRight")}</a>`;
 
-  const mount = container.querySelector("#allocation-donut");
-  const draw = (key) => {
-    const tab = tabs.find((t) => t.key === key);
-    const total = tab.items.reduce((s, it) => s + it.weight, 0);
-    renderDonut(mount, tab.items, tab.label, `${total.toFixed(1)}%`, { drillType: tab.drillType });
-  };
-  draw(tabs[0].key);
-
-  container.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      container.querySelectorAll(".tab-btn").forEach((b) => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
-      btn.classList.add("active");
-      btn.setAttribute("aria-selected", "true");
-      draw(btn.dataset.tab);
-    });
-  });
+  renderDonut(container.querySelector("#allocation-donut"), items, "Asset Class", `${total.toFixed(1)}%`, { drillType: "assetClass" });
 }
 
 /* ---------- Top Holdings table ---------- */
@@ -147,7 +142,7 @@ function renderHoldingsTable(container, holdings) {
         <tbody>${top5.map(holdingsRowHTML).join("")}</tbody>
       </table>
     </div>
-    <a class="link-more" href="#">View Portfolio ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="#">View Portfolio Detail ${icon("arrowRight")}</a>`;
 }
 
 /* ---------- Exposure ----------
@@ -392,7 +387,7 @@ function renderInsights(container, data) {
 
 window.buildKpiViewModels = buildKpiViewModels;
 window.renderSnapshot = renderSnapshot;
-window.renderAllocationTabs = renderAllocationTabs;
+window.renderAllocationSummary = renderAllocationSummary;
 window.renderHoldingsTable = renderHoldingsTable;
 window.renderExposure = renderExposure;
 window.renderPortfolioHealth = renderPortfolioHealth;

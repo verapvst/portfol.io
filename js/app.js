@@ -1,23 +1,5 @@
 function $(id) { return document.getElementById(id); }
 
-/**
- * Slices the value series (real dates, monthly-ish granularity - see
- * repository.js) by a relative range. Ranges shorter than the series'
- * real granularity legitimately resolve to <2 points - that renders as
- * "insufficient data" rather than an interpolated line, same honesty
- * rule as everywhere else in the app.
- */
-const RANGE_DAYS = { "1M": 30, "3M": 91, "1Y": 365, "3Y": 365 * 3 };
-
-function filterSeriesByRange(series, range) {
-  if (range === "All") return series;
-  const lastDate = new Date(series[series.length - 1].date);
-  const startDate = range === "YTD"
-    ? new Date(lastDate.getFullYear(), 0, 1)
-    : new Date(lastDate.getTime() - RANGE_DAYS[range] * 86400000);
-  return series.filter((p) => new Date(p.date) >= startDate);
-}
-
 /** Compact "Mon 'YY" x-axis tick label - the tooltip keeps the full
     ISO date, this is only for the axis where 100+ points need to fit. */
 function formatDateTick(dateStr) {
@@ -25,22 +7,21 @@ function formatDateTick(dateStr) {
   return d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }).replace(" ", " '");
 }
 
-/**
- * Owner Access makes this function re-entrant: it now runs once at init
- * AND again on every ownerMode toggle (see init() below), redrawing the
- * same card in place rather than mounting a second one. The filter/
- * resize listeners it attaches have to be swapped, not stacked, or a
- * few toggles would leave several stale listeners each redrawing with
- * whatever ownerMode happened to be current when they were attached.
- */
-let perfFilterClickHandler = null;
+/** Re-entrant: runs once at init and again on every auth change (see
+    init() below), redrawing the same card in place rather than mounting
+    a second one. The resize listener has to be swapped, not stacked, or
+    repeated sign-ins would leave several stale listeners each redrawing
+    with whatever data happened to be current when they were attached.
+
+    Deliberately just the "All" range now, no interactive filter pills -
+    docs/information-architecture.md gives Performance its own dedicated
+    page for that; this card headlines the number and links out (see
+    #perf-more-link below) instead of duplicating that page's controls. */
 let perfResizeHandler = null;
 
 function initPerformanceCard(data) {
   const perf = data.analytics.performance;
   const container = $("linechart-container");
-  const filtersEl = $("perf-filters");
-  const ranges = ["1M", "3M", "YTD", "1Y", "3Y", "All"];
 
   $("performance-card").dataset.drillType = "performance";
   $("performance-card").dataset.drillId = "performance";
@@ -63,47 +44,28 @@ function initPerformanceCard(data) {
   // to its sibling metric, not competing for space in the compact 2x2.
   $("perf-investor-return-value").textContent = fmtPct(perf.investorReturnPct);
 
-  // Preserve whichever range was selected across a redraw - toggling
-  // Owner Access shouldn't silently reset the user's chosen time window.
-  const activeRange = filtersEl.querySelector(".filter-pill.active")?.dataset.range || "All";
-  filtersEl.innerHTML = ranges.map((r) =>
-    `<button class="filter-pill${r === activeRange ? " active" : ""}" data-range="${r}">${r}</button>`
-  ).join("");
-
-  const draw = (range) => {
-    const rawPoints = filterSeriesByRange(data.history.valueSeries, range);
-    if (rawPoints.length < 2) {
-      renderInsufficientData(container, `Not enough historical data for "${range}" yet - the portfolio's value series is currently yearly, not monthly. Try "1Y" or "All".`);
+  const draw = () => {
+    if (data.history.valueSeries.length < 2) {
+      renderInsufficientData(container, "Not enough historical data yet to draw a trend.");
       return;
     }
-    // Public mode: the curve never disappears, only its scale does -
+    // Showcase mode: the curve never disappears, only its scale does -
     // rebase to an index (first point = 100) and drop the euro sign.
     const owner = isOwnerMode();
-    const points = owner ? rawPoints : indexValueSeries(rawPoints);
+    const points = owner ? data.history.valueSeries : indexValueSeries(data.history.valueSeries);
     renderLineChart(container, points, {
       formatValue: owner ? fmtEUR : (v) => String(Math.round(v)),
       formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
       formatDateLabel: formatDateTick,
     });
   };
-  draw(activeRange);
-
-  if (perfFilterClickHandler) filtersEl.removeEventListener("click", perfFilterClickHandler);
-  perfFilterClickHandler = (e) => {
-    const btn = e.target.closest(".filter-pill");
-    if (!btn) return;
-    filtersEl.querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    draw(btn.dataset.range);
-  };
-  filtersEl.addEventListener("click", perfFilterClickHandler);
+  draw();
 
   if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
-  perfResizeHandler = () => {
-    const active = filtersEl.querySelector(".active").dataset.range;
-    draw(active);
-  };
+  perfResizeHandler = draw;
   window.addEventListener("resize", perfResizeHandler);
+
+  $("perf-more-link").innerHTML = `<a class="link-more" href="#">View Performance ${icon("arrowRight")}</a>`;
 }
 
 /** Everything below reads from `data`, captured in this closure so a
@@ -121,14 +83,13 @@ function renderAll(data) {
   initPerformanceCard(data);
   renderHoldingsTable($("holdings-table"), data.portfolio.holdings);
 
-  renderAllocationTabs($("allocation-tabs"), data);
-
-  renderExposure({
-    tabsEl: $("exposure-tabs"),
-    vizEl: $("exposure-viz"),
-    hintEl: $("exposure-hint"),
-    titleEl: document.querySelector("#exposure-card .card-header-title"),
-  }, data);
+  // Asset-class summary + a geography highlight, not the full tabbed
+  // breakdown (Product/Account/geography/sector/currency/style all move
+  // to the dedicated Allocation page - see renderAllocationSummary in
+  // ui.js). The old world-map Exposure card is gone from Overview
+  // entirely for the same reason; charts.js's renderWorldMap is untouched
+  // and ready for that page once it's built, just not called from here.
+  renderAllocationSummary($("allocation-summary"), data);
 
   renderPortfolioHealth($("portfolio-health"), data);
   renderInsights($("portfolio-insights"), data);
