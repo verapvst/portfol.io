@@ -36,6 +36,7 @@ Portfolio.io/
 - `docs/workbook-architecture.md` — the Excel schema `data/Portfolio Workbook.xlsx` follows; still the real source for anything not yet migrated to Supabase.
 - `docs/migration-plan.md` — the concrete bridge from the workbook's 9 sheets to Supabase, module by module: table structure, CRUD, owning page, build order.
 - `docs/production-architecture.md` — the pre-deployment checkpoint: the Showcase/Portfolio/Edit access model, the repository audit that led to this migration, and why Netlify.
+- `docs/feature-backlog.md` — **living document**, unlike the four above. Feature-by-feature backlog from auditing an old prototype (`~/Downloads/index.html`): what code already exists to reuse (a real automated daily ETF-pricing pipeline, a deterministic simulator engine, a Portuguese capital-gains tax engine, a 12-question Investor-DNA recommendation engine, 9-dimension product scorecards), organized around three universes — My Portfolio (private), Product Library (public-safe), Simulator (a virtual layer on both). Execution starts with Daily Prices.
 
 ## Current state (2026-08-07)
 
