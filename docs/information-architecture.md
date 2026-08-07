@@ -22,6 +22,32 @@ Nothing new to design here — this section exists only to confirm the already-d
 
 ---
 
+## 1.5. The interaction system — one vocabulary, applied everywhere
+
+**14 pages does not mean 14 isolated experiences.** Every page in §2 below is built from the same small set of patterns, never a bespoke one-off:
+
+- **Navigation** → pages. The sidebar's only job.
+- **Page** → tabs / sections. A page can subdivide, but a tab never gets its own URL/nav entry.
+- **Cards** → drill-down. A summary tile that opens more detail without leaving the page.
+- **Drawer / modal** → quick detail or edit. Never a full page transition for "tell me more" or "add one record."
+- **Product** → product-specific tabs (Overview/Scorecard/Performance/Risk/Allocation/Market Data/Documents) — one component, reused for every entry in Product Library, never a bespoke page per product.
+- **Data Hub** → Import → Review → Classification Review → Commit, all inside one page, per §2's Operations section.
+- **Simulator** → Scenario → Results → Comparison — one flow, whether it started from Investor DNA (Showcase) or a cloned real portfolio (Private).
+
+### The rule that matters most in the whole application
+
+Every page, regardless of which of the 14 it is, obeys exactly this matrix — no page defines its own access logic:
+
+| Mode | Read | Financial values | Write | Import |
+|---|---|---|---|---|
+| **Showcase** | Public/sanitised | ❌ | ❌ | ❌ |
+| **Private** | Full | ✅ | ❌ | ❌ |
+| **Edit** | Full | ✅ | ✅ | ✅ |
+
+Concretely: a page component never asks "am I on the Showcase version of Overview or the Private version" — it asks "what mode is the current session in" once, and every page answers from the same table. This is what `edit_sessions` + RLS already enforce server-side (§1) — this matrix is the client-side mirror of that same rule, not a second, separate one.
+
+---
+
 ## 2. Complete page/module map
 
 Every row answers your eight questions at once: **Type** covers page/tab/drawer; **Access** covers admin-only/private/public in one column since they're the same three-tier system (Showcase/Private/Edit); the last two columns cover Supabase dependency and legacy reuse.
