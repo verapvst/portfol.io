@@ -1,6 +1,8 @@
 # Portfolio.io — Complete Migration Plan
 
-**Version 1.1** — the bridge document in the `02_` family: takes every real sheet in the workbook, plus the calculated concepts that were never sheets at all, and assigns each one a final home in Portfolio.io. As of v1.1, this is also the *only* per-module/per-page reference doc — `02_Portfolio.io - Core Modules Specification.md` (an earlier, less-grounded first pass at the same ground) has been merged in and retired; its one genuinely unique contribution, the Data Hub import-pipeline schema, now lives in §2.11 below.
+**Version 1.1** — the bridge document: takes every real sheet in the workbook, plus the calculated concepts that were never sheets at all, and assigns each one a final home in Portfolio.io. As of v1.1, this is also the *only* per-module/per-page reference doc — the former "Core Modules Specification" (an earlier, less-grounded first pass at the same ground) has been merged in and retired; its one genuinely unique contribution, the Data Hub import-pipeline schema, now lives in §2.11 below.
+
+> **Migration note (2026-08-07):** this repo was cleaned up and moved to a flat structure. Where this document says `02_Portfolio Workbook.xlsx`, the real file is now `data/Portfolio Workbook.xlsx`; where it says `01_Portfolio AI/...`, that's now just the repo root. Left as originally written below — the content and reasoning are unchanged, only the paths.
 
 Grounded in the actual current workbook (`02_Portfolio Workbook.xlsx`, read directly, not from memory): 9 sheets, 96 columns total, listed in full below. Nothing in this plan invents a column that doesn't already exist, except where explicitly marked **(new)**.
 

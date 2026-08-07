@@ -6,6 +6,8 @@
 
 *This revision refines the `Costs` sheet: a cost is not just a value, it's a value plus how it applies over time and what unit it's denominated in. See Section 16 for what changed. The architecture remains closed — this is a structural detail on one sheet, not a reopening.*
 
+> **Migration note (2026-08-07):** the real workbook file now lives at `data/Portfolio Workbook.xlsx` in this repo (flat structure, moved from the old `Portfolio Management/` folder). References below to `01_Portfolio AI` or a numbered top-level path describe that old repo's layout, kept for history.
+
 ---
 
 ## 1. Executive Summary

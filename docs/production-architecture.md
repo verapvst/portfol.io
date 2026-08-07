@@ -1,6 +1,8 @@
 # Portfolio.io — Production Architecture
 
-**Version 1.0** — the third document in the `02_` family, alongside the Platform Architecture (the constitution) and the Migration Plan (workbook → Supabase, module by module, including per-module schema — the former Core Modules Specification is merged into it as of Migration Plan v1.1). This document is the one that turns the project from "an app that runs on my machine" into "an app in production": the three-mode access model, a full repository audit, and a deployment recommendation.
+**Version 1.0** — alongside the Platform Architecture (the constitution) and the Migration Plan (workbook → Supabase, module by module, including per-module schema — the former Core Modules Specification is merged into it as of Migration Plan v1.1). This document is the one that turns the project from "an app that runs on my machine" into "an app in production": the three-mode access model, a full repository audit, and a deployment recommendation.
+
+> **Migration note (2026-08-07):** everything §2 below describes was executed in the old `Portfolio Management/` working folder, then this whole project moved into a fresh, flat `Portfolio.io` repo (this file's own new home) connected to GitHub. Old paths below (`01_Portfolio AI/...`, `02_Portfolio Workbook.xlsx`, numbered top-level folders) describe that prior repo, kept as real history of what was found and decided — not a live map of this repo. See the root `README.md` for what's actually here now.
 
 ---
 
