@@ -257,6 +257,20 @@ body.nav-open #nav-drawer { transform: translateX(0); }
   overflow-y: auto;
 }
 
+/* One per group (Portfolio/Investments/Research/Operations/Administration
+   - see js/shell.js's NAV_GROUPS). Quiet on purpose - structure, not a
+   call to action. */
+.nav-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.75;
+  padding: var(--sp-4) 12px 6px;
+}
+.nav-group-label:first-child { padding-top: var(--sp-1); }
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -302,9 +316,28 @@ body.nav-open #nav-drawer { transform: translateX(0); }
   color: #fff;
 }
 
-.sb-footer .nav-item { color: var(--muted); }
+/* ---------- Desktop: persistent sidebar, not an overlay ----------
+   #nav-drawer is inserted as #app's first grid child (js/shell.js) - this
+   is the only place that turns it from "fixed overlay" into "real layout
+   column". No LogoButton/backdrop needed once the sidebar is always on
+   screen; no open/close state to manage either. */
+@media (min-width: 1024px) {
+  .nav-logo-btn, #nav-backdrop { display: none; }
 
-/* ---------- Tablet ---------- */
+  #nav-drawer {
+    position: sticky;
+    top: var(--sp-6);
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: 100%;
+    max-height: calc(100vh - var(--sp-12));
+  }
+
+  .nav-drawer-logo { cursor: default; }
+}
+
+/* ---------- Tablet (overlay, unchanged) ---------- */
 @media (max-width: 1023px) {
   #nav-drawer { width: 280px; }
 }

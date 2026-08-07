@@ -64,14 +64,26 @@ a { color: inherit; text-decoration: none; }
 /* Icon stroke-width: 1.5 everywhere, matching lucide-react's default. */
 svg.icon { stroke-width: 1.5; }
 
-/* padding-left clears the fixed LogoButton (see navigation.css) - the
-   drawer itself is an overlay and never affects this layout. */
+/* Below 1024px: padding-left clears the fixed LogoButton overlay (see
+   components.css's nav rules) - the drawer is an overlay there and never
+   affects this layout. At/above 1024px, #app becomes a real two-column
+   grid (sidebar + content) instead - see the media query below. */
 #app {
   max-width: 1900px;
   margin: 0 auto;
   padding: var(--sp-6) clamp(16px, 3vw, 28px);
   padding-left: 76px;
   min-height: 100vh;
+}
+
+@media (min-width: 1024px) {
+  #app {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    gap: var(--sp-8);
+    padding-left: clamp(16px, 3vw, 28px);
+    align-items: start;
+  }
 }
 
 #main {

@@ -157,31 +157,70 @@ function initOwnerAccessModal() {
   window.closeOwnerModal = close;
 }
 
-/* ---------- Navigation overlay (LogoButton + Backdrop + Drawer) ----------
-   The sidebar is not part of the page layout. It's an overlay: LogoButton
-   (always visible, fixed top-left) + Backdrop + Drawer, all appended
-   straight to <body> so they can never affect #main's width. Exactly one
-   logo is ever on screen: the icon on LogoButton while closed, the
-   wordmark inside the drawer once open - never both. */
+/* ---------- Navigation: persistent sidebar (desktop) / overlay drawer (mobile) ----------
+   One DOM structure serves both: on desktop (>=1024px) #nav-drawer is
+   inserted as #app's first child and laid out via CSS Grid, sticky and
+   always visible - no LogoButton, no backdrop, no open/close state.
+   Below that breakpoint the exact same element switches to fixed-overlay
+   behaviour (LogoButton + Backdrop + slide-in Drawer), unchanged from
+   before. See css/components.css's nav media queries for the breakpoint
+   switch itself - this file only ever builds one drawer.
+
+   Grouped per docs/information-architecture.md §2 (Portfolio.io repo) -
+   five groups, not a flat list. Portfolio and Research are Showcase-safe
+   (shown to everyone); Investments/Operations/Administration are gated
+   on being signed in. That's a deliberate simplification: the doc's real
+   target is gating Operations/Administration on Edit Mode specifically
+   (a time-boxed elevation, not just "signed in") - edit_sessions doesn't
+   exist as working code yet, so for now "signed in" is the closest
+   honest approximation, not a forgotten distinction. Tighten this the
+   same day edit_sessions ships. */
 
 /**
- * href is the real page for the two pages that exist; everything else
- * stays a "#" placeholder until it's actually built - a dead link reads
- * honestly as "not built yet", a fake href would silently 404.
+ * href is the real page for pages that exist; everything else stays a
+ * "#" placeholder until it's actually built - a dead link reads honestly
+ * as "not built yet", a fake href would silently 404.
  */
-const NAV_ITEMS = [
-  { label: "Overview", icon: "home", href: "index.html" },
-  { label: "Data Hub", icon: "upload", href: "data-hub.html" },
-  { label: "Accounts", icon: "landmark", href: "accounts.html" },
-  { label: "Transactions", icon: "receipt", href: "transactions.html" },
-  { label: "Valuations", icon: "activity", href: "valuations.html" },
-  { label: "Costs", icon: "wallet", href: "costs.html" },
-  { label: "Portfolio", icon: "pieChart", href: "#" },
-  { label: "Performance", icon: "trendingUp", href: "#" },
-  { label: "Analytics", icon: "barChart3", href: "#" },
-  { label: "Goals", icon: "target", href: "#" },
-  { label: "AI Insights", icon: "sparkles", href: "#", badge: "New" },
-  { label: "Reports", icon: "fileText", href: "#" },
+const NAV_GROUPS = [
+  {
+    group: "Portfolio",
+    items: [
+      { label: "Overview", icon: "home", href: "index.html" },
+      { label: "Portfolio Detail", icon: "pieChart", href: "#" },
+      { label: "Performance", icon: "trendingUp", href: "#" },
+      { label: "Allocation", icon: "pieChart", href: "#" },
+      { label: "Risk", icon: "activity", href: "#" },
+    ],
+  },
+  {
+    group: "Investments",
+    private: true,
+    items: [
+      { label: "Accounts", icon: "landmark", href: "accounts.html" },
+      { label: "Transactions", icon: "receipt", href: "transactions.html" },
+      { label: "Valuations", icon: "activity", href: "valuations.html" },
+      { label: "Costs", icon: "wallet", href: "costs.html" },
+    ],
+  },
+  {
+    group: "Research",
+    items: [
+      { label: "Product Library", icon: "pieChart", href: "#" },
+      { label: "Benchmarks", icon: "barChart3", href: "#" },
+      { label: "Market Data", icon: "trendingUp", href: "#" },
+      { label: "Simulator", icon: "sparkles", href: "#" },
+    ],
+  },
+  {
+    group: "Operations",
+    private: true,
+    items: [{ label: "Data Hub", icon: "upload", href: "data-hub.html" }],
+  },
+  {
+    group: "Administration",
+    private: true,
+    items: [{ label: "Settings", icon: "settings", href: "#" }],
+  },
 ];
 
 /** Active state is which page is actually loaded, not a hardcoded flag -
@@ -200,6 +239,21 @@ function navItemHTML(item) {
       ${item.badge ? `<span class="nav-badge">${item.badge}</span>` : ""}
     </a>`;
 }
+
+function navGroupHTML(group) {
+  if (group.private && !currentUser()) return "";
+  return `
+    <div class="nav-group-label">${group.group}</div>
+    ${group.items.map(navItemHTML).join("")}`;
+}
+
+function renderNavGroups(navEl) {
+  navEl.innerHTML = NAV_GROUPS.map(navGroupHTML).join("");
+  navEl.querySelectorAll(".nav-item").forEach((el) => el.addEventListener("click", () => close()));
+}
+
+let closeNavDrawer = () => {};
+function close() { closeNavDrawer(); }
 
 function initNavigation(user) {
   const logoBtn = document.createElement("button");
@@ -232,16 +286,17 @@ function initNavigation(user) {
       </div>
     </div>
 
-    <nav class="sb-nav">${NAV_ITEMS.map(navItemHTML).join("")}</nav>
+    <nav class="sb-nav" id="sb-nav"></nav>`;
 
-    <div class="sb-footer">
-      <a class="nav-item" href="#">
-        <span class="nav-icon">${icon("settings")}</span>
-        <span>Settings</span>
-      </a>
-    </div>`;
+  document.body.append(logoBtn, backdrop);
+  // Inserted into #app (not appended to body) so the >=1024px CSS Grid
+  // layout can give it real column space - see css/components.css. Below
+  // that breakpoint it's position:fixed regardless of DOM parent, so
+  // living inside #app costs nothing on mobile/tablet.
+  document.getElementById("app").prepend(drawer);
 
-  document.body.append(logoBtn, backdrop, drawer);
+  renderNavGroups(drawer.querySelector("#sb-nav"));
+  onAuthChange(() => renderNavGroups(drawer.querySelector("#sb-nav")));
 
   const isOpen = () => document.body.classList.contains("nav-open");
 
@@ -251,19 +306,18 @@ function initNavigation(user) {
     document.addEventListener("keydown", onKey);
   };
 
-  const close = () => {
+  closeNavDrawer = () => {
     document.body.classList.remove("nav-open");
     logoBtn.setAttribute("aria-expanded", "false");
     document.removeEventListener("keydown", onKey);
   };
 
-  const toggle = () => (isOpen() ? close() : open());
-  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const toggle = () => (isOpen() ? closeNavDrawer() : open());
+  const onKey = (e) => { if (e.key === "Escape") closeNavDrawer(); };
 
   logoBtn.addEventListener("click", toggle);
-  backdrop.addEventListener("click", close);
-  drawer.querySelector(".nav-drawer-logo").addEventListener("click", close);
-  drawer.querySelectorAll(".nav-item").forEach((el) => el.addEventListener("click", close));
+  backdrop.addEventListener("click", closeNavDrawer);
+  drawer.querySelector(".nav-drawer-logo").addEventListener("click", closeNavDrawer);
 }
 
 /* ---------- Topbar ---------- */
