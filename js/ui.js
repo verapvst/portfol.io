@@ -142,7 +142,7 @@ function renderHoldingsTable(container, holdings) {
         <tbody>${top5.map(holdingsRowHTML).join("")}</tbody>
       </table>
     </div>
-    <a class="link-more" href="#">View Portfolio Detail ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="portfolio-detail.html">View Portfolio Detail ${icon("arrowRight")}</a>`;
 }
 
 /* ---------- Exposure ----------

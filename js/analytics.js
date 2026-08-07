@@ -117,6 +117,19 @@ async function getPortfolioDataLive() {
   const unrealisedGainPct = investedCapital ? Math.round((unrealisedGain / investedCapital) * 10000) / 100 : 0;
 
   // ---------- Holdings / allocation views ----------
+  // Cost basis / Unrealised P&L: grouped straight from the same real
+  // transactionsRaw already loaded above, through the one shared
+  // costBasisFromTransactions()/unrealisedPnL() (calculations.js) that
+  // repository.js's mock also calls - Portfolio Detail (and whatever
+  // reads holdings after it) gets identical figures regardless of which
+  // backend answered getPortfolioDataAuto().
+  const txnsBySecurity = new Map();
+  for (const t of transactionsRaw) {
+    const list = txnsBySecurity.get(t.security_id) || [];
+    list.push(t);
+    txnsBySecurity.set(t.security_id, list);
+  }
+
   const holdings = holdingsRaw.map((h) => ({
     id: h.security.id,
     name: h.security.name,
@@ -126,7 +139,7 @@ async function getPortfolioDataLive() {
     value: h.value,
     weight: totalValue ? Math.round((h.value / totalValue) * 10000) / 100 : 0,
     returnPct: h.security.id === twrDriver.security?.id ? totalReturnPct : 0,
-    pnl: null,
+    ...unrealisedPnL(h.value, costBasisFromTransactions(txnsBySecurity.get(h.security.id) || [])),
     tone: tokenColor("asset", h.security.name.replace(/[^a-zA-Z0-9]/g, "_")),
   }));
 

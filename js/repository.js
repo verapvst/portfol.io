@@ -139,13 +139,29 @@ function getMockPortfolioData() {
     { id: "t212", name: "Trading212", tone: tokenColor("account", "Trading212") },
   ];
 
+  // Real buy amounts, the same figures already cited above (BPI's €250
+  // subscription, each T212 ETF's own buy) - not re-typed as a separate
+  // "cost basis" number, fed through the one shared costBasisFromTransactions()
+  // (calculations.js) every page uses, so this mock and the live Supabase
+  // path can never compute Unrealised P&L two different ways. No units
+  // recorded here (T212's per-ETF unit counts aren't tracked in this
+  // mock, and BPI Dinâmico's fund subscription never had one) - the
+  // no-sells branch of that function needs none, so nothing is invented.
+  const holdingBuys = {
+    "bpi-dinamico": [{ type: "buy", amount: 250.00 }],
+    "uetw": [{ type: "buy", amount: 80.00 }],
+    "avws": [{ type: "buy", amount: 40.00 }],
+    "xdeq": [{ type: "buy", amount: 24.00 }],
+    "spym": [{ type: "buy", amount: 16.00 }],
+  };
+
   const holdings = [
-    { id: "bpi-dinamico", name: "BPI Dinâmico", ticker: "—", type: "Fund", accountId: "bpi", value: 335.44, weight: 67.71, returnPct: 34.40, pnl: null, tone: tokenColor("asset", "BPI_Dinamico") },
-    { id: "uetw", name: "UBS Core MSCI World", ticker: "UETW", type: "ETF", accountId: "t212", value: 80.00, weight: 16.15, returnPct: 0, pnl: null, tone: tokenColor("asset", "UETW") },
-    { id: "avws", name: "Avantis Global Small Cap Value", ticker: "AVWS", type: "ETF", accountId: "t212", value: 40.00, weight: 8.07, returnPct: 0, pnl: null, tone: tokenColor("asset", "AVWS") },
-    { id: "xdeq", name: "Xtrackers MSCI World Quality", ticker: "XDEQ", type: "ETF", accountId: "t212", value: 24.00, weight: 4.84, returnPct: 0, pnl: null, tone: tokenColor("asset", "XDEQ") },
-    { id: "spym", name: "SPDR Emerging Markets", ticker: "SPYM", type: "ETF", accountId: "t212", value: 16.00, weight: 3.23, returnPct: 0, pnl: null, tone: tokenColor("asset", "SPYM") },
-  ];
+    { id: "bpi-dinamico", name: "BPI Dinâmico", ticker: "—", type: "Fund", accountId: "bpi", value: 335.44, weight: 67.71, returnPct: 34.40, tone: tokenColor("asset", "BPI_Dinamico") },
+    { id: "uetw", name: "UBS Core MSCI World", ticker: "UETW", type: "ETF", accountId: "t212", value: 80.00, weight: 16.15, returnPct: 0, tone: tokenColor("asset", "UETW") },
+    { id: "avws", name: "Avantis Global Small Cap Value", ticker: "AVWS", type: "ETF", accountId: "t212", value: 40.00, weight: 8.07, returnPct: 0, tone: tokenColor("asset", "AVWS") },
+    { id: "xdeq", name: "Xtrackers MSCI World Quality", ticker: "XDEQ", type: "ETF", accountId: "t212", value: 24.00, weight: 4.84, returnPct: 0, tone: tokenColor("asset", "XDEQ") },
+    { id: "spym", name: "SPDR Emerging Markets", ticker: "SPYM", type: "ETF", accountId: "t212", value: 16.00, weight: 3.23, returnPct: 0, tone: tokenColor("asset", "SPYM") },
+  ].map((h) => ({ ...h, ...unrealisedPnL(h.value, costBasisFromTransactions(holdingBuys[h.id] || [])) }));
 
   const accountAllocation = accounts.map((a) => {
     const value = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.value, 0);

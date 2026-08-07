@@ -1,0 +1,20 @@
+/* ============================================================
+   portfolio-detail.css - page-specific overrides only. The table itself
+   reuses .holdings-table (components.css) - same look as Overview's Top
+   Holdings, just more rows and, in Private mode, three extra columns.
+   ============================================================ */
+
+#holdings-detail-card { max-width: 1100px; }
+
+/* Wider than the 4-column Top Holdings preview - forces horizontal
+   scroll instead of illegible squeezed columns once Private mode adds
+   Market Value/Avg. Cost/Unrealised P&L. */
+.holdings-detail-table { min-width: 640px; }
+.holdings-detail-table.showcase { min-width: 420px; }
+
+.holdings-detail-empty { color: var(--muted); font-size: 14px; }
+
+@media (max-width: 767px) {
+  .holdings-detail-table { min-width: 560px; }
+  .holdings-detail-table.showcase { min-width: 380px; }
+}

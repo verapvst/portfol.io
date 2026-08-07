@@ -85,7 +85,7 @@ const NAV_GROUPS = [
     group: "Portfolio",
     items: [
       { label: "Overview", icon: "home", href: "index.html" },
-      { label: "Portfolio Detail", icon: "pieChart", href: "#" },
+      { label: "Portfolio Detail", icon: "pieChart", href: "portfolio-detail.html" },
       { label: "Performance", icon: "trendingUp", href: "#" },
       { label: "Allocation", icon: "pieChart", href: "#" },
       { label: "Risk", icon: "activity", href: "#" },
@@ -360,6 +360,11 @@ const METRIC_DOCS = {
     calculation: "BPI Dinâmico is EUR-denominated; the Trading212 ETF sleeve is USD. Weighted by each account's share of the portfolio. A world-equity ETF traded in EUR still has real USD/JPY/GBP exposure through its underlying holdings - that finer breakdown isn't in the workbook, so this tab deliberately answers \"what currency would I receive if I sold\", not \"what currencies move this portfolio's value\".",
     source: "analytics.currency, derived from portfolio.accounts.",
   },
+  "portfolio-detail": {
+    definition: "Every position currently held, across every account - what you actually own, not how it's performing (see Performance) or how it's diversified (see Allocation). Showcase shows structure and weight only; Private adds market value, average cost basis and unrealised P&L.",
+    calculation: "Holdings are never edited directly - each row is derived from Transactions (units bought/sold) and Valuations (latest known value) per security, per docs/migration-plan.md §3.1. Avg. Cost Basis and Unrealised P&L use the average-cost method over that security's own buy/sell transactions - a security with no sell on record needs no per-unit tracking at all, its cost basis is simply everything paid in so far.",
+    source: "portfolio.holdings, computed by js/calculations.js:costBasisFromTransactions()/unrealisedPnL() from transactions + valuations - the same shared functions Performance/Allocation/Risk read from as they're built, never a page-local recomputation.",
+  },
   "top-holdings": {
     definition: "The portfolio's five largest positions by weight.",
     calculation: "All holdings sorted by weight, descending, top 5 kept.",
@@ -447,8 +452,22 @@ function comingSoon(items) {
   return `<div class="drawer-coming-soon"><p class="drawer-hint">Coming soon, once the Excel parser is wired in:</p><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul></div>`;
 }
 
+/** The last data getPortfolioDataAuto() actually resolved to (mock or
+    live Supabase), kept here so drillDown() reads exactly what's on
+    screen. Without this, every drawer independently called
+    getPortfolioData() - the MOCK-only entry point, never the live one -
+    so a signed-in user looking at their real €501.27 on the KPI grid
+    would click into a drawer built from the mock's €495.44 instead, and
+    a real holding wouldn't be found there at all (mock ids like
+    "bpi-dinamico" vs. real Supabase UUIDs), opening a silently empty
+    drawer. Set once per render by app.js/portfolio-detail.js's own
+    loadAndRender(), same object reference the cards themselves drew
+    from - never a second, independent fetch. */
+let currentPortfolioData = null;
+function setCurrentPortfolioData(data) { currentPortfolioData = data; }
+
 function drillDown(type, id) {
-  const data = getPortfolioData();
+  const data = currentPortfolioData || getPortfolioData();
   let payload;
 
   switch (type) {
@@ -501,12 +520,21 @@ function holdingDrill(id, data) {
   const h = data.portfolio.holdings.find((x) => x.id === id);
   if (!h) return { icon: "pieChart", title: "Holding", bodyHTML: "" };
   const account = data.portfolio.accounts.find((a) => a.id === h.accountId);
+  // Avg. Cost Basis / Unrealised P&L: Private-only, per
+  // docs/information-architecture.md's Portfolio Detail row ("Showcase =
+  // structure + %, no €/cost-basis") - and read straight off h.costBasis/
+  // h.pnl, never recomputed here, since the holdings table on Portfolio
+  // Detail already computed them via the same calculations.js functions.
+  const costRows = (isOwnerMode() && h.costBasis != null) ? `
+        ${rowHTML("Avg. Cost Basis", formatMoney(h.costBasis))}
+        ${rowHTML("Unrealised P&L", `${formatMoney(h.pnl, { signed: true })}${h.pnlPct != null ? ` (${fmtPct(h.pnlPct)})` : ""}`)}` : "";
   return {
     icon: "pieChart", title: h.name, subtitle: `${h.ticker !== "—" ? h.ticker + " · " : ""}${h.type}`,
     bodyHTML: `
       <div class="drawer-rows">
         ${rowHTML("Weight", `${h.weight.toFixed(2)}%`)}
         ${rowHTML("Market Value", formatMoney(h.value))}
+        ${costRows}
         ${rowHTML("Total Return", `${h.returnPct > 0 ? "+" : ""}${h.returnPct.toFixed(2)}%`)}
         ${rowHTML("Account", account ? account.name : "—")}
       </div>
@@ -660,3 +688,4 @@ window.initDrawer = initDrawer;
 window.initInfoPopovers = initInfoPopovers;
 window.drillDown = drillDown;
 window.initDrillDown = initDrillDown;
+window.setCurrentPortfolioData = setCurrentPortfolioData;

@@ -114,6 +114,7 @@ async function init() {
   // the money-sensitive sections, since the DATA SOURCE itself changes.
   const loadAndRender = async () => {
     const data = await getPortfolioDataAuto();
+    setCurrentPortfolioData(data);
     renderAll(data);
   };
   onAuthChange(() => { loadAndRender(); });
