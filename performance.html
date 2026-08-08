@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=45">
+<link rel="stylesheet" href="css/layout.css?v=45">
+<link rel="stylesheet" href="css/components.css?v=45">
+<link rel="stylesheet" href="css/performance.css?v=45">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <!-- "How has my portfolio performed?" - per
+         docs/information-architecture.md §2. Deliberately answers this
+         with Transactions/Valuations-derived numbers only, never a
+         security's own market price return (a different question,
+         belongs on that security's own page once Product Library and
+         daily_prices are live) - see the info popover on each metric. -->
+    <div class="perf-stats-grid" id="perf-stats-grid"></div>
+
+    <section class="card glass interactive" id="performance-chart-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="investment-performance" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Portfolio Value Over Time</h2>
+        </div>
+        <div class="filter-pills glass-quiet" id="perf-filters"></div>
+      </div>
+      <div id="perf-linechart-container"></div>
+    </section>
+
+    <!-- Honest unavailable state, not a placeholder chart - no benchmark
+         is configured and comparing to one needs daily_prices, which is
+         explicitly still paused. See the "benchmark-comparison" info
+         popover for exactly what's missing. -->
+    <section class="card glass" id="benchmark-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="benchmark-comparison" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Benchmark Comparison</h2>
+        </div>
+      </div>
+      <div id="benchmark-body"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=45"></script>
+<script src="js/supabaseClient.js?v=45"></script>
+
+<script src="js/utils.js?v=45"></script>
+<script src="js/calculations.js?v=45"></script>
+<script src="js/repository.js?v=45"></script>
+
+<script src="js/charts.js?v=45"></script>
+<script src="js/shell.js?v=45"></script>
+<script src="js/auth.js?v=45"></script>
+<script src="js/db.js?v=45"></script>
+<script src="js/analytics.js?v=45"></script>
+<script src="js/performance.js?v=45"></script>
+</body>
+</html>

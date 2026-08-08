@@ -65,7 +65,7 @@ function initPerformanceCard(data) {
   perfResizeHandler = draw;
   window.addEventListener("resize", perfResizeHandler);
 
-  $("perf-more-link").innerHTML = `<a class="link-more" href="#">View Performance ${icon("arrowRight")}</a>`;
+  $("perf-more-link").innerHTML = `<a class="link-more" href="performance.html">View Performance ${icon("arrowRight")}</a>`;
 }
 
 /** Everything below reads from `data`, captured in this closure so a

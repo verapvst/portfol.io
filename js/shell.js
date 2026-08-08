@@ -53,7 +53,10 @@ function formatMoney(value, opts) {
     initPerformanceCard - the chart itself never disappears). */
 function indexValueSeries(series) {
   const base = series[0]?.value || 1;
-  return series.map((p) => ({ date: p.date, value: (p.value / base) * 100 }));
+  // Carries `real` through the rebase - Showcase mode needs the same
+  // interpolated-vs-observed distinction on the chart as Private mode,
+  // not just a rescaled line with the honesty flag silently dropped.
+  return series.map((p) => ({ date: p.date, value: (p.value / base) * 100, real: p.real }));
 }
 
 /* ---------- Navigation: persistent sidebar (desktop) / overlay drawer (mobile) ----------
@@ -86,7 +89,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Overview", icon: "home", href: "index.html" },
       { label: "Portfolio Detail", icon: "pieChart", href: "portfolio-detail.html" },
-      { label: "Performance", icon: "trendingUp", href: "#" },
+      { label: "Performance", icon: "trendingUp", href: "performance.html" },
       { label: "Allocation", icon: "pieChart", href: "#" },
       { label: "Risk", icon: "activity", href: "#" },
     ],
@@ -323,7 +326,7 @@ const METRIC_DOCS = {
   "investor-return": {
     definition: "XIRR (Money-Weighted Return, annualised) - what you personally earned, given exactly when and how much you deposited. A genuinely different question from Investment Return (TWR): that one measures the investment cash-flow-neutral, this one is sensitive to your own timing on purpose.",
     calculation: "The annual rate that makes every real cash flow (each contribution as a negative flow, current value as a hypothetical payout today) net to zero in present-value terms - the standard XIRR definition. It reads much smaller than Investment Return's +34.40% not because something's wrong, but because that figure is cumulative (total since 2017) while this one is annualised (per year) - they're on different time bases by definition, not disagreeing about the same thing.",
-    source: "analytics.performance.investorReturnPct, computed by repository.js:xirr() over the real dated amounts in portfolio.transactions plus the current total value.",
+    source: "analytics.performance.investorReturnPct/investorReturnAvailable, computed by repository.js:xirr() over the real dated cash flows plus the current total value as a hypothetical terminal payout. investorReturnAvailable is false with fewer than 2 cash flows, shown as insufficient history rather than a fabricated 0%.",
   },
   "net-invested": {
     definition: "Capital actually contributed, excluding any gain or loss - a capital-flow figure, not a performance one.",
@@ -336,9 +339,9 @@ const METRIC_DOCS = {
     source: "portfolio.cash. Currently €0 - every euro is invested, nothing idle.",
   },
   "investment-performance": {
-    definition: "Time-Weighted Return (TWR) since inception - how the investment itself performed, isolated from when or how much was deposited. Deliberately not the same question as Portfolio Value (\"what do I have\") or Investor Return / MWR-XIRR (\"what did I personally gain, given when I put money in\" - not yet built, see the architecture doc).",
-    calculation: "BPI Dinâmico is the only holding with a return history (one lump-sum subscription in 2017, no interim contributions since) - real dated NAV observations where they exist, linearly interpolated between them elsewhere, chain-linked into the return shown. The Trading212 sleeve (bought today) contributes a real 0% until it has time behind it. Interpolated stretches don't capture real intra-period volatility (e.g. 2020's drawdown isn't visible here even though it happened).",
-    source: "history.valueSeries + analytics.performance.totalReturnPct, transcribed from 02_Portfolio Workbook.xlsx's Portfolio Values sheet. Each point is flagged real:true/false in the data.",
+    definition: "Time-Weighted Return (TWR) since inception - how the investment itself performed, isolated from when or how much was deposited. Deliberately not the same question as Portfolio Value (\"what do I have\"), Investor Return / XIRR (\"what did I personally gain, given when I put money in\") - or a security's own market price return: this is computed from the portfolio's recorded Valuations, which already net out fees and distributions the way a raw price series never would, so the two numbers can legitimately differ even for a single-holding portfolio. A security's own price history (once daily_prices is live) belongs on that security's own page, not here.",
+    calculation: "The holding with the longest real valuation history drives the shown series - real dated NAV observations where they exist, linearly interpolated between them elsewhere (dashed on the chart, never drawn as if observed), chain-linked into the return shown. A newly-bought holding contributes a real 0% until it has time behind it. Interpolated stretches don't capture real intra-period volatility (e.g. a real drawdown might not be visible here even though it happened) - this is a known, flagged limitation, not a silent one.",
+    source: "history.valueSeries + analytics.performance.totalReturnPct/totalReturnAvailable, computed from Valuations (live) or transcribed from 02_Portfolio Workbook.xlsx's Portfolio Values sheet (mock). Each point is flagged real:true/false in the data; totalReturnAvailable is false when fewer than 2 dated observations exist yet, in which case this shows as insufficient history rather than a fabricated 0%.",
   },
   "portfolio-allocation": {
     definition: "How the portfolio splits by asset class, product, or account.",
@@ -359,6 +362,21 @@ const METRIC_DOCS = {
     definition: "Which settlement currencies the portfolio is exposed to - not the same as the underlying economic currency exposure of what each fund actually holds.",
     calculation: "BPI Dinâmico is EUR-denominated; the Trading212 ETF sleeve is USD. Weighted by each account's share of the portfolio. A world-equity ETF traded in EUR still has real USD/JPY/GBP exposure through its underlying holdings - that finer breakdown isn't in the workbook, so this tab deliberately answers \"what currency would I receive if I sold\", not \"what currencies move this portfolio's value\".",
     source: "analytics.currency, derived from portfolio.accounts.",
+  },
+  "cost-basis": {
+    definition: "What was actually paid for a position, still attributable to the units currently held - not what the position is worth today (see Market Value), and not the total ever paid in (a sold portion's cost leaves with it).",
+    calculation: "Average-cost method: total amount spent across every buy transaction for that security, reduced proportionally by the average cost-per-unit for any units later sold. A security with no sell on record needs no per-unit tracking at all - its cost basis is simply everything paid in so far.",
+    source: "js/calculations.js:costBasisFromTransactions(), over that security's own Transactions (type='buy'/'sell', amount, units) - the one shared implementation both the mock and live Supabase path call, never recomputed per page.",
+  },
+  "unrealised-pnl": {
+    definition: "The paper gain or loss on a position if it were sold today at its latest known value - \"unrealised\" because nothing has actually been sold yet.",
+    calculation: "Market Value minus Cost Basis, and that difference as a percentage of Cost Basis.",
+    source: "js/calculations.js:unrealisedPnL(value, costBasis) - value from the latest Valuation, cost basis from costBasisFromTransactions() above. Shown as unavailable (never €0) when cost basis itself can't be determined, e.g. a sell exists but no unit count was ever recorded for it.",
+  },
+  "benchmark-comparison": {
+    definition: "How the portfolio's return compares to a relevant market index (e.g. MSCI World) over the same period - not shown yet, honestly, rather than estimated.",
+    calculation: "Would compare the portfolio's own Time-Weighted Return against the benchmark's own TWR (chain-linked from the benchmark's dated values, not its raw price - comparing to a raw price series is a common, misleading shortcut this app won't take).",
+    source: "Needs a chosen benchmark (a future Settings field) and benchmark_history (docs/migration-plan.md §2.8) - neither exists in Supabase yet. daily_prices exists but its fetch/schedule is explicitly paused (docs/information-architecture.md §7), so no index price history is live either. Shown as an honest unavailable state rather than a placeholder chart.",
   },
   "portfolio-detail": {
     definition: "Every position currently held, across every account - what you actually own, not how it's performing (see Performance) or how it's diversified (see Allocation). Showcase shows structure and weight only; Private adds market value, average cost basis and unrealised P&L.",
@@ -382,7 +400,11 @@ const METRIC_DOCS = {
   },
 };
 
-const INFO_TRIGGER_SELECTOR = ".card-header-title[data-info], .kpi-label[data-info]";
+// th[data-info]: table column headers (Portfolio Detail's Avg. Cost /
+// Unrealised P&L today) - same popover mechanism, just a third trigger
+// shape, so a table column can explain itself exactly like a card title
+// or a KPI label does, never a bespoke tooltip per table.
+const INFO_TRIGGER_SELECTOR = ".card-header-title[data-info], .kpi-label[data-info], th[data-info]";
 
 function initInfoPopovers() {
   let openPopover = null;

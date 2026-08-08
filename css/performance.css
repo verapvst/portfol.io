@@ -1,0 +1,21 @@
+/* ============================================================
+   performance.css - page-specific layout only. Stat tiles reuse
+   .kpi-card (components.css); the chart card and its filter pills reuse
+   #linechart-container's styling and .filter-pills - nothing here
+   restyles a shared component, only lays this page's cards out.
+   ============================================================ */
+
+.perf-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-8);
+}
+
+#performance-chart-card,
+#benchmark-card { margin-bottom: var(--sp-8); }
+#benchmark-card:last-child { margin-bottom: 0; }
+
+@media (max-width: 900px) {
+  .perf-stats-grid { grid-template-columns: 1fr; }
+}

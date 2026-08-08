@@ -46,6 +46,20 @@ function renderLineChart(container, points, { formatValue = fmtEUR, formatAxisVa
   const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
   const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${padT + innerH} L${pts[0][0].toFixed(1)},${padT + innerH} Z`;
 
+  // Interpolated stretches (real:false - see repository.js/analytics.js)
+  // draw dashed, not solid, so a filled-in gap between two known values
+  // never reads as "observed" - the "future chart pass" the data's own
+  // `real` flag was always waiting for. `real` defaults to true when
+  // absent, so callers that never set it (every live Supabase series)
+  // draw one continuous solid line exactly as before.
+  const hasInterpolated = points.some((p) => p.real === false);
+  const segmentPaths = pts.slice(1).map((p, i) => {
+    const prev = pts[i];
+    const interpolated = points[i].real === false || points[i + 1].real === false;
+    const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+    return `<path d="${d}" fill="none" stroke="url(#perfStroke)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
+  }).join("");
+
   // Below €1K, "K" compact notation rounds everything to "€0K" - show
   // plain euros instead so a small, early-stage portfolio stays legible.
   const axisLabel = formatAxisValue || ((val) => (max >= 1000 ? `€${Math.round(val / 1000)}K` : `€${Math.round(val)}`));
@@ -92,19 +106,20 @@ function renderLineChart(container, points, { formatValue = fmtEUR, formatAxisVa
       </defs>
       <g class="linechart-grid">${gridLines}</g>
       <path d="${area}" fill="url(#perfFill)" stroke="none"/>
-      <path d="${line}" fill="none" stroke="url(#perfStroke)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${segmentPaths}
       <g class="linechart-axis">${xLabels}</g>
       <g class="chart-hits">${hitTargets}</g>
       <circle id="linechart-hover-dot" r="4" fill="${dotColor}" stroke="#fff" stroke-width="1.5" opacity="0"/>
     </svg>
-    <div class="chart-tooltip"></div>`;
+    <div class="chart-tooltip"></div>
+    ${hasInterpolated ? `<p class="chart-legend-note">- - - interpolated between known values</p>` : ""}`;
 
   const tooltip = container.querySelector(".chart-tooltip");
   const hoverDot = container.querySelector("#linechart-hover-dot");
   container.querySelectorAll(".chart-hit").forEach((el) => {
     const i = Number(el.dataset.i);
     el.addEventListener("mousemove", () => {
-      tooltip.textContent = `${points[i].date} · ${formatValue(points[i].value)}`;
+      tooltip.textContent = `${points[i].date}${points[i].real === false ? " (interpolated)" : ""} · ${formatValue(points[i].value)}`;
       tooltip.style.left = pts[i][0] + "px";
       tooltip.style.top = pts[i][1] + "px";
       tooltip.classList.add("visible");

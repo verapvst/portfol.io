@@ -111,7 +111,12 @@ async function getPortfolioDataLive() {
       .map((t) => ({ date: t.date, amount: Number(t.amount || 0) })),
     { date: latestDate, amount: totalValue },
   ].sort((a, b) => a.date.localeCompare(b.date));
-  const investorReturnPct = cashflows.length >= 2 ? Math.round(xirr(cashflows) * 10000) / 100 : 0;
+  // Exposed alongside the percentage (analytics.performance below) so a
+  // page shows "insufficient history" instead of a fabricated 0% when
+  // there aren't yet 2 real cash flows to solve XIRR from - genuinely
+  // varies here, unlike the mock's always-true equivalent.
+  const investorReturnAvailable = cashflows.length >= 2;
+  const investorReturnPct = investorReturnAvailable ? Math.round(xirr(cashflows) * 10000) / 100 : 0;
 
   const unrealisedGain = Math.round((totalValue - investedCapital) * 100) / 100;
   const unrealisedGainPct = investedCapital ? Math.round((unrealisedGain / investedCapital) * 10000) / 100 : 0;
@@ -202,7 +207,9 @@ async function getPortfolioDataLive() {
       health,
       performance: {
         totalValue, investedCapital, unrealisedGain, unrealisedGainPct,
-        totalReturnPct, investorReturnPct, todayChange: 0, todayChangePct: 0, cash,
+        totalReturnPct, totalReturnAvailable: twrDriver.history.length >= 2,
+        investorReturnPct, investorReturnAvailable,
+        todayChange: 0, todayChangePct: 0, cash,
       },
     },
     settings: { currency: "EUR", benchmark: null, timezone: "Europe/Lisbon" },

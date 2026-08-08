@@ -57,7 +57,7 @@ function renderHoldingsDetail(container, data) {
         <thead>
           <tr>
             <th>Asset</th><th>Account</th><th>Weight</th>
-            ${owner ? `<th>Market Value</th><th>Avg. Cost</th><th>Unrealised P&amp;L</th>` : ""}
+            ${owner ? `<th>Market Value</th><th data-info="cost-basis" tabindex="0" role="button" aria-label="About this metric">Avg. Cost</th><th data-info="unrealised-pnl" tabindex="0" role="button" aria-label="About this metric">Unrealised P&amp;L</th>` : ""}
           </tr>
         </thead>
         <tbody>${holdings.map((h) => holdingsDetailRowHTML(h, data, owner)).join("")}</tbody>

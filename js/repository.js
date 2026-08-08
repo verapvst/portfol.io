@@ -128,11 +128,18 @@ function getMockPortfolioData() {
   // Annualised, unlike totalReturnPct above (cumulative TWR) - the two
   // numbers living on different time bases is expected, not a bug; see
   // the investor-return info popover for why they're not meant to match.
-  const investorReturnPct = Math.round(xirr([
+  const xirrCashflows = [
     { date: "2017-06-21", amount: -250.00 },
     { date: "2026-08-04", amount: -160.00 },
     { date: "2026-08-04", amount: totalValue },
-  ]) * 10000) / 100;
+  ];
+  // Exposed alongside the percentage itself (see analytics.performance
+  // below) so a page can show "insufficient history" instead of a
+  // fabricated 0% - always true here since the mock always has real
+  // cash flows, but the live Supabase path's equivalent flag genuinely
+  // varies, and both read the same field name.
+  const investorReturnAvailable = xirrCashflows.length >= 2;
+  const investorReturnPct = investorReturnAvailable ? Math.round(xirr(xirrCashflows) * 10000) / 100 : 0;
 
   const accounts = [
     { id: "bpi", name: "BPI", tone: tokenColor("account", "BPI") },
@@ -384,7 +391,12 @@ function getMockPortfolioData() {
         // investment perform") - conflating the two was the original bug.
         unrealisedGainPct: Math.round((unrealisedGain / investedCapital) * 10000) / 100,
         totalReturnPct,
+        // Real, dated NAV history exists for the whole series (see
+        // valueSeries below) - always true in the mock, unlike the live
+        // path where it genuinely depends on how many Valuations exist.
+        totalReturnAvailable: true,
         investorReturnPct,
+        investorReturnAvailable,
         todayChange,
         todayChangePct,
         cash,
