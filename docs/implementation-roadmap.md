@@ -57,7 +57,7 @@ Legend: **LIVE** (real Supabase, no mock in the loop) · **LIVE\*** (real Supaba
 
 ### Not built yet (PLANNED — nav entries exist, pages don't)
 
-Risk, Product Library, Benchmarks, Market Data, Simulator, Settings — all `href="#"` in `NAV_GROUPS` (`js/shell.js`), by design ("a dead link reads honestly as 'not built yet'").
+Risk, Securities, Benchmarks, Market Data, Simulator, Settings — all `href="#"` in `NAV_GROUPS` (`js/shell.js`), by design ("a dead link reads honestly as 'not built yet'").
 
 ### Supabase (`supabase/migrations/`, `supabase/functions/`)
 
@@ -127,6 +127,8 @@ You flagged this precisely right: **"a security com a maior história de valuati
 
 **This needs your call before Performance/Risk go further:** keep the current single-driver simplification a while longer (fine as long as only one holding has real interim history), or prioritize real multi-holding chain-linked TWR now. Flagging this explicitly rather than quietly building more on top of the simplification.
 
+**Decision taken this session (autonomous pass): kept the single-driver simplification, unchanged.** You asked me to inspect the actual current data situation before deciding rather than assume — I couldn't do that this pass, honestly: inspecting live valuation counts per holding needs an authenticated Supabase session, and this pass ran without your session token. Rather than guess at the data or rebuild TWR on an unverified premise, I left `twrDriver` exactly as it was and did not build Risk or anything else on top of it. **Next time you're here with a live session, the one-question check that resolves this:** in Valuations, does any holding other than BPI Dinâmico now have 2+ dated observations? If no — the simplification is still correct today, no rebuild needed yet. If yes — that's the trigger to prioritize real multi-holding chain-linked TWR before Risk goes further, per your own rule above ("never knowingly build a major new feature on top of an architectural shortcut already invalidated by the current data").
+
 ---
 
 ## C. Legacy Feature Inventory — complete
@@ -192,9 +194,23 @@ Matches the phase order you specified. Not resuming Risk or any other page build
 2. **Data foundation** — resolve the `twrDriver` decision (Section B), confirm Supabase read/write end-to-end with your real session, establish the product database shape (pending Section C)
 3. **Shell** — done this session (toggleable sidebar, all breakpoints)
 4. **Existing pages** — Risk is next once Phase 2 lands (Risk needs Section B's TWR decision resolved first — its own volatility/Sharpe/drawdown math depends on the same valuation-history question)
-5. **Research** (Product Library → Product Detail → Scorecard → Costs → Benchmarks → Market Data)
+5. **Research** (Securities → Product Detail → Scorecard → Costs → Benchmarks → Market Data)
 6. **Investments** — already live, revisit only if Phase 2 changes their contract
 7. **Simulator** (Investor DNA → recommendations → Portfolio Builder → simulation → Monte Carlo → Strategy Lab → switching-cost tool → broker comparison) — see `docs/legacy-feature-inventory.md` for exactly what's being ported into each
 8. **Operations** (Data Hub completion, real Classification Review, Administration, Edit permissions/`edit_sessions`)
 9. **Polish** (mobile, accessibility, loading/empty/error states, performance, security, cleanup)
 10. **Remove legacy** — only after everything above is confirmed stable
+
+---
+
+## G. Autonomous implementation pass (this session) — what actually shipped
+
+Per your "stop auditing, start building" directive. Concrete, not another plan:
+
+- **Product database, Supabase-backed** (`supabase/migrations/0005_product_database.sql`, `0006_seed_products_and_brokers.sql`, not yet run against your live database — you need to paste both into the SQL Editor). `security_details` extends `securities` 1:1, per the Migration Plan's already-decided convention — not a parallel `products` table, not static JSON. `brokers` is standalone. Both `authenticated`-only for now (see the migration's own RLS comment for why anon access needs the `public_*` views project first, not solved this pass). Seeded with the real 18 products / 10 brokers from `~/Desktop/Portfol.io/database/database.json`, transcribed verbatim (verified column-by-column against the source file) and translated to English. The 4 products matching your actual held ETFs (UETW/AVWS/XDEQ/SPYM, by ISIN) attach to their existing `securities` row; the other 14 get a new one. **BPI Dinâmico has no 1:1 match in this dataset** — none of the 18 legacy products is literally that fund — so it has no `security_details` row. Honest gap, not an oversight.
+- **Securities** (`products.html`/`js/products.js`) and **Product Detail** (`product-detail.html`/`js/product-detail.js`) — wired to the nav placeholder that already existed at `js/shell.js`'s Research group. Search + type filter, "Held" badge (a real `transactions` check, not inferred), star rating, data-quality badge. Detail page: costs, an interactive Cost Drag calculator (5/10/20/30y), performance/risk stats, calendar-year returns, allocation/exposure bars (reusing Allocation's own `.bar-row` primitive), Portuguese tax brackets, philosophy and provenance. Supabase-only, no mock fallback — signed-out visitors see a sign-in prompt, not fabricated products (same simplification as the rest of the app today; real Showcase access is the same future `public_*`-views work as above).
+- **`costDrag()`** (`js/calculations.js`) — the TER-vs-cumulative-cost-drag distinction your directive asked for, as a pure function: `((1+gross)^n − (1+gross−TER)^n) / (1+gross)^n × 100`, computed from each product's own assumed gross return and TER over a chosen horizon. Never a flat "~20%" constant.
+- **Interpolation/real-data wording** — reviewed, not changed. The live Supabase path already tags every point `real:true` unconditionally (`analytics.js`'s `getPortfolioDataLive()`); interpolation (`real:false`, dashed on the chart) only ever happens in `repository.js`'s Showcase mock. This was already correct and already clearly worded from an earlier pass ("- - - interpolated between known values", the mock-fallback warning banner) — nothing needed changing.
+- **TWR decision** — not changed, see Section B above for why and what to check next time you're signed in.
+- **Cache-busting** bumped to `v=53` on every page (new JS/CSS added this pass).
+- **Nothing deleted.** Legacy apps/docs untouched.

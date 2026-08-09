@@ -30,7 +30,7 @@ Nothing new to design here — this section exists only to confirm the already-d
 - **Page** → tabs / sections. A page can subdivide, but a tab never gets its own URL/nav entry.
 - **Cards** → drill-down. A summary tile that opens more detail without leaving the page.
 - **Drawer / modal** → quick detail or edit. Never a full page transition for "tell me more" or "add one record."
-- **Product** → product-specific tabs (Overview/Scorecard/Performance/Risk/Allocation/Market Data/Documents) — one component, reused for every entry in Product Library, never a bespoke page per product.
+- **Product** → product-specific tabs (Overview/Scorecard/Performance/Risk/Allocation/Market Data/Documents) — one component, reused for every entry in Securities, never a bespoke page per product.
 - **Data Hub** → Import → Review → Classification Review → Commit, all inside one page, per §2's Operations section.
 - **Simulator** → Scenario → Results → Comparison — one flow, whether it started from Investor DNA (Showcase) or a cloned real portfolio (Private).
 
@@ -79,10 +79,10 @@ Unchanged rule, restated because it's load-bearing: **Holdings is never directly
 
 | Item | Type | Access | Supabase table/view | Legacy functionality reused |
 |---|---|---|---|---|
-| **Product Library** | Page, with internal tabs per product (Overview / Scorecard / Performance / Risk / Allocation / Market Data / Documents) | Fully Showcase — no personal data touches this section at all | `securities` (extended with a new `security_details` table), `daily_prices`, `security_classifications` | Heaviest reuse in the whole audit: `productScores()` (Scorecard tab), the product metadata shape, `__spark()` (Market Data tab), `viewComparison()`'s sortable/filterable table, `viewDatabase()` |
-| **Benchmarks** | Page (thin — a filtered view over Product Library's own component, `type = 'Index'`) | Showcase | Same tables as Product Library | `viewBenchmarks()`'s comparison-chart pattern |
+| **Securities** | Page, with internal tabs per product (Overview / Scorecard / Performance / Risk / Allocation / Market Data / Documents) | Fully Showcase — no personal data touches this section at all | `securities` (extended with a new `security_details` table), `daily_prices`, `security_classifications` | Heaviest reuse in the whole audit: `productScores()` (Scorecard tab), the product metadata shape, `__spark()` (Market Data tab), `viewComparison()`'s sortable/filterable table, `viewDatabase()` |
+| **Benchmarks** | Page (thin — a filtered view over Securities's own component, `type = 'Index'`) | Showcase | Same tables as Securities | `viewBenchmarks()`'s comparison-chart pattern |
 | **Market Data** | Page (thin — an aggregate/watchlist across every tracked security's latest price, distinct from one product's own price tab) | Showcase | `daily_prices`; `price_fetch_log` visible Edit-only (it's an ops log, not visitor content) | `__spark()`, `loadPriceHistory()` |
-| **Simulator** | Page | Private (clones real Holdings) / Showcase — open question, see §5 | Reads Holdings (Private) or, if Showcase is enabled, Investor-DNA output instead; Product Library for "add a product"; writes nothing to real Data (optional `simulation_scenarios` if you want saved scenarios) | `simulate()`, `portVol()`, `portTaxRate()`, `normWeights()` |
+| **Simulator** | Page | Private (clones real Holdings) / Showcase — open question, see §5 | Reads Holdings (Private) or, if Showcase is enabled, Investor-DNA output instead; Securities for "add a product"; writes nothing to real Data (optional `simulation_scenarios` if you want saved scenarios) | `simulate()`, `portVol()`, `portTaxRate()`, `normWeights()` |
 
 **One deliberate change from your list, flagged rather than silently made:** Investor DNA isn't its own page in this version — it becomes **Simulator's entry point for a first-time or Showcase visitor** ("answer 12 questions → get 3 recommended portfolios → open one in the Simulator to explore further"). A logged-in Private session skips straight to cloning the real portfolio instead. This uses the same infrastructure either way and gives the DNA engine a natural landing spot instead of being an island. Tell me if you'd rather it stay a fully separate page — easy to split back out.
 
@@ -105,7 +105,7 @@ Same reasoning as Operations: three small admin concerns collapse into tabs of o
 
 ## 3. Net page count
 
-**14 real pages**: Overview, Portfolio Detail, Performance, Allocation, Risk, Accounts, Transactions, Valuations, Costs, Product Library, Benchmarks, Market Data, Simulator, Data Hub, Settings.
+**14 real pages**: Overview, Portfolio Detail, Performance, Allocation, Risk, Accounts, Transactions, Valuations, Costs, Securities, Benchmarks, Market Data, Simulator, Data Hub, Settings.
 
 (That's 15 listed — Settings' three tabs count as one page. Classification Review is a tab, not counted separately.)
 
@@ -140,12 +140,12 @@ Unchanged in spirit from the prior version, re-sequenced for the confirmed 14-pa
 2. **Portfolio section** — Overview first (migrate existing content into the new shell/visual language), then Portfolio Detail, then Performance/Allocation/Risk as their own pages (all mostly real data already, lowest risk).
 3. **Investments section** — move the four already-built pages into the new shell. Least new work in the whole plan.
 4. **Resume `daily_prices`** — finish the paused EODHD test, schedule the cron. Can run in parallel with 2-3.
-5. **Research: Product Library** — needs `daily_prices` live to be worth building; Scorecards/Benchmarks/Market Data tabs land with it.
-6. **Research: Simulator** (incl. Investor DNA entry flow) — the biggest single build; do it once Product Library gives it real products.
+5. **Research: Securities** — needs `daily_prices` live to be worth building; Scorecards/Benchmarks/Market Data tabs land with it.
+6. **Research: Simulator** (incl. Investor DNA entry flow) — the biggest single build; do it once Securities gives it real products.
 7. **Operations, Administration** — lower urgency; Data Hub already functions today under the old shell.
 
 ---
 
 ## 7. Status of `daily_prices`
 
-Unchanged: nothing wasted by pausing. Schema and Edge Function are page-map-agnostic — they feed Product Library's Market Data tab and Investments' Holdings valuation regardless of which section owns the page. Pending step was the manual test invoke (curl with the `apikey` header) — resume whenever this document is done informing the build.
+Unchanged: nothing wasted by pausing. Schema and Edge Function are page-map-agnostic — they feed Securities's Market Data tab and Investments' Holdings valuation regardless of which section owns the page. Pending step was the manual test invoke (curl with the `apikey` header) — resume whenever this document is done informing the build.

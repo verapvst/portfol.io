@@ -1,0 +1,64 @@
+/* ============================================================
+   products.css - Product Library page. Reuses .holdings-table
+   (components.css) for the list itself and .tab-bar/.tab-btn for the
+   type filter - only this page's search bar and rating/quality badges
+   are new primitives.
+   ============================================================ */
+
+.product-library-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+}
+
+.product-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px var(--sp-4);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--card-border);
+  background: var(--glass-quiet-bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13.5px;
+}
+.product-search::placeholder { color: var(--muted); }
+.product-search:disabled { opacity: 0.5; }
+
+.product-table th:nth-child(2),
+.product-table td:nth-child(2),
+.product-table th:nth-child(3),
+.product-table td:nth-child(3) { text-align: right; }
+
+.product-stars { color: var(--amber-2); letter-spacing: 1px; font-size: 13px; }
+
+.held-badge {
+  display: inline-block;
+  margin-left: var(--sp-2);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--primary-foreground);
+  background: var(--positive);
+  vertical-align: middle;
+}
+
+.quality-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 500;
+}
+.quality-real { color: var(--positive); background: color-mix(in oklab, var(--positive) 16%, transparent); }
+.quality-partial { color: var(--orange-2); background: color-mix(in oklab, var(--orange-1) 20%, transparent); }
+.quality-estimated { color: var(--muted); background: var(--glass-quiet-bg); }
+
+.product-library-empty { font-size: 13px; color: var(--muted); margin-top: var(--sp-5); }
+
+@media (max-width: 767px) {
+  .product-table { min-width: 460px; }
+}

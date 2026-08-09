@@ -189,6 +189,25 @@ function fmtCompact(v) {
   return new Intl.NumberFormat("en-IE", { notation: "compact", maximumFractionDigits: 1 }).format(v);
 }
 
+/** "Last updated" / "Data as of" - one shared renderer for the
+    freshness caption described in docs/data-freshness.md, so this
+    doesn't become dozens of hand-written date strings across pages.
+    `date` is any value `new Date()` accepts (an ISO date string from
+    Supabase, a JS Date) or null/undefined - null renders nothing at
+    all (an honestly-missing date is not the same as "today", and this
+    function never manufactures one). `label` chooses the wording:
+    "updated" -> "Last updated" (the row was touched then); "as-of"
+    (default) -> "Data as of" (the underlying figures were true then) -
+    see that doc for when to use which. */
+function lastUpdatedHTML(date, { label = "as-of" } = {}) {
+  if (!date) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const formatted = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const prefix = label === "updated" ? "Last updated" : "Data as of";
+  return `<span class="last-updated">${prefix}: ${formatted}</span>`;
+}
+
 /* ---------- Icons ----------
    Minimal stroke-line icon set (24x24, currentColor, stroke-width 1.5) -
    hand-drawn equivalents of the exact lucide-react icons the Lovable
@@ -239,4 +258,5 @@ window.regionForCountry = regionForCountry;
 window.fmtEUR = fmtEUR;
 window.fmtPct = fmtPct;
 window.fmtCompact = fmtCompact;
+window.lastUpdatedHTML = lastUpdatedHTML;
 window.icon = icon;

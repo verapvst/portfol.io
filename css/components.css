@@ -501,6 +501,12 @@ th[data-info]:focus-visible {
 .section-title { font-size: var(--fs-card-title); font-weight: 500; letter-spacing: -0.025em; color: var(--ink); }
 .section-hint { margin-top: 4px; margin-bottom: var(--sp-4); font-size: 12px; color: var(--muted); }
 
+/* ---------- Last Updated / Data as of - shared across every page, see
+   docs/data-freshness.md and js/utils.js:lastUpdatedHTML(). Deliberately
+   quiet (smaller/lighter than .section-hint) - a freshness caption, not
+   a headline. ---------- */
+.last-updated { display: block; margin-top: var(--sp-3); font-size: 11px; color: var(--muted); opacity: 0.85; }
+
 .pill-action {
   border-radius: var(--r-pill);
   padding: 6px var(--sp-3);

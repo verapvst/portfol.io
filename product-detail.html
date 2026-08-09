@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfol.io — Accounts</title>
+<title>Portfol.io — Security Detail</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/theme.css?v=57">
 <link rel="stylesheet" href="css/layout.css?v=57">
 <link rel="stylesheet" href="css/components.css?v=57">
-<link rel="stylesheet" href="css/accounts.css?v=57">
+<link rel="stylesheet" href="css/products.css?v=57">
+<link rel="stylesheet" href="css/product-detail.css?v=57">
 </head>
 <body>
 <div id="app">
@@ -18,16 +19,7 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <section class="card glass" id="accounts-card">
-      <div class="card-header accounts-card-header-row">
-        <div class="card-header-title">
-          <h2 class="section-title">Accounts</h2>
-        </div>
-        <button class="add-account-btn" id="add-account-btn" type="button">+ Add Account</button>
-      </div>
-      <p class="section-hint">Every brokerage, bank and pension account on record — reads and writes Supabase directly.</p>
-      <div id="accounts-table-container"></div>
-    </section>
+    <div id="product-detail-body"></div>
 
   </main>
 
@@ -38,9 +30,11 @@
 <script src="js/supabaseClient.js?v=57"></script>
 
 <script src="js/utils.js?v=57"></script>
+<script src="js/calculations.js?v=57"></script>
+<script src="js/repository.js?v=57"></script>
 <script src="js/shell.js?v=57"></script>
 <script src="js/auth.js?v=57"></script>
 <script src="js/db.js?v=57"></script>
-<script src="js/accounts.js?v=57"></script>
+<script src="js/product-detail.js?v=57"></script>
 </body>
 </html>

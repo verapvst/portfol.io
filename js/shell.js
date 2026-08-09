@@ -108,7 +108,7 @@ const NAV_GROUPS = [
   {
     group: "Research",
     items: [
-      { label: "Product Library", icon: "pieChart", href: "#" },
+      { label: "Securities", icon: "pieChart", href: "products.html" },
       { label: "Benchmarks", icon: "barChart3", href: "#" },
       { label: "Market Data", icon: "trendingUp", href: "#" },
       { label: "Simulator", icon: "sparkles", href: "#" },
@@ -424,6 +424,21 @@ const METRIC_DOCS = {
     definition: "Rule-based observations about the portfolio - never AI-generated commentary.",
     calculation: "Each sentence is the output of one fixed rule (e.g. \"largest position\", \"concentration if >50%\", \"cash below 5%\") evaluated against the current data.",
     source: "ui.js:buildInsights().",
+  },
+  "product-library": {
+    definition: "Every product with research data on file - funds, ETFs, PPRs and unit-linked insurance products, whether or not you actually hold them. A research tool, distinct from Portfolio Detail (\"what do I have\").",
+    calculation: "No calculation - a filtered/sorted view of security_details joined to securities. Products you actually hold (per Transactions) are marked \"Held\"; everything else is research-only.",
+    source: "supabase/migrations/0005_product_database.sql / 0006_seed_products_and_brokers.sql - real figures transcribed from the old Portfol.io app's Excel-derived master database (18 products), not estimated. Authenticated-only for now, see that migration's own RLS comment for why.",
+  },
+  "product-score": {
+    definition: "A 0-100 scorecard across nine dimensions - cost, tax efficiency, diversification, liquidity, transparency, scale, risk-adjusted efficiency, risk, and return. A scoring model, not a verdict: a low score on one dimension means \"know this about it\", not \"don't buy this\" - that's why every dimension is shown, not just the overall number.",
+    calculation: "Each dimension is 0-100 from the product's own real data (e.g. Cost = 100 - (TER/2.8)×100; Return = 5Y return, or 3Y, or assumed gross return ÷14 ×100). Overall is their weighted average - weights unchanged from the original: cost and return matter most (1.3x each), scale matters least (0.6x).",
+    source: "js/calculations.js:productScore(), ported verbatim (weights and thresholds unchanged) from the old Portfol.io engine's productScores() - see docs/legacy-feature-inventory.md's \"Product scoring\" row.",
+  },
+  "cost-drag": {
+    definition: "The cumulative lifetime impact of this product's annual fee, as a percentage of what the investment would be worth with zero fees - a different question from the TER itself, and easy to conflate with it. A small annual fee compounds into a much larger lifetime number the longer money stays invested.",
+    calculation: "((1+gross)^years - (1+gross-TER)^years) / (1+gross)^years × 100, using the product's own assumed gross return and TER over the horizon you choose here - never a flat \"~20%\" constant applied to every product.",
+    source: "js/calculations.js:costDrag(), fed by this product's assumed_gross_return_pct/ter_pct (security_details).",
   },
 };
 

@@ -116,3 +116,50 @@ async function findOrCreateSecurity({ name, type, currency }, cache) {
   cache.push(data);
   return data.id;
 }
+
+/** Securities's data source (supabase/migrations/0005/0006). Inner
+    join on purpose - a security with no security_details row isn't a
+    researchable product yet, so it has no place in this list (it might
+    just be a plain holding created via Transactions, with no product
+    research attached). Requires signing in, same as every other
+    authenticated-only table today - see 0005_product_database.sql's own
+    comment for why this isn't anon-readable yet. */
+async function loadProductLibrary() {
+  const { data, error } = await window.db
+    .from("security_details")
+    .select("*, securities!inner(id, name, type, isin, domicile, currency, benchmark, asset_class, institutions(name))")
+    .order("name", { foreignTable: "securities" });
+  if (error) throw error;
+  return data || [];
+}
+
+async function loadProductDetail(securityId) {
+  const { data, error } = await window.db
+    .from("security_details")
+    .select("*, securities!inner(id, name, type, isin, domicile, currency, benchmark, asset_class, institutions(name))")
+    .eq("security_id", securityId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Whether the signed-in user actually holds this security (vs. just
+    researching it) - a real transactions check, not inferred from the
+    product catalogue itself, so a researched-but-never-bought product
+    never gets mislabelled as held. */
+async function isSecurityHeld(portfolioId, securityId) {
+  const { data, error } = await window.db
+    .from("transactions")
+    .select("id")
+    .eq("portfolio_id", portfolioId)
+    .eq("security_id", securityId)
+    .limit(1);
+  if (error) throw error;
+  return !!(data && data.length);
+}
+
+async function loadBrokers() {
+  const { data, error } = await window.db.from("brokers").select("*").order("name");
+  if (error) throw error;
+  return data || [];
+}

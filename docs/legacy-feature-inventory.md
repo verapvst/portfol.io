@@ -29,13 +29,13 @@ Source of truth was `Portfol.io_Master_Database.xlsx`, 8 sheets joined by `Produ
 
 | Feature | What it does | Source | Real data? | Keep/Adapt/Drop | New location |
 |---|---|---|---|---|---|
-| Product database (18 products) | Full ETF/Fund/PPR/Insurance metadata, costs, performance, allocation, tax | `database.json` via `parser.py` (Portfol.io) | Real | **Keep** | Research → Product Library. Schema above informs `security_details` |
+| Product database (18 products) | Full ETF/Fund/PPR/Insurance metadata, costs, performance, allocation, tax | `database.json` via `parser.py` (Portfol.io) | Real | **Keep** | Research → Securities. Schema above informs `security_details` |
 | Broker database (10 brokers) | Regulator, protection, fees, 6 sub-scores, pros/cons | `database.json` (Portfol.io) — **not in the original feature-backlog at all** | Real | **Keep** | New `brokers` table — no equivalent exists yet anywhere in the current app or plan |
 | TER | Simple weighted-average cost across portfolio slices | `analyze()`, `engine.js:` `ter=slices.reduce(...)` (Portfol.io) | Real | **Keep** | Cost Engine — the small annual input number |
 | **Cost Drag (≠ TER)** | Cumulative lifetime impact: `(fees ÷ wealth-if-fee-free) × 100`, compounded over the horizon | `analyze()`'s `costDrag` calc (Portfol.io) | Real, computed | **Keep — and label distinctly from TER** | Cost Engine. **This answers your "~19-20%" question — see the note below.** |
 | Product classifications / `quality` flag | `Real`/`Parcial`/`Estimado` provenance per product, promised transparency on the old app's own "About" page | `database.json` `quality` field (Portfol.io) | Real | **Keep** | Carry as a trust/provenance column on any new product table |
-| PPR | 5 real PPR products, entry-deduction tax modelling (20% of contributions, capped €400/yr, cites CIRS art. 43/72 + EBF art. 21) | `pprEntryBenefit()` (Portfol.io) | Real, PT-law-specific | **Keep** | Cost Engine / Product Library |
-| Insurance / Unit-Linked | 2 real Seguro products, same field shape as funds/ETFs | `database.json` (Portfol.io) | Real | **Keep** | Product Library |
+| PPR | 5 real PPR products, entry-deduction tax modelling (20% of contributions, capped €400/yr, cites CIRS art. 43/72 + EBF art. 21) | `pprEntryBenefit()` (Portfol.io) | Real, PT-law-specific | **Keep** | Cost Engine / Securities |
+| Insurance / Unit-Linked | 2 real Seguro products, same field shape as funds/ETFs | `database.json` (Portfol.io) | Real | **Keep** | Securities |
 | Scenarios (conservador/base/otimista) | Named forward-looking return/vol assumption sets | `parser.py` — **hard-coded, not from Excel** (Portfol.io) | Placeholder-ish | **Adapt** — needs a real schema decision, not a straight copy | Simulator assumptions |
 | Stress tests (2008/COVID/etc.) | Named equity/bond shock + recovery-years scenarios | `parser.py` — **hard-coded, not from Excel** (Portfol.io) | Placeholder-ish | **Adapt** | Simulator / Risk |
 
@@ -73,7 +73,7 @@ Source of truth was `Portfol.io_Master_Database.xlsx`, 8 sheets joined by `Produ
 | Feature | What it does | Source | Real data? | Keep/Adapt/Drop | New location |
 |---|---|---|---|---|---|
 | Product scoring (9-dimension) | 0–100 per product: costs×1.3, tax×1.0, diversification×1.1, liquidity×0.7, transparency×0.8, scale×0.6, efficiency×1.2, risk×1.0, return×1.3 — portfolio-level weighted average | `productScores()` (Portfol.io + Downloads prototype) | Real | **Keep** | Product detail Scorecard tab |
-| Product Explorer | Sortable/searchable/filterable table + detail drawer | `viewDatabase()`, `dbRows()` (Portfol.io) | Real | **Keep** | Product Library |
+| Product Explorer | Sortable/searchable/filterable table + detail drawer | `viewDatabase()`, `dbRows()` (Portfol.io) | Real | **Keep** | Securities |
 | Strategy Lab (A/B comparator) | Portfolio A vs B, 9-metric win/lose/tie table + grounded trade-off sentence | `comparePortfolios()` (Portfol.io) — **fuller than the Downloads prototype's unnamed two-portfolio hint** | Real | **Keep** | New: Strategy/Scenario comparison, alongside Simulator |
 | Benchmarks | Portfolio vs. MSCI World / S&P 500 | `viewBenchmarks()` (Portfol.io + Downloads prototype) | **Approximation** — hardcoded `+2.5%` offset for S&P, not real index data | **Adapt** — needs real benchmark price history (ties to Daily Prices, paused) | Performance (already has an honest "not available" state for this) |
 | Market Data | Daily/latest prices, sparklines | `loadPriceHistory()`, `__spark()` (Downloads prototype, per original feature-backlog) | Placeholder in the prototype | **Adapt** — deferred, tied to Daily Prices (explicitly paused) | Research → Market Data (not built) |
@@ -108,7 +108,7 @@ You asked to separate **cost percentage** from **cumulative cost over time** bef
 ## Execution order (unchanged in spirit from the original backlog, now with everything above folded in)
 
 1. Product database schema (Supabase `securities`/`security_details` — this is now well-specified, see above)
-2. Product Library (list + detail, Scorecard tab)
+2. Securities (list + detail, Scorecard tab)
 3. Cost Engine (TER + Cost Drag, clearly distinguished)
 4. Simulator (Portfolio Builder + Monte Carlo)
 5. Investor DNA (public-safe entry point)

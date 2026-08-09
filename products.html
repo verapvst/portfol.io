@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Securities</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=57">
+<link rel="stylesheet" href="css/layout.css?v=57">
+<link rel="stylesheet" href="css/components.css?v=57">
+<link rel="stylesheet" href="css/products.css?v=57">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <!-- "What could I invest in?" - per docs/information-architecture.md
+         §2's Research row. Supabase-only (security_details/securities,
+         see js/db.js's loadProductLibrary()) - no mock/Showcase fallback
+         for this domain yet, since it's authenticated-only for now (see
+         supabase/migrations/0005_product_database.sql's RLS comment for
+         why). Signed-out visitors see a sign-in prompt, not fabricated
+         products. -->
+    <section class="card glass interactive" id="product-library-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="product-library" tabindex="0" role="button" aria-label="About this page">
+          <h2 class="section-title">Securities</h2>
+        </div>
+      </div>
+      <p class="section-hint" id="product-library-summary"></p>
+
+      <div class="product-library-controls">
+        <input type="search" id="product-search" class="product-search" placeholder="Search by name or issuer…" autocomplete="off">
+        <div class="tab-bar glass-quiet" id="product-type-tabs"></div>
+      </div>
+
+      <div id="product-library-body"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=57"></script>
+<script src="js/supabaseClient.js?v=57"></script>
+
+<script src="js/utils.js?v=57"></script>
+<script src="js/calculations.js?v=57"></script>
+<script src="js/repository.js?v=57"></script>
+<script src="js/shell.js?v=57"></script>
+<script src="js/auth.js?v=57"></script>
+<script src="js/db.js?v=57"></script>
+<script src="js/products.js?v=57"></script>
+</body>
+</html>

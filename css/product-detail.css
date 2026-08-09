@@ -1,0 +1,128 @@
+/* ============================================================
+   product-detail.css - Product Detail page. Reuses .card/.glass,
+   .bar-row/.bar-track/.bar-fill (components.css) and .quality-badge/
+   .held-badge/.product-stars (products.css) - only this page's facts
+   grid, stat row, cost-drag block, tax grid and annual-returns grid
+   are new.
+   ============================================================ */
+
+#pd-header-card, #pd-scorecard-card { margin-bottom: var(--sp-8); }
+
+.pd-scorecard-layout {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--sp-8);
+  align-items: center;
+}
+
+.pd-score-ring-wrap { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); }
+.pd-score-ring { width: 140px; height: 140px; }
+.pd-score-ring-track { fill: none; stroke: var(--card-border); stroke-width: 8; }
+.pd-score-ring-fill { fill: none; stroke-width: 8; stroke-linecap: round; transform-origin: 50px 50px; transform: rotate(-90deg); transition: stroke-dasharray 0.4s ease; }
+.pd-score-ring-text { font-size: 26px; font-weight: 600; fill: var(--ink); font-family: var(--font); }
+.pd-score-ring-caption { font-size: 12px; color: var(--muted); margin: 0; }
+
+.pd-radar-wrap { display: flex; justify-content: center; min-width: 0; }
+.pd-radar-svg { width: 100%; max-width: 400px; height: auto; overflow: visible; }
+.pd-radar-grid { fill: none; stroke: var(--card-border); stroke-width: 1; }
+.pd-radar-fill { fill: color-mix(in oklab, var(--coral-2) 22%, transparent); stroke: var(--coral-2); stroke-width: 1.5; stroke-linejoin: round; }
+.pd-radar-dot { fill: var(--coral-2); }
+.pd-radar-dot-empty { fill: var(--card); stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 1.5 1.5; }
+.pd-radar-label { font-size: 10.5px; fill: var(--muted); font-family: var(--font); }
+.pd-radar-value { font-size: 12px; font-weight: 600; font-family: var(--font); }
+.pd-radar-value-empty { fill: var(--muted); font-weight: 400; }
+
+.pd-score-ring-text-empty { fill: var(--muted); font-weight: 400; }
+
+.pd-score-up { color: var(--positive); fill: var(--positive); }
+.pd-score-warn { color: var(--orange-2); fill: var(--orange-2); }
+.pd-score-down { color: var(--negative); fill: var(--negative); }
+
+@media (max-width: 700px) {
+  .pd-scorecard-layout { grid-template-columns: 1fr; justify-items: center; }
+}
+
+.pd-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.pd-title {
+  font-size: var(--fs-section-title);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.pd-facts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--card-border);
+}
+
+.pd-fact { display: flex; flex-direction: column; gap: 4px; }
+.pd-fact-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.pd-fact-value { font-size: 14px; color: var(--ink); font-weight: 500; }
+
+.pd-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+  align-items: start;
+}
+
+.pd-col { display: flex; flex-direction: column; gap: var(--sp-8); }
+
+.pd-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-4);
+}
+.pd-stat-row-spaced { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--card-border); }
+
+.pd-stat { display: flex; flex-direction: column; gap: 4px; }
+.pd-stat-label { font-size: 11.5px; color: var(--muted); }
+.pd-stat-value { font-size: 17px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.pd-cost-drag {
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--card-border);
+}
+.pd-cost-drag-header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.pd-cost-drag-title { font-size: 13px; color: var(--muted); margin: 0; }
+.pd-cost-drag-value { font-size: var(--fs-kpi-value); font-weight: 600; color: var(--coral-2); margin: var(--sp-2) 0 4px; font-variant-numeric: tabular-nums; }
+.pd-cost-drag-hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+.pd-subsection-label { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 var(--sp-3); }
+.pd-subsection-label-spaced { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--card-border); }
+
+.pd-annual-returns { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--card-border); }
+.pd-annual-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: var(--sp-3); }
+.pd-annual-cell { display: flex; flex-direction: column; gap: 2px; }
+.pd-annual-year { font-size: 11px; color: var(--muted); }
+.pd-annual-value { font-size: 13.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.pd-tax-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }
+.pd-tax-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg);
+  background: var(--glass-quiet-bg);
+}
+.pd-tax-period { font-size: 11.5px; color: var(--muted); }
+.pd-tax-rate { font-size: 16px; font-weight: 600; color: var(--ink); }
+.pd-tax-deduction { margin-top: var(--sp-4); font-size: 13px; color: var(--muted); }
+
+.pd-philosophy { font-size: 13.5px; color: var(--ink); line-height: 1.6; margin-bottom: var(--sp-3); }
+.pd-provenance { font-size: 11.5px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .pd-two-col { grid-template-columns: 1fr; }
+}
