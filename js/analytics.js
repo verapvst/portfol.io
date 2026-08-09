@@ -230,6 +230,17 @@ async function getPortfolioDataAuto() {
       return await getPortfolioDataLive();
     } catch (err) {
       console.warn("Supabase data load failed, falling back to mock:", err);
+      // Signed in, but the live fetch failed - tagged distinctly from the
+      // legitimate signed-out fallback below (metadata.source stays
+      // "mock" there) so a page can tell "you're genuinely on Showcase
+      // mock data" apart from "you're signed in, but silently looking at
+      // stale mock data because something broke" - those look identical
+      // otherwise, which is exactly what made a real Supabase edit
+      // (updated valuations) appear to do nothing.
+      const fallback = getMockPortfolioData();
+      fallback.metadata.source = "mock-fallback-error";
+      fallback.metadata.loadError = err.message || String(err);
+      return fallback;
     }
   }
   return getMockPortfolioData();

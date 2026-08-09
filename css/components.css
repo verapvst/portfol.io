@@ -299,13 +299,21 @@ body.nav-open #nav-drawer { transform: translateX(0); }
   color: #fff;
 }
 
-/* ---------- Desktop: persistent sidebar, not an overlay ----------
-   #nav-drawer is inserted as #app's first grid child (js/shell.js) - this
-   is the only place that turns it from "fixed overlay" into "real layout
-   column". No LogoButton/backdrop needed once the sidebar is always on
-   screen; no open/close state to manage either. */
+/* ---------- Desktop: toggleable sidebar, alongside content not over it ----------
+   #nav-drawer is inserted as #app's first flex child (js/shell.js;
+   #app is display:flex at this breakpoint, see layout.css). Its own
+   flex-basis (264px <-> 0) is what actually animates open<->closed -
+   flex-shrink:0 so it never resizes for any other reason. min-width:0
+   is required - flex items default to min-width:auto (their content's
+   intrinsic width), which would otherwise stop this shrinking below
+   whatever the longest nav label needs. */
 @media (min-width: 1024px) {
-  .nav-logo-btn, #nav-backdrop { display: none; }
+  /* Desktop never gets the dim/blur overlay - the sidebar sits alongside
+     content (pushing it over via #app's flex layout, see layout.css),
+     never on top of it. The LogoButton itself DOES stay live here now -
+     it's the only toggle trigger at every breakpoint - so no display:none
+     override for it in this block anymore. */
+  #nav-backdrop { display: none; }
 
   #nav-drawer {
     position: sticky;
@@ -313,11 +321,19 @@ body.nav-open #nav-drawer { transform: translateX(0); }
     left: auto;
     bottom: auto;
     transform: none;
-    width: 100%;
+    flex: 0 0 264px;
+    min-width: 0;
     max-height: calc(100vh - var(--sp-12));
+    opacity: 1;
+    overflow: hidden;
+    transition: flex-basis 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
   }
 
-  .nav-drawer-logo { cursor: default; }
+  body:not(.nav-open) #nav-drawer {
+    flex-basis: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* ---------- Tablet (overlay, unchanged) ---------- */

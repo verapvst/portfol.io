@@ -157,6 +157,21 @@ function renderBenchmarkSection() {
   );
 }
 
+/** Signed in but the live fetch failed (see analytics.js's
+    getPortfolioDataAuto()) - without this, this state is indistinguishable
+    from "genuinely on live data, genuinely flat" or from "genuinely signed
+    out, correctly on Showcase mock". Only that specific case renders
+    anything here. */
+function renderDataWarning(data) {
+  const el = $("perf-data-warning");
+  if (data.metadata.source !== "mock-fallback-error") { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="data-warning-banner">
+      <b>Showing fallback data</b> - couldn't load your live portfolio data from Supabase, so this is the old placeholder series, not your current numbers.
+      ${data.metadata.loadError ? `<br>Error: ${data.metadata.loadError}` : ""}
+    </div>`;
+}
+
 async function init() {
   const user = { initial: "V", name: "Vera Sousa", role: "Long-term investor", greetingName: "Vera" };
 
@@ -174,6 +189,7 @@ async function init() {
 
   const loadAndRender = async (data) => {
     setCurrentPortfolioData(data);
+    renderDataWarning(data);
     renderStats(data);
     renderValueChart(data);
   };

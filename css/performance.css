@@ -5,6 +5,18 @@
    restyles a shared component, only lays this page's cards out.
    ============================================================ */
 
+.data-warning-banner {
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg);
+  background: color-mix(in oklab, var(--coral-1) 14%, white);
+  border: 1px solid color-mix(in oklab, var(--coral-2) 30%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.data-warning-banner b { color: var(--coral-2); }
+
 .perf-stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

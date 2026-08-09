@@ -210,6 +210,19 @@ function initNavigation(user) {
   renderNavGroups(drawer.querySelector("#sb-nav"));
   onAuthChange(() => renderNavGroups(drawer.querySelector("#sb-nav")));
 
+  // Same body.nav-open flag drives every breakpoint now (desktop used to
+  // be permanently visible via an unconditional CSS override, with no
+  // way to close it - see components.css's >=1024px nav block). Desktop
+  // starts pre-opened so the first paint looks exactly like before this
+  // fix; mobile/tablet start closed, unchanged. Resizing across the
+  // breakpoint doesn't need its own listener - the same class just gets
+  // reinterpreted by whichever media query now applies (sticky column
+  // vs. fixed overlay).
+  if (window.matchMedia("(min-width: 1024px)").matches) {
+    document.body.classList.add("nav-open");
+    logoBtn.setAttribute("aria-expanded", "true");
+  }
+
   const isOpen = () => document.body.classList.contains("nav-open");
 
   const open = () => {

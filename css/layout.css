@@ -77,13 +77,32 @@ svg.icon { stroke-width: 1.5; }
 }
 
 @media (min-width: 1024px) {
+  /* Flexbox, not Grid - confirmed by direct testing that Chrome does not
+     reliably converge a transition on grid-template-columns between a
+     px value and minmax(0,1fr) (verified: forcing transition:none was
+     the only thing that made the change apply at all - the animated
+     version got stuck holding the pre-toggle value indefinitely). A
+     flex item's flex-basis transitions correctly (also verified
+     directly), so #app trades grid for flex only at this breakpoint;
+     #main still just fills "the rest of the row" either way. */
   #app {
-    display: grid;
-    grid-template-columns: 264px minmax(0, 1fr);
+    display: flex;
     gap: var(--sp-8);
     padding-left: clamp(16px, 3vw, 28px);
-    align-items: start;
+    align-items: flex-start;
+    transition: gap 0.28s cubic-bezier(0.22, 1, 0.36, 1), padding-left 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
+
+  body:not(.nav-open) #app {
+    gap: 0;
+    padding-left: 76px;
+  }
+
+  /* flex-grow:1 so #main claims whatever space #nav-drawer isn't using -
+     grid's minmax(0,1fr) did this implicitly; flex items default to
+     flex-grow:0, so this needs to be explicit or #main would just sit at
+     its own content width instead of filling the row. */
+  #main { flex: 1 1 auto; min-width: 0; }
 }
 
 #main {
