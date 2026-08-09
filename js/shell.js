@@ -59,14 +59,15 @@ function indexValueSeries(series) {
   return series.map((p) => ({ date: p.date, value: (p.value / base) * 100, real: p.real }));
 }
 
-/* ---------- Navigation: persistent sidebar (desktop) / overlay drawer (mobile) ----------
-   One DOM structure serves both: on desktop (>=1024px) #nav-drawer is
-   inserted as #app's first child and laid out via CSS Grid, sticky and
-   always visible - no LogoButton, no backdrop, no open/close state.
-   Below that breakpoint the exact same element switches to fixed-overlay
-   behaviour (LogoButton + Backdrop + slide-in Drawer), unchanged from
-   before. See css/components.css's nav media queries for the breakpoint
-   switch itself - this file only ever builds one drawer.
+/* ---------- Navigation: overlay drawer, every breakpoint ----------
+   One DOM structure, one behaviour, at every width: #nav-drawer is
+   always position:fixed (css/components.css), floating above a dimmed/
+   blurred backdrop, never part of #app's layout - opening it never
+   pushes or resizes page content, at 375px or 1440px alike. Only the
+   drawer's own size/inset varies per breakpoint (see components.css's
+   nav media queries) - never the interaction model itself. The trigger
+   button lives inside the sticky topbar's own markup (renderTopbar()
+   below), not as an independent floating element.
 
    Grouped per docs/information-architecture.md §2 (Portfolio.io repo) -
    five groups, not a flat list. Portfolio and Research are Showcase-safe
@@ -167,14 +168,12 @@ function renderNavGroups(navEl) {
 let closeNavDrawer = () => {};
 function close() { closeNavDrawer(); }
 
+/** Requires renderTopbar() to already have run - it renders #nav-logo-btn
+    as part of its own markup now (see that function). Every page's
+    init() calls renderTopbar() before initNavigation() for exactly this
+    reason. */
 function initNavigation(user) {
-  const logoBtn = document.createElement("button");
-  logoBtn.id = "nav-logo-btn";
-  logoBtn.className = "nav-logo-btn glass-quiet";
-  logoBtn.type = "button";
-  logoBtn.setAttribute("aria-label", "Open menu");
-  logoBtn.setAttribute("aria-expanded", "false");
-  logoBtn.innerHTML = `<img src="assets/images/logo-icon.png" alt="Portfol.io">`;
+  const logoBtn = document.getElementById("nav-logo-btn");
 
   const backdrop = document.createElement("div");
   backdrop.id = "nav-backdrop";
@@ -200,28 +199,13 @@ function initNavigation(user) {
 
     <nav class="sb-nav" id="sb-nav"></nav>`;
 
-  document.body.append(logoBtn, backdrop);
-  // Inserted into #app (not appended to body) so the >=1024px CSS Grid
-  // layout can give it real column space - see css/components.css. Below
-  // that breakpoint it's position:fixed regardless of DOM parent, so
-  // living inside #app costs nothing on mobile/tablet.
-  document.getElementById("app").prepend(drawer);
+  // Always position:fixed (components.css) - appended to body, not
+  // #app, since the drawer never participates in page layout at any
+  // breakpoint anymore (see this section's header comment).
+  document.body.append(backdrop, drawer);
 
   renderNavGroups(drawer.querySelector("#sb-nav"));
   onAuthChange(() => renderNavGroups(drawer.querySelector("#sb-nav")));
-
-  // Same body.nav-open flag drives every breakpoint now (desktop used to
-  // be permanently visible via an unconditional CSS override, with no
-  // way to close it - see components.css's >=1024px nav block). Desktop
-  // starts pre-opened so the first paint looks exactly like before this
-  // fix; mobile/tablet start closed, unchanged. Resizing across the
-  // breakpoint doesn't need its own listener - the same class just gets
-  // reinterpreted by whichever media query now applies (sticky column
-  // vs. fixed overlay).
-  if (window.matchMedia("(min-width: 1024px)").matches) {
-    document.body.classList.add("nav-open");
-    logoBtn.setAttribute("aria-expanded", "true");
-  }
 
   const isOpen = () => document.body.classList.contains("nav-open");
 
@@ -254,9 +238,19 @@ function timeGreeting() {
   return "Good evening";
 }
 
+/** The menu-trigger button lives here now, not as its own independent
+    fixed element (see initNavigation() in this file) - it's part of the
+    sticky topbar's permanent chrome, so it belongs in the topbar's own
+    markup. initNavigation() finds it by id and wires its click handler;
+    it doesn't create it - that's why renderTopbar() has to run before
+    initNavigation() in every page's init(), not after (this was the
+    other way around before this pass). */
 function renderTopbar(container, user, { heading = "Portfolio Overview", subtitle = "Track, analyze and grow your wealth." } = {}) {
   container.innerHTML = `
     <div class="topbar-heading-group">
+      <button id="nav-logo-btn" class="nav-logo-btn" type="button" aria-label="Open menu" aria-expanded="false">
+        <img src="assets/images/logo-icon.png" alt="Portfol.io">
+      </button>
       <div class="topbar-heading">
         <p class="greeting">${timeGreeting()}, ${user.greetingName}</p>
         <h1>${heading}</h1>

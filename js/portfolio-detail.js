@@ -86,11 +86,11 @@ async function init() {
   initInfoPopovers();
   initDrillDown();
 
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Portfolio Detail",
     subtitle: "Every position you hold, right now.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
 

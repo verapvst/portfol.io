@@ -127,33 +127,35 @@
 /* ========== Navigation shell (LogoButton/Backdrop/Drawer) ========== */
 /* ============================================================
    Navigation overlay - LogoButton + Backdrop + Drawer.
-   None of this participates in #app's layout at any breakpoint:
-   every piece here is position:fixed, so #main always gets the
-   full available width whether the drawer is open or closed.
-   ============================================================ */
+   None of this participates in #app's layout at ANY breakpoint -
+   the drawer is always position:fixed, so #main always gets the full
+   available width whether the drawer is open or closed. Same mechanism
+   at every width; only the drawer's own size/inset varies (see the
+   breakpoint overrides near the bottom of this section) - restored
+   after a brief detour where desktop tried to make it a real layout
+   column. Mobile's behaviour was always correct; this made desktop match.
 
-/* ---------- LogoButton: the only thing visible when closed ---------- */
+   LogoButton itself now lives inside .topbar's own markup
+   (renderTopbar() in shell.js), not as an independent fixed element -
+   it's persistent chrome now, not a floating control, so this file only
+   styles its size/shape; position comes from the topbar's normal flex
+   layout. */
+
+/* ---------- LogoButton: the menu trigger, inside .topbar ---------- */
 .nav-logo-btn {
-  position: fixed;
-  top: var(--sp-6);
-  left: var(--sp-6);
-  z-index: 60;
+  flex-shrink: 0;
   width: 44px;
   height: 44px;
   border-radius: var(--r-2xl);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: transform 0.2s ease;
 }
 
 .nav-logo-btn img { width: 24px; height: 24px; object-fit: contain; }
 .nav-logo-btn:hover { transform: scale(1.06); }
 .nav-logo-btn:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
-
-/* Logo button disappears once the drawer is open - the wordmark inside
-   the drawer is the only logo on screen at that point. */
-body.nav-open .nav-logo-btn { opacity: 0; pointer-events: none; transform: scale(0.92); }
 
 /* ---------- Backdrop ---------- */
 #nav-backdrop {
@@ -299,51 +301,19 @@ body.nav-open #nav-drawer { transform: translateX(0); }
   color: #fff;
 }
 
-/* ---------- Desktop: toggleable sidebar, alongside content not over it ----------
-   #nav-drawer is inserted as #app's first flex child (js/shell.js;
-   #app is display:flex at this breakpoint, see layout.css). Its own
-   flex-basis (264px <-> 0) is what actually animates open<->closed -
-   flex-shrink:0 so it never resizes for any other reason. min-width:0
-   is required - flex items default to min-width:auto (their content's
-   intrinsic width), which would otherwise stop this shrinking below
-   whatever the longest nav label needs. */
+/* ---------- Per-breakpoint sizing - same overlay everywhere, only its
+   width/inset changes, per your explicit instruction that this should
+   be the only difference between breakpoints. ---------- */
 @media (min-width: 1024px) {
-  /* Desktop never gets the dim/blur overlay - the sidebar sits alongside
-     content (pushing it over via #app's flex layout, see layout.css),
-     never on top of it. The LogoButton itself DOES stay live here now -
-     it's the only toggle trigger at every breakpoint - so no display:none
-     override for it in this block anymore. */
-  #nav-backdrop { display: none; }
-
-  #nav-drawer {
-    position: sticky;
-    top: var(--sp-6);
-    left: auto;
-    bottom: auto;
-    transform: none;
-    flex: 0 0 264px;
-    min-width: 0;
-    max-height: calc(100vh - var(--sp-12));
-    opacity: 1;
-    overflow: hidden;
-    transition: flex-basis 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
-  }
-
-  body:not(.nav-open) #nav-drawer {
-    flex-basis: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
+  #nav-drawer { width: 320px; top: var(--sp-6); left: var(--sp-6); bottom: var(--sp-6); }
 }
 
-/* ---------- Tablet (overlay, unchanged) ---------- */
 @media (max-width: 1023px) {
   #nav-drawer { width: 280px; }
 }
 
 /* ---------- Mobile ---------- */
 @media (max-width: 767px) {
-  .nav-logo-btn { top: var(--sp-4); left: var(--sp-4); }
   #nav-drawer {
     top: var(--sp-3);
     left: var(--sp-3);
@@ -351,19 +321,34 @@ body.nav-open #nav-drawer { transform: translateX(0); }
     width: min(85vw, 320px);
   }
   .nav-item { min-height: 44px; }
+  .nav-logo-btn { width: 36px; height: 36px; }
+  .nav-logo-btn img { width: 20px; height: 20px; }
 }
 
-/* ========== Topbar ========== */
+/* ========== Topbar ==========
+   Sticky, glass (see .glass, .topbar in layout.css) - stays visible
+   while the page scrolls underneath it, same surface language as every
+   card. z-index sits above normal page content but below the nav
+   backdrop/drawer (55/56) so opening the sidebar dims/covers this too,
+   exactly like it already covers everything else. */
 .topbar {
+  position: sticky;
+  top: var(--sp-4);
+  z-index: 40;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--sp-6);
   margin-bottom: var(--sp-8);
+  padding: var(--sp-4) var(--sp-6);
+  border-radius: var(--r-2xl);
 }
 
-.topbar-heading-group { display: flex; align-items: flex-start; min-width: 0; }
+/* Logo/menu trigger + heading text as one unit (see renderTopbar() in
+   shell.js) - keeps them adjacent even when .topbar wraps to a column
+   on mobile, matching "LOGO | PAGE TITLE" staying together. */
+.topbar-heading-group { display: flex; align-items: center; gap: var(--sp-4); min-width: 0; }
 
 .topbar-heading .greeting { font-size: 14px; color: var(--muted); }
 

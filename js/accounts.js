@@ -267,11 +267,11 @@ function init() {
 
   initDrawer();
   initInfoPopovers();
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Accounts",
     subtitle: "Every brokerage, bank and pension account, in one place.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
   initAccountModal();

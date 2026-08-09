@@ -567,11 +567,11 @@ function init() {
 
   initDrawer();
   initInfoPopovers();
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Data Hub",
     subtitle: "Every piece of data enters Portfol.io through here.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
 

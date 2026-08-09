@@ -179,11 +179,11 @@ async function init() {
   initInfoPopovers();
   initDrillDown();
 
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Performance",
     subtitle: "How has your portfolio performed - not any single holding's market price.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
 

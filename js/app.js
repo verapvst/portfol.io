@@ -102,8 +102,8 @@ async function init() {
   initInfoPopovers();
   initDrillDown();
 
-  initNavigation(user);
   renderTopbar($("topbar"), user);
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
 

@@ -298,11 +298,11 @@ function init() {
 
   initDrawer();
   initInfoPopovers();
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Costs",
     subtitle: "TERs, custody fees, commissions — every recurring cost, dated and sourced.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
   initCostModal();

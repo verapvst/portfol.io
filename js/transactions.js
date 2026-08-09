@@ -359,11 +359,11 @@ function init() {
 
   initDrawer();
   initInfoPopovers();
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Transactions",
     subtitle: "Every buy, sell, dividend and cash movement, dated and sourced.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
   initTransactionModal();

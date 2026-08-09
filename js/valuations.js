@@ -250,11 +250,11 @@ function init() {
 
   initDrawer();
   initInfoPopovers();
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Valuations",
     subtitle: "Dated value observations — the record every performance number is built from.",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
   initValuationModal();

@@ -140,11 +140,11 @@ async function init() {
   initInfoPopovers();
   initDrillDown();
 
-  initNavigation(user);
   renderTopbar($("topbar"), user, {
     heading: "Allocation",
     subtitle: "Where is your portfolio invested?",
   });
+  initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
 
