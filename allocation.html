@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Allocation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=46">
+<link rel="stylesheet" href="css/layout.css?v=46">
+<link rel="stylesheet" href="css/components.css?v=46">
+<link rel="stylesheet" href="css/allocation.css?v=46">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <!-- "Where is my portfolio invested?" - per
+         docs/information-architecture.md §2. Every section here reads
+         from data.analytics.* (repository.js/analytics.js), computed
+         fresh from current positions on every load - never a stored
+         allocation percentage, never an editable one. -->
+    <p class="section-hint" id="alloc-summary"></p>
+
+    <section class="card glass interactive" id="asset-class-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="allocation-asset-class" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Asset Class Allocation</h2>
+        </div>
+      </div>
+      <p class="section-hint">The highest-level view of what kind of risk the portfolio is taking</p>
+      <div id="asset-class-viz"></div>
+    </section>
+
+    <section class="card glass interactive" id="concentration-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="allocation-concentration" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Top Concentrations</h2>
+        </div>
+      </div>
+      <div class="alloc-concentration-grid" id="concentration-stats"></div>
+      <div id="concentration-list"></div>
+    </section>
+
+    <section class="card glass interactive" id="security-allocation-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="allocation-security" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Security Allocation</h2>
+        </div>
+      </div>
+      <p class="section-hint">Every holding, ranked by weight</p>
+      <div id="security-allocation-body"></div>
+    </section>
+
+    <section class="card glass interactive" id="account-allocation-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="allocation-account" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Account Allocation</h2>
+        </div>
+      </div>
+      <p class="section-hint">Which broker/account each euro actually sits in</p>
+      <div id="account-allocation-body"></div>
+    </section>
+
+    <!-- Restored from Overview (removed there per the shell/Overview
+         review - see index.html's own history) - this is exactly the
+         dedicated page docs/information-architecture.md always meant
+         for it, not a rebuild. Same renderExposure/EXPOSURE_GROUPINGS
+         (ui.js) and renderWorldMap (charts.js) as before. -->
+    <section class="card glass interactive" id="exposure-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="exposure-country" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Geographic Exposure</h2>
+        </div>
+        <div id="exposure-tabs" class="tab-bar glass-quiet"></div>
+      </div>
+      <p class="section-hint" id="exposure-hint">Where the portfolio is invested, by country</p>
+      <div id="exposure-viz"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=46"></script>
+<script src="js/supabaseClient.js?v=46"></script>
+
+<script src="js/utils.js?v=46"></script>
+<script src="js/calculations.js?v=46"></script>
+<script src="js/repository.js?v=46"></script>
+
+<script src="vendor/d3.min.js?v=46"></script>
+<script src="vendor/topojson-client.min.js?v=46"></script>
+
+<script src="js/charts.js?v=46"></script>
+<script src="js/shell.js?v=46"></script>
+<script src="js/auth.js?v=46"></script>
+<script src="js/db.js?v=46"></script>
+<script src="js/analytics.js?v=46"></script>
+<script src="js/ui.js?v=46"></script>
+<script src="js/allocation.js?v=46"></script>
+</body>
+</html>

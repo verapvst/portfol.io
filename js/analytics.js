@@ -148,7 +148,10 @@ async function getPortfolioDataLive() {
     tone: tokenColor("asset", h.security.name.replace(/[^a-zA-Z0-9]/g, "_")),
   }));
 
-  const accounts = accountsRows.map((a) => ({ id: a.id, name: a.name, tone: tokenColor("account", a.name) }));
+  // currency carried through from the real accounts row (already fetched
+  // above) so currencyDrill (shell.js) can match holdings to a currency
+  // by real account data instead of a hardcoded account-name check.
+  const accounts = accountsRows.map((a) => ({ id: a.id, name: a.name, currency: a.currency, tone: tokenColor("account", a.name) }));
   const accountAllocation = accounts.map((a) => {
     const value = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.value, 0);
     return { name: a.name, value, weight: totalValue ? Math.round((value / totalValue) * 10000) / 100 : 0, tone: a.tone };

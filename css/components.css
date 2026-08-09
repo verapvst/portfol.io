@@ -635,10 +635,19 @@ th[data-info]:focus-visible {
 }
 
 /* ---------- Horizontal bar-fill primitive ----------
-   Not rendered by anything live right now (Currency Exposure moved to
-   the map, see EXPOSURE_GROUPINGS in ui.js) - kept because it's shared
-   by archive/components/accountBars.js and archive/components/goals.js,
-   both real Phase-2 features waiting to be wired in. */
+   Ranked-list allocation view (Security/Account Allocation on the
+   Allocation page) - a labelled row per item, its own bar-track/bar-fill
+   underneath. Kept generic (no page-specific class name) so it's ready
+   for whatever else eventually wants a ranked bar list (goals, future
+   Risk factor weights). */
+.bar-row { padding: var(--sp-3) 0; border-top: 1px solid var(--card-border); }
+.bar-row:first-child { border-top: none; padding-top: 0; }
+.bar-row.drill-row { cursor: pointer; }
+
+.bar-row-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); font-size: 13.5px; }
+.bar-row-name { font-weight: 400; color: var(--ink); }
+.bar-row-value { color: var(--muted); flex-shrink: 0; white-space: nowrap; }
+
 .bar-track {
   margin-top: 8px;
   height: 6px;

@@ -90,7 +90,7 @@ const NAV_GROUPS = [
       { label: "Overview", icon: "home", href: "index.html" },
       { label: "Portfolio Detail", icon: "pieChart", href: "portfolio-detail.html" },
       { label: "Performance", icon: "trendingUp", href: "performance.html" },
-      { label: "Allocation", icon: "pieChart", href: "#" },
+      { label: "Allocation", icon: "pieChart", href: "allocation.html" },
       { label: "Risk", icon: "activity", href: "#" },
     ],
   },
@@ -348,13 +348,33 @@ const METRIC_DOCS = {
     calculation: "Each holding's market value divided by total portfolio value, grouped by the selected dimension. Asset Class blends BPI Dinâmico's own internal split (Liquidez/Obrigações/Ações/Outros Investimentos) with the Trading212 sleeve (100% equity), scaled by each product's share of the total portfolio.",
     source: "portfolio.holdings and portfolio.accounts, plus BPI Dinâmico's real internal split from the workbook's Allocations sheet (source: BPI Ficha Mensal, June 2026).",
   },
+  "allocation-asset-class": {
+    definition: "How the portfolio splits across broad asset classes (Equities, Bonds, Cash, Alternatives) - the highest-level view of what kind of risk the portfolio is actually taking, independent of which product or account holds it.",
+    calculation: "Each holding's market value classified by asset class and summed as a percentage of total portfolio value. A fund-of-funds (e.g. BPI Dinâmico) contributes its own disclosed internal split, scaled by its own share of the total portfolio, rather than being counted as one opaque \"Fund\" bucket - blended with every directly-held security's own class. Recomputed from current positions on every load, never read from a stored percentage.",
+    source: "analytics.assetClassAllocation, from portfolio.holdings + BPI Dinâmico's internal split (source: BPI Ficha Mensal, June 2026 - see docs/migration-plan.md §3.3, not yet migrated to a live Supabase Allocations table, Phase 4/5).",
+  },
+  "allocation-security": {
+    definition: "Weight of every individual holding (fund, ETF, stock, cash) as a share of total portfolio value - the most granular allocation view, one step up from Portfolio Detail's own data table.",
+    calculation: "Each holding's latest market value ÷ current total portfolio value, ranked descending. Same figures as Portfolio Detail's Weight column - shown here as a ranked allocation view, not a second computation of it.",
+    source: "analytics.productAllocation, derived from portfolio.holdings (Transactions + Valuations via js/calculations.js) - never a stored allocation table.",
+  },
+  "allocation-account": {
+    definition: "How the portfolio splits across the accounts/brokers it's actually held in - a custody view, not a risk one (two accounts can hold the exact same underlying asset class or security).",
+    calculation: "Sum of each account's holdings' current market value ÷ current total portfolio value.",
+    source: "analytics.accountAllocation, derived from portfolio.accounts + portfolio.holdings - recalculated every load, never stored.",
+  },
+  "allocation-concentration": {
+    definition: "How much of the portfolio sits in its largest few positions - a diversification signal (is this portfolio really spread out, or effectively one bet), not a performance one.",
+    calculation: "Holdings ranked by current weight, descending; cumulative weight of the top 1, top 3 and top 5 shown alongside the full ranked list. A portfolio with very few holdings (as here) will legitimately show high concentration - that's a real structural fact, not a warning about data quality.",
+    source: "analytics.productAllocation, re-ranked and summed on this page - no separate stored \"concentration\" figure exists anywhere.",
+  },
   "exposure-country": {
-    definition: "Which countries the portfolio's holdings are exposed to - fully real, no illustrative or placeholder entries. Two layers: each security's own Exposure Country (Detailed Portfolio), plus a real look-through decomposition for securities whose mandate is a broad index (World / Emerging Markets) rather than one country.",
+    definition: "Which countries the portfolio's holdings are exposed to - fully real, no illustrative or placeholder entries. Two layers: each security's own Exposure Country (Detailed Portfolio), plus a real look-through decomposition for securities whose mandate is a broad index (World / Emerging Markets) rather than one country. This is look-through exposure, not a security's own stated region/mandate (a separate field, docs/migration-plan.md §2.2's securities.region - not shown here) - the two answer different questions and are deliberately never merged into one number, per docs/migration-plan.md §2.2.",
     calculation: "Every one of the 122 real securities was individually classified by issuer, ETF index or fund mandate - never by regulatory category. Where a security's mandate genuinely tracks (or, for Trading212's actively-managed AVWS, closely matches) a real published index, its real country weights are pulled in from that index's official factsheet (MSCI, Jul 2026) or the fund's own factsheet (Avantis, Jun 2026) - not guessed. Each factsheet only discloses its own top 5 countries plus a lump \"Other\" for the rest; that residual, plus BPI Dinâmico's ~25 actively-managed/thematic World/Europe/Emerging-Markets fund-of-fund positions (each would need its own individually-researched factsheet, not an index's), stay honestly folded into \"Not attributable to a single country\" - a real number, not a placeholder. 17 of BPI Dinâmico's 118 holdings (7.62% of the total portfolio - see the Region tab's \"Unknown\" figure) couldn't be classified at all from the security name and are marked Unknown.",
     source: "analytics.countries + analytics.notCountrySpecificWeight. Base classification from 02_Portfolio Workbook.xlsx's Detailed Portfolio (Exposure Country column); look-through weights from MSCI's official index factsheets and Avantis' fund factsheet, fetched live and cited in js/repository.js.",
   },
   "exposure-region": {
-    definition: "The same portfolio, classified by region instead of country - not derived from the Country tab, from the same Detailed Portfolio source at its own (coarser) dimension. Answers \"what's this fund's mandate\", not \"which countries does it hold\" - see the Country tab for that.",
+    definition: "The same portfolio, classified by region instead of country - not derived from the Country tab, from the same Detailed Portfolio source at its own (coarser) dimension. This is still look-through Exposure Region (Detailed Portfolio), not each security's own stated region/mandate (securities.region, a separate field per docs/migration-plan.md §2.2, not shown here) - despite the shared word \"region\", these are never merged.",
     calculation: "Aggregated directly from every security's Exposure Region classification. Categories like \"World\" or \"Unknown\" are real region-level facts about holdings that were never country-specific to begin with (a global tracker fund, or a security that couldn't be classified) - not a residual bucket for map-plotting leftovers. Deliberately unaffected by the Country tab's look-through decomposition: a fund classified \"World\" stays counted as World here even though its real US weight now shows up under United States on the Country tab - both are correct answers to different questions.",
     source: "analytics.regions, aggregated from 02_Portfolio Workbook.xlsx's Detailed Portfolio (Exposure Region column).",
   },
@@ -587,7 +607,13 @@ function assetClassDrill(name, data) {
 
 function accountDrill(name, data) {
   const acc = data.analytics.accountAllocation.find((a) => a.name === name);
-  const holdings = data.portfolio.holdings.filter((h) => h.accountId === (name === "BPI" ? "bpi" : "t212"));
+  // Looked up by name -> real account id, not hardcoded to the mock's
+  // two accounts (a leftover from before this was reachable from any
+  // live page - Allocation's Account card is what first wires this up
+  // for real, so the bug now actually matters: a real Supabase account
+  // id is a UUID, never "bpi"/"t212").
+  const accountRecord = data.portfolio.accounts.find((a) => a.name === name);
+  const holdings = data.portfolio.holdings.filter((h) => h.accountId === accountRecord?.id);
   const subtitle = !acc ? "" : isOwnerMode()
     ? `${fmtEUR(acc.value)} · ${acc.weight.toFixed(2)}% of portfolio`
     : `${acc.weight.toFixed(2)}% of portfolio`;
@@ -623,7 +649,12 @@ function countryDrill(isoCode, data) {
 
 function currencyDrill(code, data) {
   const cur = data.analytics.currency.find((c) => c.code === code);
-  const holdings = data.portfolio.holdings.filter((h) => (code === "EUR" ? h.accountId === "bpi" : h.accountId !== "bpi"));
+  // Same fix as accountDrill above: matched by each account's own real
+  // currency field, not hardcoded to "EUR means BPI, anything else
+  // means Trading212" - that only ever happened to work for the mock's
+  // exact two accounts.
+  const accountIds = new Set(data.portfolio.accounts.filter((a) => (a.currency || "EUR") === code).map((a) => a.id));
+  const holdings = data.portfolio.holdings.filter((h) => accountIds.has(h.accountId));
   return {
     icon: "wallet", title: `${code} Exposure`, subtitle: cur ? `${cur.weight.toFixed(2)}% of portfolio` : "",
     bodyHTML: `

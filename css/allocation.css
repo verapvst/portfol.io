@@ -1,0 +1,23 @@
+/* ============================================================
+   allocation.css - page-specific layout only. Donut, bar rows, tabs and
+   the world map all reuse existing components (components.css) - this
+   file only spaces this page's own cards and its concentration tiles.
+   ============================================================ */
+
+#asset-class-card,
+#concentration-card,
+#security-allocation-card,
+#account-allocation-card,
+#exposure-card { margin-bottom: var(--sp-8); }
+#exposure-card:last-child { margin-bottom: 0; }
+
+.alloc-concentration-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+
+@media (max-width: 900px) {
+  .alloc-concentration-grid { grid-template-columns: 1fr; }
+}

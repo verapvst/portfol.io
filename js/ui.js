@@ -110,7 +110,7 @@ function renderAllocationSummary(container, data) {
         ${topRegion ? `<span>${topRegion.name} <b>${topRegion.weight.toFixed(1)}%</b></span>` : ""}
         ${topCountry ? `<span>${topCountry.name} <b>${topCountry.weight.toFixed(1)}%</b></span>` : ""}
       </div>` : ""}
-    <a class="link-more" href="#">View Allocation ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="allocation.html">View Allocation ${icon("arrowRight")}</a>`;
 
   renderDonut(container.querySelector("#allocation-donut"), items, "Asset Class", `${total.toFixed(1)}%`, { drillType: "assetClass" });
 }

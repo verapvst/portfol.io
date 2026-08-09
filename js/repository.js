@@ -141,9 +141,14 @@ function getMockPortfolioData() {
   const investorReturnAvailable = xirrCashflows.length >= 2;
   const investorReturnPct = investorReturnAvailable ? Math.round(xirr(xirrCashflows) * 10000) / 100 : 0;
 
+  // currency: real settlement currency per account (BPI Dinâmico is
+  // EUR-denominated, the Trading212 sleeve is USD - see the
+  // exposure-currency info popover) - carried on portfolio.accounts
+  // itself so currencyDrill (shell.js) can match holdings to a currency
+  // by real account data instead of a hardcoded account-name check.
   const accounts = [
-    { id: "bpi", name: "BPI", tone: tokenColor("account", "BPI") },
-    { id: "t212", name: "Trading212", tone: tokenColor("account", "Trading212") },
+    { id: "bpi", name: "BPI", currency: "EUR", tone: tokenColor("account", "BPI") },
+    { id: "t212", name: "Trading212", currency: "USD", tone: tokenColor("account", "Trading212") },
   ];
 
   // Real buy amounts, the same figures already cited above (BPI's €250
