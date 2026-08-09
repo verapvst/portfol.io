@@ -360,6 +360,22 @@ function getMockPortfolioData() {
   // anything yet - exactly the "just deposit money and it looks like
   // performance" distortion this whole fix exists to avoid.
 
+  // Same calendar-year breakdown the live path computes
+  // (calculations.js:annualReturns()) - reused here, not a second
+  // formula, so Showcase and Private show the same kind of number even
+  // though the underlying series differs. Single pseudo-security (this
+  // whole series already IS the cash-flow-neutral trajectory above), one
+  // cash flow at inception, matching the mock's own real fact ("exactly
+  // one cash flow, the 2017 subscription, no interim contributions").
+  const yearlyReturns = window.annualReturns
+    ? window.annualReturns(
+        { series: valueSeries.map((p) => ({ date: p.date, value_eur: p.value })) },
+        [inceptionDate],
+        valueSeries[valueSeries.length - 1].date,
+        inceptionDate
+      )
+    : {};
+
   const largest = [...holdings].sort((a, b) => b.weight - a.weight)[0];
   const health = {
     holdingsCount: holdings.length,
@@ -402,6 +418,7 @@ function getMockPortfolioData() {
         totalReturnAvailable: true,
         investorReturnPct,
         investorReturnAvailable,
+        yearlyReturns,
         todayChange,
         todayChangePct,
         cash,

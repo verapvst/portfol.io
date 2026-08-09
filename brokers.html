@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfol.io — Securities</title>
+<title>Portfol.io — Broker Comparison</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="css/layout.css?v=63">
 <link rel="stylesheet" href="css/components.css?v=63">
 <link rel="stylesheet" href="css/products.css?v=63">
+<link rel="stylesheet" href="css/brokers.css?v=63">
 </head>
 <body>
 <div id="app">
@@ -18,27 +19,27 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <!-- "What could I invest in?" - per docs/information-architecture.md
-         §2's Research row. Supabase-only (security_details/securities,
-         see js/db.js's loadProductLibrary()) - no mock/Showcase fallback
-         for this domain yet, since it's authenticated-only for now (see
-         supabase/migrations/0005_product_database.sql's RLS comment for
-         why). Signed-out visitors see a sign-in prompt, not fabricated
-         products. -->
-    <section class="card glass interactive" id="product-library-card">
+    <!-- "Where should I hold my investments?" - Tools, per
+         docs/legacy-feature-inventory.md. Supabase-only (brokers table,
+         supabase/migrations/0005_product_database.sql), same
+         authenticated-only simplification as Securities - no mock
+         fallback, no anon access yet (see that migration's own RLS
+         note). Real data: 10 brokers transcribed verbatim from the old
+         Portfol.io app's Excel-derived database
+         (0006_seed_products_and_brokers.sql), never estimated. -->
+    <section class="card glass interactive" id="brokers-card">
       <div class="card-header">
-        <div class="card-header-title" data-info="product-library" tabindex="0" role="button" aria-label="About this page">
-          <h2 class="section-title">Securities</h2>
+        <div class="card-header-title" data-info="broker-comparison" tabindex="0" role="button" aria-label="About this page">
+          <h2 class="section-title">Broker Comparison</h2>
         </div>
       </div>
-      <p class="section-hint" id="product-library-summary"></p>
+      <p class="section-hint" id="brokers-summary"></p>
 
       <div class="product-library-controls">
-        <input type="search" id="product-search" class="product-search" placeholder="Search by name or issuer…" autocomplete="off">
-        <div class="tab-bar glass-quiet" id="product-type-tabs"></div>
+        <input type="search" id="broker-search" class="product-search" placeholder="Search by name or country…" autocomplete="off">
       </div>
 
-      <div id="product-library-body"></div>
+      <div id="brokers-body"></div>
     </section>
 
   </main>
@@ -55,6 +56,6 @@
 <script src="js/shell.js?v=63"></script>
 <script src="js/auth.js?v=63"></script>
 <script src="js/db.js?v=63"></script>
-<script src="js/products.js?v=63"></script>
+<script src="js/brokers.js?v=63"></script>
 </body>
 </html>

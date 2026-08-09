@@ -98,4 +98,9 @@ insert into security_details (
   '2026-06-30', '2026-06-30', current_date,
 
   'Reconciled 2026-08-09 from: live securities record (id/name/isin/type, pre-existing), docs/workbook-architecture.md (Costs sheet, BPI Ficha Mensal transcription - NOT yet confirmed by a live costs table row, _check_bpi_costs.sql returned zero rows on 2026-08-09), js/repository.js comments (BPI Ficha Mensal June 2026 internal split), js/importer/geoClassifier.js + docs/migration-plan.md (118 real Detailed Portfolio holdings). Fund-level AUM, performance, risk metrics, benchmark, real launch date (distinct from Vera''s 2017-06-21 subscription date), SFDR article and star rating are not yet substantiated - left null rather than estimated. The Data Hub''s BPI Ficha Mensal parser (js/importer/monthlyFactsheetParser.js) can extract several of these (launch_date, assets_under_management) automatically from a real BPI PDF the next time one is imported - that''s the intended path to filling these in with real data, not a manual guess.'
-);
+)
+on conflict (security_id) do nothing;
+-- Guards against a duplicate-key error if this file is accidentally run
+-- twice (security_id is security_details' primary key) - matches the
+-- "make partial/repeat runs safe, not just single-shot" lesson from
+-- 0007's own re-run failure this session.

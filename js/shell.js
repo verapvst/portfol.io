@@ -22,14 +22,45 @@
    unchanged; only what backs the answer changed. */
 
 const MONEY_MASK = "······";
+const VALUES_VISIBLE_KEY = "portfolio_io_values_visible";
 
-/** Showcase (signed out) masks money; Private (signed in) shows it -
-    the real mechanism now, not a separate toggle. No separate
-    onOwnerModeChange listener exists anymore - every page already
-    re-renders on onAuthChange (auth.js) for its data, which covers
-    money-sensitive sections too since they read this same function. */
+/** Layer 3 (docs/production-architecture.md's three-mode model, extended):
+    a real UI privacy toggle *within* an authenticated session, independent
+    of sign-in state itself. Signing in already grants real read/write
+    access (Layer 2) - this only controls whether money renders on screen
+    right now, for the "showing someone Portfol.io in person while signed
+    in" case. Defaults to visible (true) the first time you're ever signed
+    in, since that's the common case; explicit choices persist across
+    reloads via localStorage (there is exactly one real user of this app,
+    so a shared browser-level flag is the right scope - it isn't meant to
+    survive a sign-out/sign-in as a different person, which this app
+    doesn't support anyway). This is NOT a second authentication layer, by
+    design - it's a display preference, and every table it protects is
+    still fully RLS-gated on the real Supabase session regardless of this
+    flag's value. */
+function valuesVisible() {
+  const stored = localStorage.getItem(VALUES_VISIBLE_KEY);
+  return stored === null ? true : stored === "true";
+}
+
+/** Reloads on purpose rather than trying to re-render every open page's
+    money-showing sections in place - this app has no shared reactivity
+    system, and a privacy toggle is an occasional, deliberate action, not
+    a hot path worth the per-page wiring a live re-render would need. */
+function setValuesVisible(visible) {
+  localStorage.setItem(VALUES_VISIBLE_KEY, visible ? "true" : "false");
+  window.location.reload();
+}
+
+/** Showcase (signed out) always masks money. Signed in, money shows
+    UNLESS valuesVisible() has been explicitly toggled off (Layer 3) - the
+    real mechanism now, not a separate toggle for the signed-out case, but
+    a genuine independent layer on top of it for the signed-in case. No
+    separate onOwnerModeChange listener exists - every page already
+    re-renders on onAuthChange (auth.js) for its data, and a values-
+    visibility change reloads the page outright (see setValuesVisible). */
 function isOwnerMode() {
-  return !!currentUser();
+  return !!currentUser() && valuesVisible();
 }
 
 /** The one place every absolute money value in the app should be
@@ -43,6 +74,29 @@ function isOwnerMode() {
     instead of the tag as literal text. */
 function formatMoney(value, opts) {
   return isOwnerMode() ? fmtEUR(value, opts) : `<span class="money-mask">${MONEY_MASK}</span>`;
+}
+
+/** The topbar toggle itself - only rendered when actually signed in
+    (a signed-out Showcase visitor already sees masked money via
+    isOwnerMode() above; showing them a toggle that does nothing useful
+    would be confusing, not helpful). Called again on every auth change
+    (initAuthButton wires that up) since sign-in/out changes whether this
+    should exist at all - clears the slot first each time so that never
+    stacks duplicate buttons. */
+function initValuesToggle(container) {
+  if (!container) return;
+  container.innerHTML = "";
+  if (!currentUser()) return;
+
+  const btn = document.createElement("button");
+  btn.id = "values-toggle-btn";
+  btn.className = "icon-btn glass-quiet";
+  const visible = valuesVisible();
+  btn.innerHTML = icon(visible ? "eye" : "eyeOff");
+  btn.setAttribute("aria-label", visible ? "Hide values" : "Show values");
+  btn.title = visible ? "Hide values" : "Show values";
+  btn.addEventListener("click", () => setValuesVisible(!valuesVisible()));
+  container.appendChild(btn);
 }
 
 /** Rebases a value series to the first point = 100, preserving the
@@ -109,6 +163,7 @@ const NAV_GROUPS = [
     group: "Research",
     items: [
       { label: "Securities", icon: "pieChart", href: "products.html" },
+      { label: "Broker Comparison", icon: "landmark", href: "brokers.html" },
       { label: "Benchmarks", icon: "barChart3", href: "#" },
       { label: "Market Data", icon: "trendingUp", href: "#" },
       { label: "Simulator", icon: "sparkles", href: "#" },
@@ -259,6 +314,7 @@ function renderTopbar(container, user, { heading = "Portfolio Overview", subtitl
     </div>
     <div class="topbar-actions">
       <div class="search-box glass-quiet">${icon("search")}<span>Search anything…</span><kbd>⌘K</kbd></div>
+      <div id="values-toggle-slot"></div>
       <div id="auth-slot"></div>
       <button class="icon-btn glass-quiet" aria-label="Notifications">${icon("bell")}</button>
     </div>`;
@@ -346,9 +402,9 @@ const METRIC_DOCS = {
     source: "portfolio.cash. Currently €0 - every euro is invested, nothing idle.",
   },
   "investment-performance": {
-    definition: "Time-Weighted Return (TWR) since inception - how the investment itself performed, isolated from when or how much was deposited. Deliberately not the same question as Portfolio Value (\"what do I have\"), Investor Return / XIRR (\"what did I personally gain, given when I put money in\") - or a security's own market price return: this is computed from the portfolio's recorded Valuations, which already net out fees and distributions the way a raw price series never would, so the two numbers can legitimately differ even for a single-holding portfolio. A security's own price history (once daily_prices is live) belongs on that security's own page, not here.",
-    calculation: "The holding with the longest real valuation history drives the shown series - real dated NAV observations where they exist, linearly interpolated between them elsewhere (dashed on the chart, never drawn as if observed), chain-linked into the return shown. A newly-bought holding contributes a real 0% until it has time behind it. Interpolated stretches don't capture real intra-period volatility (e.g. a real drawdown might not be visible here even though it happened) - this is a known, flagged limitation, not a silent one.",
-    source: "history.valueSeries + analytics.performance.totalReturnPct/totalReturnAvailable, computed from Valuations (live) or transcribed from 02_Portfolio Workbook.xlsx's Portfolio Values sheet (mock). Each point is flagged real:true/false in the data; totalReturnAvailable is false when fewer than 2 dated observations exist yet, in which case this shows as insufficient history rather than a fabricated 0%.",
+    definition: "Time-Weighted Return (TWR) since inception - how the investment strategy performed, isolated from when or how much was deposited. Deliberately not the same question as Portfolio Value (\"what do I have\"), Investor Return / XIRR (\"what did I personally gain, given when I put money in\") - or a security's own market price return: this is computed from every holding's recorded Valuations, which already net out fees and distributions the way a raw price series never would, so the two numbers can legitimately differ even for a single-holding portfolio. A security's own price history (once daily_prices is live) belongs on that security's own page, not here.",
+    calculation: "Portfolio-level chain-linked TWR - NOT one holding's own trajectory standing in for the whole portfolio, and NOT each holding's own return separately calculated and blended. Sub-periods are bounded by external cash-flow dates (a deposit or withdrawal); at each boundary, every holding's value is looked up via its nearest real observation on or before that date (never a future one, never interpolated) and summed into a total - that total already reflects each holding's historical weight, so there's no separate weighting step. Sub-period returns are then chained: (1+r1)×(1+r2)×...−1. This is an honest approximation using available valuation snapshots, not daily-continuous institutional-grade TWR - precision in any given stretch is bounded by whichever holding has the sparsest valuation history relevant to it. A holding with no observation yet contributes exactly 0 (it wasn't part of the portfolio), never a guess.",
+    source: "history.valueSeries + analytics.performance.totalReturnPct/totalReturnAvailable, computed by js/calculations.js:chainLinkedPortfolioReturn()/valueOfSecurityAsOf() from live Valuations (or transcribed from 02_Portfolio Workbook.xlsx's Portfolio Values sheet, mock). Chart points are all real:true on the live path (every plotted date is a genuine observed total, never a fabricated smoothing point) - the real:false/dashed/interpolated treatment exists for the Showcase mock's deliberately sparse hand-authored series, not live data. totalReturnAvailable is false when there isn't yet at least one external cash flow with a valuation after it, in which case this shows as insufficient history rather than a fabricated 0%. Known limitation: the schema doesn't yet distinguish an external deposit from an internally-funded rebalance (every buy/sell counts as an external cash-flow boundary today) - correct for the current transaction history (no sells on record), not guaranteed correct in general.",
   },
   "portfolio-allocation": {
     definition: "How the portfolio splits by asset class, product, or account.",
@@ -400,6 +456,11 @@ const METRIC_DOCS = {
     calculation: "Market Value minus Cost Basis, and that difference as a percentage of Cost Basis.",
     source: "js/calculations.js:unrealisedPnL(value, costBasis) - value from the latest Valuation, cost basis from costBasisFromTransactions() above. Shown as unavailable (never €0) when cost basis itself can't be determined, e.g. a sell exists but no unit count was ever recorded for it.",
   },
+  "annual-returns": {
+    definition: "Time-Weighted Return for each calendar year, and the current year to date - a different view of the same headline TWR above, not a separate metric. Average of the yearly figures shown here is NOT the same number as the since-inception TWR itself (arithmetic mean vs. compounded/chain-linked) - the two answer different questions and shouldn't be expected to match.",
+    calculation: "The same chain-linked TWR calculation as the headline number (js/calculations.js:chainLinkedPortfolioReturn()), sliced at each Dec-31/Jan-1 boundary (annualReturns()) rather than recomputed - splitting the since-inception chain into years never changes its total. A year shows as \"no growth signal yet\" rather than a flat 0% when there's a real gap in dated observations spanning that whole year (nearest-prior carries the same value across the gap) - that's an honest data-availability limitation, not a claim the portfolio didn't move that year.",
+    source: "analytics.performance.yearlyReturns, computed from the same Valuations/cash-flow data as the headline TWR - see that metric's own info popover for the full methodology and its documented limitations.",
+  },
   "benchmark-comparison": {
     definition: "How the portfolio's return compares to a relevant market index (e.g. MSCI World) over the same period - not shown yet, honestly, rather than estimated.",
     calculation: "Would compare the portfolio's own Time-Weighted Return against the benchmark's own TWR (chain-linked from the benchmark's dated values, not its raw price - comparing to a raw price series is a common, misleading shortcut this app won't take).",
@@ -429,6 +490,11 @@ const METRIC_DOCS = {
     definition: "Every product with research data on file - funds, ETFs, PPRs and unit-linked insurance products, whether or not you actually hold them. A research tool, distinct from Portfolio Detail (\"what do I have\").",
     calculation: "No calculation - a filtered/sorted view of security_details joined to securities. Products you actually hold (per Transactions) are marked \"Held\"; everything else is research-only.",
     source: "supabase/migrations/0005_product_database.sql / 0006_seed_products_and_brokers.sql - real figures transcribed from the old Portfol.io app's Excel-derived master database (18 products), not estimated. Authenticated-only for now, see that migration's own RLS comment for why.",
+  },
+  "broker-comparison": {
+    definition: "Real costs, investor protection, and platform-quality scores for 10 brokers - a comparison tool, not a recommendation. Which broker fits you best depends on how you invest (small/frequent trades vs. large/infrequent, EUR-only vs. multi-currency, beginner vs. advanced), which this page deliberately doesn't decide for you.",
+    calculation: "No calculation on the cost/protection facts - transcribed directly from each broker's own disclosed terms. The six scores (Cost/Safety/Beginner/Advanced/Tax simplicity/UX) are the old Portfol.io app's own curated 1-10 ratings, carried over as-is, not recomputed.",
+    source: "supabase/migrations/0006_seed_products_and_brokers.sql - real figures transcribed from the old Portfol.io app's Excel-derived master database (10 brokers), not estimated. Authenticated-only for now, same as Securities.",
   },
   "product-score": {
     definition: "A 0-100 scorecard across nine dimensions - cost, tax efficiency, diversification, liquidity, transparency, scale, risk-adjusted efficiency, risk, and return. A scoring model, not a verdict: a low score on one dimension means \"know this about it\", not \"don't buy this\" - that's why every dimension is shown, not just the overall number.",

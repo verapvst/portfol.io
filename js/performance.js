@@ -142,6 +142,43 @@ function renderStats(data) {
   $("perf-stats-grid").innerHTML = tiles.join("");
 }
 
+/* ---------- Annual returns ----------
+   Same chain-linked TWR the headline number uses, sliced by calendar
+   year (calculations.js:annualReturns()) - a different view, not a
+   different calculation. Percentages only, shown identically whether
+   signed in or not (same precedent as the headline TWR/XIRR tiles
+   above - a %-return reveals nothing about portfolio size). */
+function renderAnnualReturns(data) {
+  const container = $("annual-returns-body");
+  const years = data.analytics.performance.yearlyReturns || {};
+  const entries = Object.entries(years).sort(([a], [b]) => Number(a) - Number(b));
+
+  if (!entries.length) {
+    renderInsufficientData(container, "Not enough dated history yet to break performance down by year.");
+    return;
+  }
+
+  const currentYear = new Date().getFullYear();
+  const rows = entries.map(([year, y]) => {
+    const label = Number(year) === currentYear ? `${year} YTD` : year;
+    if (!y.hasObservationInYear) {
+      return `
+        <div class="annual-return-row">
+          <span class="annual-return-year">${label}</span>
+          <span class="annual-return-value text-muted">No data</span>
+        </div>`;
+    }
+    const tone = y.returnPct > 0 ? "up" : y.returnPct < 0 ? "down" : "text-muted";
+    return `
+      <div class="annual-return-row">
+        <span class="annual-return-year">${label}</span>
+        <span class="annual-return-value ${tone}">${fmtPct(y.returnPct)}</span>
+      </div>`;
+  }).join("");
+
+  container.innerHTML = `<div class="annual-returns-list">${rows}</div>`;
+}
+
 /* ---------- Benchmark comparison ----------
    Honest "not built yet" state, not a placeholder chart - see the
    benchmark-comparison info popover (shell.js) for exactly what's
@@ -192,6 +229,7 @@ async function init() {
     renderDataWarning(data);
     renderStats(data);
     renderValueChart(data);
+    renderAnnualReturns(data);
   };
 
   renderBenchmarkSection();

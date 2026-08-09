@@ -230,6 +230,10 @@
 .db-load-signedout { font-size: 12.5px; color: var(--muted); }
 .db-load-signedout button { color: var(--coral-2); font-weight: 500; }
 
+.db-load-match-note { margin-top: 6px; font-size: 11.5px; line-height: 1.4; }
+.db-load-match-found { color: var(--positive); }
+.db-load-match-none { color: var(--orange-2); font-weight: 500; }
+
 /* ---------- Raw tables (the real, preserved "copy to Excel" mechanism) ---------- */
 .raw-tables-toggle {
   margin-top: var(--sp-6);

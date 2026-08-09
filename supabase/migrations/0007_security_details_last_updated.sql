@@ -17,14 +17,20 @@
 -- still entirely unknown - one row-level "last_verified" date can't
 -- honestly represent both.
 --
--- How to run this: paste into the Supabase SQL Editor and run once,
--- after 0005/0006.
+-- How to run this: paste into the Supabase SQL Editor, after 0005/0006.
+-- Safely re-runnable - every statement below is guarded (IF NOT EXISTS /
+-- OR REPLACE / DROP...IF EXISTS then re-create), since a first attempt
+-- at this file partially applied (the SQL Editor doesn't roll DDL back
+-- as one transaction the way the 0006 data-insert script did) - re-
+-- running used to fail with "column already exists" on the first
+-- statement, so nothing after it could ever be reached even though it
+-- still needed to run.
 
 -- =========================================================================
 -- 1. Missing real field
 -- =========================================================================
 
-alter table security_details add column subscription_fee_pct numeric;
+alter table security_details add column if not exists subscription_fee_pct numeric;
 comment on column security_details.subscription_fee_pct is
   'Annual/one-off subscription fee, % - the counterpart to redemption_fee_pct. Missing from 0005 by oversight, not a deliberate omission.';
 
@@ -50,9 +56,9 @@ comment on column security_details.subscription_fee_pct is
 --    figures currently have none at all.
 -- =========================================================================
 
-alter table security_details add column costs_as_of date;
-alter table security_details add column performance_as_of date;
-alter table security_details add column allocation_as_of date;
+alter table security_details add column if not exists costs_as_of date;
+alter table security_details add column if not exists performance_as_of date;
+alter table security_details add column if not exists allocation_as_of date;
 
 comment on column security_details.costs_as_of is 'Data as of: the real-world date the TER/fee/AUM figures were true, per their source document. Not the row''s save date.';
 comment on column security_details.performance_as_of is 'Data as of: the real-world date the return/risk figures were true.';
@@ -69,6 +75,7 @@ $$ language plpgsql;
 comment on function set_updated_at is
   'Generic "Last Updated" trigger - stamps updated_at = now() on every UPDATE. Applied to security_details now; other tables can adopt the same trigger later without a schema change of their own (just `create trigger ... before update ... execute function set_updated_at()`), not required as part of this pass.';
 
+drop trigger if exists security_details_set_updated_at on security_details;
 create trigger security_details_set_updated_at
   before update on security_details
   for each row
@@ -78,7 +85,7 @@ create trigger security_details_set_updated_at
 -- 3. A 4th data_quality state
 -- =========================================================================
 
-alter table security_details drop constraint security_details_data_quality_check;
+alter table security_details drop constraint if exists security_details_data_quality_check;
 alter table security_details add constraint security_details_data_quality_check
   check (data_quality in ('Real', 'Partial', 'Estimated', 'Unknown'));
 

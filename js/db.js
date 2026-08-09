@@ -62,16 +62,18 @@ async function loadInstitutions() {
 }
 
 /** Institutions/Securities are shared reference data (Migration Plan
-    §2.1/§2.2) - find by case-insensitive name before creating, so typing
-    "BPI" on two different pages never produces two rows. `cache` is the
-    caller's already-loaded array (kept in sync by pushing the new row on
+    §2.1/§2.2) - find by case- AND diacritic-insensitive name before
+    creating (normalizeName(), utils.js), so typing "BPI" on two
+    different pages, or a BPI PDF printing "BPI DINAMICO" without the
+    accent, never produces a second row. `cache` is the caller's
+    already-loaded array (kept in sync by pushing the new row on
     creation), not re-fetched here, so repeated lookups in one form
     session don't re-query. */
 async function findOrCreateInstitution(name, cache) {
   const trimmed = name.trim();
   if (!trimmed) return null;
 
-  const existing = cache.find((i) => i.name.toLowerCase() === trimmed.toLowerCase());
+  const existing = cache.find((i) => normalizeName(i.name) === normalizeName(trimmed));
   if (existing) return existing.id;
 
   const { data, error } = await window.db.from("institutions").insert({ name: trimmed }).select("id").single();
@@ -104,7 +106,7 @@ async function findOrCreateSecurity({ name, type, currency }, cache) {
   const trimmed = name.trim();
   if (!trimmed) return null;
 
-  const existing = cache.find((s) => s.name.toLowerCase() === trimmed.toLowerCase());
+  const existing = cache.find((s) => normalizeName(s.name) === normalizeName(trimmed));
   if (existing) return existing.id;
 
   const { data, error } = await window.db

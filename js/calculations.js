@@ -141,7 +141,142 @@ function productScore(p) {
   };
 }
 
+/**
+ * The single seam every performance calculation asks "what was security
+ * X worth on date Y?" through - added when the old single-driver TWR
+ * (js/analytics.js's twrDriver) was confirmed invalid the moment more
+ * than one holding had real interim valuation history. `history` is
+ * that security's own valuations array (any order, `{date, value_eur}`
+ * shape) - never interpolated, never a future observation:
+ *
+ * - Nearest-PRIOR real observation only (inclusive of `date` itself,
+ *   unless `exclusive` is set - see chainLinkedPortfolioReturn() below
+ *   for why both variants exist: a cash-flow date needs both "value
+ *   right before this flow" and "value right after it").
+ * - A security with no observation on/before `date` contributes 0 - it
+ *   simply wasn't part of the portfolio yet, not an error, not a guess.
+ *
+ * Deliberately source-agnostic: this reads `value_eur` from whatever
+ * array it's handed, so once `daily_prices` resumes, a caller can build
+ * that same `{date, value_eur}` shape from price × units-held and pass
+ * it straight in - the lookup and the chain-linking below never need to
+ * know which source answered "what was it worth". BPI Dinâmico (no
+ * market price, ever) keeps using manual valuations indefinitely; nothing
+ * about that requires special-casing here.
+ *
+ * Returns *position* value, not the security's own market price - see
+ * docs/implementation-roadmap.md's Performance & Analytics Architecture
+ * section for why those aren't the same question, and why they
+ * currently happen to produce the same number for every holding here
+ * (single-lot positions only, so far).
+ */
+function valueOfSecurityAsOf(history, date, { exclusive = false } = {}) {
+  let best = null;
+  for (const v of history) {
+    const qualifies = exclusive ? v.date < date : v.date <= date;
+    if (!qualifies) continue;
+    if (best === null || v.date > best.date) best = v;
+  }
+  return best ? best.value_eur : 0;
+}
+
+/**
+ * Portfolio-level chain-linked Time-Weighted Return - replaces the old
+ * "longest-history holding drives the whole portfolio" simplification.
+ * Never computes each security's own TWR and blends them; total
+ * portfolio value at each checkpoint (the sum of valueOfSecurityAsOf()
+ * across every holding) already embeds each holding's historical
+ * weight, so there's no separate weight-reconstruction step.
+ *
+ * `cashFlowDates` = every date an EXTERNAL cash flow happened (money
+ * entering/leaving the portfolio as a whole - today that means every
+ * `buy`/`sell`/`deposit`/`withdrawal` transaction date, deduplicated).
+ * KNOWN, DOCUMENTED LIMITATION: the schema has no flag distinguishing
+ * "funded by new money" from "funded by selling something else first" -
+ * every buy/sell is treated as external. Correct for the real data
+ * today (zero sells on record), not correct in general once a rebalance
+ * happens - flagging here rather than pretending the schema is more
+ * sophisticated than it is.
+ *
+ * `asOfDate` is a plain read-point (today / latest known data), not
+ * itself treated as a cash-flow boundary unless it genuinely coincides
+ * with one.
+ *
+ * The inclusive/exclusive distinction at each boundary is what keeps a
+ * new deposit from inflating the period that just ended: the period
+ * ENDING at a cash-flow date reads that date EXCLUSIVE (value right
+ * before the flow landed); the period STARTING there reads it INCLUSIVE
+ * (value right after). Getting this backwards is the classic TWR bug -
+ * see the Node-verified cross-checks in this feature's implementation
+ * notes for why this specific ordering was chosen and confirmed correct
+ * against a BPI-only reference calculation.
+ */
+function chainLinkedPortfolioReturn(securityHistories, cashFlowDates, asOfDate) {
+  const allDates = [...new Set(cashFlowDates)].sort();
+  if (!allDates.length) return { subPeriods: [], totalReturnPct: null };
+  if (allDates[allDates.length - 1] !== asOfDate) allDates.push(asOfDate);
+
+  const totalAt = (date, exclusive) =>
+    Object.values(securityHistories).reduce((sum, h) => sum + valueOfSecurityAsOf(h, date, { exclusive }), 0);
+
+  const subPeriods = [];
+  for (let i = 0; i < allDates.length - 1; i++) {
+    const startDate = allDates[i];
+    const endDate = allDates[i + 1];
+    const isEndACashFlow = endDate !== asOfDate;
+    const startValue = totalAt(startDate, false);
+    const endValue = totalAt(endDate, isEndACashFlow);
+    const returnPct = startValue > 0 ? ((endValue / startValue) - 1) * 100 : null;
+    subPeriods.push({ startDate, endDate, startValue, endValue, returnPct });
+  }
+
+  const totalReturnPct = subPeriods.length
+    ? (subPeriods.reduce((prod, p) => prod * (p.returnPct == null ? 1 : 1 + p.returnPct / 100), 1) - 1) * 100
+    : null;
+
+  return { subPeriods, totalReturnPct: subPeriods.length ? Math.round(totalReturnPct * 100) / 100 : null };
+}
+
+/**
+ * Calendar-year TWR breakdown - reuses chainLinkedPortfolioReturn()
+ * per year rather than a second calculation method, per the "don't
+ * rebuild analytics.js every time we add a metric" goal. Splitting the
+ * since-inception chain at Dec-31/Jan-1 boundaries never changes the
+ * total (Node-verified: product of every year's return here equals
+ * chainLinkedPortfolioReturn()'s own since-inception total, because a
+ * calendar-year edge is a plain read-point, not a cash flow).
+ * `inceptionDate` = the earliest cash-flow date (portfolio's real
+ * start), so the first "year" is a partial year from inception, and the
+ * last is a partial year through `asOfDate`.
+ */
+function annualReturns(securityHistories, cashFlowDates, asOfDate, inceptionDate) {
+  const startYear = Number(inceptionDate.slice(0, 4));
+  const endYear = Number(asOfDate.slice(0, 4));
+  const years = {};
+  for (let y = startYear; y <= endYear; y++) {
+    const rangeStart = y === startYear ? inceptionDate : `${y}-01-01`;
+    const rangeEnd = y === endYear ? asOfDate : `${y}-12-31`;
+    const flowsInRange = cashFlowDates.filter((d) => d > rangeStart && d <= rangeEnd);
+    const checkpoints = [rangeStart, ...flowsInRange];
+    const yearResult = chainLinkedPortfolioReturn(securityHistories, checkpoints, rangeEnd);
+    // Was anything actually OBSERVED within this year (strictly after
+    // rangeStart, on/before rangeEnd), for any holding? If not, a 0%
+    // result here is an artifact of nearest-prior carrying the same
+    // pre-year value all the way through a real data gap - not a claim
+    // the portfolio genuinely didn't move that year. Distinguishing this
+    // from a genuine 0% return is why this flag exists at all.
+    const hasObservationInYear = Object.values(securityHistories).some((h) =>
+      h.some((v) => v.date > rangeStart && v.date <= rangeEnd)
+    );
+    years[y] = { rangeStart, rangeEnd, returnPct: yearResult.totalReturnPct, hasObservationInYear };
+  }
+  return years;
+}
+
 window.costBasisFromTransactions = costBasisFromTransactions;
 window.unrealisedPnL = unrealisedPnL;
 window.costDrag = costDrag;
 window.productScore = productScore;
+window.valueOfSecurityAsOf = valueOfSecurityAsOf;
+window.chainLinkedPortfolioReturn = chainLinkedPortfolioReturn;
+window.annualReturns = annualReturns;

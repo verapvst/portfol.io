@@ -82,26 +82,62 @@ async function getPortfolioDataLive() {
   const cashHolding = holdingsRaw.find((h) => h.security.type === "Cash");
   const cash = cashHolding ? cashHolding.value : 0;
 
+  // ---------- Cash-flow boundaries (for TWR) ----------
+  // Every buy/sell/deposit/withdrawal transaction date is treated as an
+  // EXTERNAL portfolio cash flow. KNOWN, DOCUMENTED LIMITATION (see
+  // calculations.js:chainLinkedPortfolioReturn()'s own comment): the
+  // schema has no flag distinguishing "funded by new money" from
+  // "funded by selling something else first" - every buy/sell counts as
+  // external. Correct for the real data today (zero sells on record),
+  // not correct in general the day a rebalance happens - not silently
+  // pretending otherwise.
+  const cashFlowDates = [...new Set(
+    transactionsRaw.filter((t) => ["buy", "sell", "deposit", "withdrawal"].includes(t.type)).map((t) => t.date)
+  )].sort();
+  const inceptionDate = cashFlowDates[0] || null;
+
+  // ---------- Combined value series (every date any holding has a real
+  // observation) ----------
+  // real:true throughout - each point is a genuine point-in-time total
+  // (sum of valueOfSecurityAsOf() across every holding, nearest-prior -
+  // calculations.js), never a fabricated smoothing point. This replaces
+  // the old single-driver series (one holding's own points only) with
+  // the SAME density, correctly summed with whatever else was actually
+  // in the portfolio on each of those dates - richer, not coarser, and
+  // still never interpolated on the live path (exactly as before).
+  const securityHistories = Object.fromEntries(holdingsRaw.map((h) => [h.security.id, h.history]));
+  const allObservationDates = [...new Set(valuationsRaw.map((v) => v.date))].sort();
+  const valueSeries = allObservationDates.map((date) => ({
+    date,
+    value: Math.round(Object.values(securityHistories).reduce((s, h) => s + valueOfSecurityAsOf(h, date), 0) * 100) / 100,
+    real: true,
+  }));
+
   // ---------- TWR ----------
-  // Generic, not hardcoded to one fund by name: the security with the
-  // longest real valuation history drives the portfolio TWR, exactly
-  // matching today's real methodology (repository.js's own comment) -
-  // it degenerates to this automatically because a newly-bought security
-  // has only one valuation (0 elapsed time, a real 0% sub-period), so it
-  // can never be the longest history. True multi-security chain-linking
-  // only matters once more than one holding has real interim history.
-  const twrDriver = holdingsRaw.reduce((best, h) => (h.history.length > best.history.length ? h : best), { history: [] });
-  const totalReturnPct = twrDriver.history.length >= 2
-    ? Math.round(((twrDriver.history[twrDriver.history.length - 1].value_eur / twrDriver.history[0].value_eur) - 1) * 10000) / 100
-    : 0;
-  const valueSeries = twrDriver.history.map((v) => ({ date: v.date, value: v.value_eur, real: true }));
+  // Portfolio-level chain-linked TWR (calculations.js:
+  // chainLinkedPortfolioReturn()) - replaces the old "longest-history
+  // holding drives the whole portfolio" simplification, confirmed
+  // invalid the moment UETW/AVWS/XDEQ/SPYM each accumulated a second
+  // real valuation. Never each holding's own TWR blended afterward -
+  // total portfolio value at each cash-flow boundary already embeds
+  // every holding's historical weight.
+  const latestDate = allObservationDates[allObservationDates.length - 1] || "0000-00-00";
+  const twrResult = cashFlowDates.length
+    ? chainLinkedPortfolioReturn(securityHistories, cashFlowDates, latestDate)
+    : { subPeriods: [], totalReturnPct: null };
+  const totalReturnAvailable = twrResult.totalReturnPct != null;
+  const totalReturnPct = totalReturnAvailable ? twrResult.totalReturnPct : 0;
+
+  // Calendar-year breakdown - same chain-linking primitive, sliced at
+  // Dec-31/Jan-1 boundaries (calculations.js:annualReturns()), not a
+  // second calculation method.
+  const yearlyReturns = inceptionDate ? annualReturns(securityHistories, cashFlowDates, latestDate, inceptionDate) : {};
 
   // ---------- XIRR ----------
   // Same generic solver as repository.js (window.xirr, still loaded) -
   // every real transaction is a dated cash flow, current total value is
   // the hypothetical terminal one, on the latest valuation date across
   // all holdings.
-  const latestDate = holdingsRaw.reduce((d, h) => (h.history[h.history.length - 1].date > d ? h.history[h.history.length - 1].date : d), "0000-00-00");
   const cashflows = [
     ...transactionsRaw
       .filter((t) => ["buy", "deposit"].includes(t.type))
@@ -135,18 +171,33 @@ async function getPortfolioDataLive() {
     txnsBySecurity.set(t.security_id, list);
   }
 
-  const holdings = holdingsRaw.map((h) => ({
-    id: h.security.id,
-    name: h.security.name,
-    ticker: h.security.ticker || "—",
-    type: h.security.type,
-    accountId: h.accountId,
-    value: h.value,
-    weight: totalValue ? Math.round((h.value / totalValue) * 10000) / 100 : 0,
-    returnPct: h.security.id === twrDriver.security?.id ? totalReturnPct : 0,
-    ...unrealisedPnL(h.value, costBasisFromTransactions(txnsBySecurity.get(h.security.id) || [])),
-    tone: tokenColor("asset", h.security.name.replace(/[^a-zA-Z0-9]/g, "_")),
-  }));
+  // Each holding's OWN naive return (its latest observation vs. its
+  // first) - a genuinely different question from the portfolio-level
+  // TWR above. Naive, not chain-linked, because every position today is
+  // a single lot (bought once, never added to) - a simple first-vs-last
+  // comparison is mathematically exact for that case. This is POSITION
+  // return, not the security's own market-price return (they currently
+  // coincide only because there's no second purchase/partial sale yet
+  // to make them diverge - see docs/implementation-roadmap.md's
+  // Performance & Analytics Architecture section for why these aren't
+  // the same concept in general).
+  const holdings = holdingsRaw.map((h) => {
+    const ownReturnPct = h.history.length >= 2
+      ? Math.round(((h.history[h.history.length - 1].value_eur / h.history[0].value_eur) - 1) * 10000) / 100
+      : 0;
+    return {
+      id: h.security.id,
+      name: h.security.name,
+      ticker: h.security.ticker || "—",
+      type: h.security.type,
+      accountId: h.accountId,
+      value: h.value,
+      weight: totalValue ? Math.round((h.value / totalValue) * 10000) / 100 : 0,
+      returnPct: ownReturnPct,
+      ...unrealisedPnL(h.value, costBasisFromTransactions(txnsBySecurity.get(h.security.id) || [])),
+      tone: tokenColor("asset", h.security.name.replace(/[^a-zA-Z0-9]/g, "_")),
+    };
+  });
 
   // currency carried through from the real accounts row (already fetched
   // above) so currencyDrill (shell.js) can match holdings to a currency
@@ -198,7 +249,7 @@ async function getPortfolioDataLive() {
 
   return {
     portfolio: { holdings, accounts, cash, transactions },
-    history: { valueSeries, inceptionDate: valueSeries[0]?.date || null, benchmarks: null },
+    history: { valueSeries, inceptionDate, benchmarks: null },
     analytics: {
       assetClassAllocation: staticReal.assetClassAllocation,
       productAllocation,
@@ -210,8 +261,15 @@ async function getPortfolioDataLive() {
       health,
       performance: {
         totalValue, investedCapital, unrealisedGain, unrealisedGainPct,
-        totalReturnPct, totalReturnAvailable: twrDriver.history.length >= 2,
+        totalReturnPct, totalReturnAvailable,
         investorReturnPct, investorReturnAvailable,
+        // Calendar-year breakdown (calculations.js:annualReturns()) -
+        // {2017: {returnPct}, 2018: {...}, ...}. Not yet rendered
+        // anywhere - the seam Performance can build a "2024: +X% / 2025:
+        // +X% / 2026 YTD: +X%" view on top of once there's a UI slot for
+        // it, per docs/implementation-roadmap.md's Performance &
+        // Analytics Architecture section.
+        yearlyReturns,
         todayChange: 0, todayChangePct: 0, cash,
       },
     },

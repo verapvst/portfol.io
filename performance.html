@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=57">
-<link rel="stylesheet" href="css/layout.css?v=57">
-<link rel="stylesheet" href="css/components.css?v=57">
-<link rel="stylesheet" href="css/performance.css?v=57">
+<link rel="stylesheet" href="css/theme.css?v=63">
+<link rel="stylesheet" href="css/layout.css?v=63">
+<link rel="stylesheet" href="css/components.css?v=63">
+<link rel="stylesheet" href="css/performance.css?v=63">
 </head>
 <body>
 <div id="app">
@@ -43,6 +43,20 @@
       <div id="perf-linechart-container"></div>
     </section>
 
+    <!-- Same chain-linked TWR primitive as the headline number above,
+         just sliced by calendar year (js/calculations.js:
+         annualReturns()) - not a second calculation method. Years with
+         no real growth signal yet (a data gap, not zero performance)
+         are labelled honestly rather than shown as a flat 0%. -->
+    <section class="card glass interactive" id="annual-returns-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="annual-returns" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Annual Returns</h2>
+        </div>
+      </div>
+      <div id="annual-returns-body"></div>
+    </section>
+
     <!-- Honest unavailable state, not a placeholder chart - no benchmark
          is configured and comparing to one needs daily_prices, which is
          explicitly still paused. See the "benchmark-comparison" info
@@ -61,18 +75,18 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=57"></script>
-<script src="js/supabaseClient.js?v=57"></script>
+<script src="js/supabaseConfig.js?v=63"></script>
+<script src="js/supabaseClient.js?v=63"></script>
 
-<script src="js/utils.js?v=57"></script>
-<script src="js/calculations.js?v=57"></script>
-<script src="js/repository.js?v=57"></script>
+<script src="js/utils.js?v=63"></script>
+<script src="js/calculations.js?v=63"></script>
+<script src="js/repository.js?v=63"></script>
 
-<script src="js/charts.js?v=57"></script>
-<script src="js/shell.js?v=57"></script>
-<script src="js/auth.js?v=57"></script>
-<script src="js/db.js?v=57"></script>
-<script src="js/analytics.js?v=57"></script>
-<script src="js/performance.js?v=57"></script>
+<script src="js/charts.js?v=63"></script>
+<script src="js/shell.js?v=63"></script>
+<script src="js/auth.js?v=63"></script>
+<script src="js/db.js?v=63"></script>
+<script src="js/analytics.js?v=63"></script>
+<script src="js/performance.js?v=63"></script>
 </body>
 </html>

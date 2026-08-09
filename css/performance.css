@@ -25,8 +25,22 @@
 }
 
 #performance-chart-card,
+#annual-returns-card,
 #benchmark-card { margin-bottom: var(--sp-8); }
 #benchmark-card:last-child { margin-bottom: 0; }
+
+.annual-returns-list { display: flex; flex-direction: column; }
+.annual-return-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--card-border);
+  font-size: 14px;
+}
+.annual-return-row:first-child { border-top: none; padding-top: 0; }
+.annual-return-year { color: var(--ink); }
+.annual-return-value { font-weight: 500; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 900px) {
   .perf-stats-grid { grid-template-columns: 1fr; }

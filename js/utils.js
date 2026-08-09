@@ -166,6 +166,18 @@ function regionForCountry(name) {
   return COUNTRY_TO_REGION[name] || "Other / not yet mapped";
 }
 
+/** Case- AND diacritic-insensitive name comparison key - "BPI Dinâmico"
+    and "BPI DINAMICO" (a real name a BPI PDF actually printed, no accent,
+    all-caps) must match, or a find-or-create lookup silently creates a
+    duplicate security instead of updating the real one. Added after
+    exactly that happened via a live Data Hub import: db.js's
+    findOrCreateSecurity()/findOrCreateInstitution() and data-hub.js's
+    guessSecurityId() all compared with plain .toLowerCase(), which is
+    diacritic-sensitive and doesn't catch this. */
+function normalizeName(name) {
+  return (name || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
 /* ---------- Formatting ---------- */
 
 function fmtEUR(v, opts = {}) {
@@ -215,6 +227,8 @@ function lastUpdatedHTML(date, { label = "as-of" } = {}) {
    actually referenced by a component or NAV_ITEMS are kept here. */
 const ICONS = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a21.3 21.3 0 0 1-3.94 5.29M6.1 6.1A21.6 21.6 0 0 0 1 12s4 8 11 8a10.4 10.4 0 0 0 5.1-1.36"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
   pieChart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>',
   trendingUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg>',
   barChart3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-5"/></svg>',
@@ -259,4 +273,5 @@ window.fmtEUR = fmtEUR;
 window.fmtPct = fmtPct;
 window.fmtCompact = fmtCompact;
 window.lastUpdatedHTML = lastUpdatedHTML;
+window.normalizeName = normalizeName;
 window.icon = icon;

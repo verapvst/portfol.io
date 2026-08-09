@@ -273,8 +273,13 @@ async function loadDbContext() {
   state.accounts = await loadAccountsForPortfolio(state.portfolioId);
 }
 
+/** Case- AND diacritic-insensitive (normalizeName(), utils.js) - fixed
+    after a real live import created a duplicate "BPI DINAMICO" security
+    instead of matching the existing "BPI Dinâmico", because BPI's own
+    PDF prints the fund name without the accent and the old plain
+    .toLowerCase() comparison treated that as a different security. */
 function guessSecurityId(fundName) {
-  const match = state.securities.find((s) => s.name.toLowerCase() === (fundName || "").toLowerCase());
+  const match = state.securities.find((s) => normalizeName(s.name) === normalizeName(fundName || ""));
   return match ? match.id : "";
 }
 
@@ -339,6 +344,9 @@ function dbLoadBlockHTML(groupKey, group) {
           <select class="db-load-select" id="db-security-${cssId(groupKey)}" data-security-select="${groupKey}">
             ${securityOptionsHTML(guessedId)}
           </select>
+          ${guessedId
+            ? `<p class="db-load-match-note db-load-match-found">Matched to an existing security by name.</p>`
+            : `<p class="db-load-match-note db-load-match-none">No existing security matches "${group.fundName}" - this will create a new one. If this fund is already in Securities under a different name, pick it above instead.</p>`}
         </div>
         <div class="db-load-field">
           <label for="db-account-${cssId(groupKey)}">Account (optional)</label>
@@ -479,6 +487,24 @@ function renderGroups() {
 
   container.querySelectorAll("[data-signin-cta]").forEach((btn) => {
     btn.addEventListener("click", () => window.openAuthModal());
+  });
+
+  // Keep the match note honest as she changes the selection herself -
+  // the initial guess is just a starting point, not the only signal.
+  container.querySelectorAll("[data-security-select]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const note = select.parentElement.querySelector(".db-load-match-note");
+      if (!note) return;
+      if (select.value) {
+        note.className = "db-load-match-note db-load-match-found";
+        note.textContent = "Costs will be added to the selected existing security.";
+      } else {
+        const groupKey = select.dataset.securitySelect;
+        const group = state.groups.get(groupKey);
+        note.className = "db-load-match-note db-load-match-none";
+        note.textContent = `No existing security matches "${group.fundName}" - this will create a new one. If this fund is already in Securities under a different name, pick it above instead.`;
+      }
+    });
   });
 
   container.querySelectorAll("[data-load-db]").forEach((btn) => {

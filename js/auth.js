@@ -41,13 +41,6 @@ async function signIn(email, password) {
   return data;
 }
 
-async function signUp(email, password) {
-  if (!window.db) throw new Error("Supabase not configured yet.");
-  const { data, error } = await window.db.auth.signUp({ email, password });
-  if (error) throw error;
-  return data;
-}
-
 async function signOutUser() {
   if (!window.db) return;
   await window.db.auth.signOut();
@@ -57,6 +50,9 @@ async function signOutUser() {
 
 function initAuthButton(container) {
   if (!container) return;
+  initValuesToggle(document.getElementById("values-toggle-slot"));
+  onAuthChange(() => initValuesToggle(document.getElementById("values-toggle-slot")));
+
   const btn = document.createElement("button");
   btn.id = "auth-btn";
   btn.className = "topbar-pill-btn glass-quiet";
@@ -83,6 +79,19 @@ function initAuthButton(container) {
   container.appendChild(btn);
 }
 
+/** Sign-in only, deliberately - no sign-up flow anywhere in the UI.
+    Portfol.io has exactly one legitimate user; a public visitor being
+    able to self-register was never a feature, and per the three-layer
+    access model (docs/production-architecture.md, extended) a random
+    link recipient should land in Showcase, not be invited to create an
+    account. Removed at the UI level here; disabling email sign-up in
+    the Supabase project's own Auth settings is the matching
+    database-level lock and isn't something this codebase can do for
+    itself (that's a dashboard setting, not a migration). Even without
+    that second lock, RLS already scopes every private table to
+    `user_id = auth.uid()` - a hypothetical extra account could only
+    ever see its own empty portfolio, never Vera's real one - so this
+    is about not inviting confusion, not closing a data leak. */
 function initAuthModal() {
   if (document.getElementById("auth-modal-root")) return;
 
@@ -98,24 +107,13 @@ function initAuthModal() {
       <input id="auth-password-input" class="owner-modal-input" type="password" autocomplete="current-password"/>
       <p class="owner-modal-error" id="auth-modal-error"></p>
       <button id="auth-modal-submit" class="owner-modal-submit" type="button">Sign In</button>
-      <button id="auth-modal-toggle" class="auth-modal-toggle" type="button">Need an account? Sign up</button>
     </div>`;
   document.body.appendChild(root);
 
   const emailInput = root.querySelector("#auth-email-input");
   const passwordInput = root.querySelector("#auth-password-input");
   const errorEl = root.querySelector("#auth-modal-error");
-  const title = root.querySelector("#auth-modal-title");
   const submitBtn = root.querySelector("#auth-modal-submit");
-  const toggleBtn = root.querySelector("#auth-modal-toggle");
-
-  let mode = "signin";
-
-  const applyMode = () => {
-    title.textContent = mode === "signin" ? "Sign In" : "Create Account";
-    submitBtn.textContent = mode === "signin" ? "Sign In" : "Sign Up";
-    toggleBtn.textContent = mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in";
-  };
 
   const close = () => {
     root.classList.remove("open");
@@ -127,8 +125,6 @@ function initAuthModal() {
   const onKey = (e) => { if (e.key === "Escape") close(); };
 
   const open = () => {
-    mode = "signin";
-    applyMode();
     root.classList.add("open");
     document.addEventListener("keydown", onKey);
     setTimeout(() => emailInput.focus(), 50);
@@ -138,14 +134,8 @@ function initAuthModal() {
     errorEl.textContent = "";
     submitBtn.disabled = true;
     try {
-      if (mode === "signin") {
-        await signIn(emailInput.value.trim(), passwordInput.value);
-        close();
-      } else {
-        await signUp(emailInput.value.trim(), passwordInput.value);
-        errorEl.style.color = "var(--positive)";
-        errorEl.textContent = "Account created — check your email to confirm, then sign in.";
-      }
+      await signIn(emailInput.value.trim(), passwordInput.value);
+      close();
     } catch (err) {
       errorEl.style.color = "var(--negative)";
       errorEl.textContent = err.message || "Something went wrong.";
@@ -156,11 +146,6 @@ function initAuthModal() {
   root.querySelector("#auth-modal-backdrop").addEventListener("click", close);
   submitBtn.addEventListener("click", attempt);
   passwordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") attempt(); });
-  toggleBtn.addEventListener("click", () => {
-    mode = mode === "signin" ? "signup" : "signin";
-    errorEl.textContent = "";
-    applyMode();
-  });
 
   window.openAuthModal = open;
   window.closeAuthModal = close;
