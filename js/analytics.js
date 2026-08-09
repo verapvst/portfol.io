@@ -107,6 +107,19 @@ async function getPortfolioDataLive() {
   // still never interpolated on the live path (exactly as before).
   const securityHistories = Object.fromEntries(holdingsRaw.map((h) => [h.security.id, h.history]));
   const allObservationDates = [...new Set(valuationsRaw.map((v) => v.date))].sort();
+
+  // ---------- Real per-security market data (db.js: getHistoricalPrices())
+  // ----------
+  // Only for securities EODHD (or any future provider) actually covers -
+  // data_provider_symbol null means "not exchange-traded / not yet
+  // verified" (see 0004_daily_prices.sql), not an error, so those are
+  // silently skipped rather than queried for nothing. Kept as its own
+  // history.marketData map, deliberately NOT merged into holdingsRaw's
+  // .history (valuations - position value) - Phase 2/3 build security-
+  // level returns/UI on top of this; nothing reads it yet.
+  const trackedSecurityIds = securitiesRows.filter((s) => s.data_provider_symbol).map((s) => s.id);
+  const marketDataLists = await Promise.all(trackedSecurityIds.map((id) => getHistoricalPrices(id)));
+  const marketData = Object.fromEntries(trackedSecurityIds.map((id, i) => [id, marketDataLists[i]]));
   const valueSeries = allObservationDates.map((date) => ({
     date,
     value: Math.round(Object.values(securityHistories).reduce((s, h) => s + valueOfSecurityAsOf(h, date), 0) * 100) / 100,
@@ -249,7 +262,7 @@ async function getPortfolioDataLive() {
 
   return {
     portfolio: { holdings, accounts, cash, transactions },
-    history: { valueSeries, inceptionDate, benchmarks: null },
+    history: { valueSeries, inceptionDate, benchmarks: null, marketData },
     analytics: {
       assetClassAllocation: staticReal.assetClassAllocation,
       productAllocation,

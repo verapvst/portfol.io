@@ -506,6 +506,41 @@ const METRIC_DOCS = {
     calculation: "((1+gross)^years - (1+gross-TER)^years) / (1+gross)^years × 100, using the product's own assumed gross return and TER over the horizon you choose here - never a flat \"~20%\" constant applied to every product.",
     source: "js/calculations.js:costDrag(), fed by this product's assumed_gross_return_pct/ter_pct (security_details).",
   },
+  "security-market-performance": {
+    definition: "How the SECURITY ITSELF performed as a real market-priced instrument - a different question from Performance & Risk above (this product's own researched/estimated figures) and from Portfolio Detail (how YOUR position performed, given your own purchase timing and cash flows). Only shown for exchange-traded securities with a verified market-data provider symbol - BPI Dinâmico and similar manually-valued holdings show an honest \"unavailable\" state instead, never a fabricated or borrowed figure.",
+    calculation: "Price return only (close-to-close), never adjusted_close - kept distinct in the underlying data for when a distributing (non-Accumulating) security needs true total-return figures later. Since Data Available / YTD / 1Y / CAGR all anchor to the security's own first and latest REAL observations, never a synthesized Jan-1 or \"as of today\" price - a security with only ~1 year of history correctly shows a 1-year figure, never a fabricated multi-year one. Every metric's \"as of\"/period dates come from daily_prices.date (the market's own date, when the price was actually true) - kept distinct from \"Imported\" (daily_prices.fetched_at, when Portfol.io's collector actually stored the row). For this automated pipeline there's no separate manual-confirmation step, so \"Imported\" doubles as the closest thing to \"last updated\" here - not a second, invented timestamp.",
+    source: "js/calculations.js:securityMarketAnalytics(), reading js/db.js:getHistoricalPrices() (daily_prices, EODHD) - provider-agnostic by design, the calculation layer never references EODHD directly; the \"EODHD\"/source label shown is read straight from daily_prices.source, not hardcoded in calculations.js.",
+  },
+  "security-since-data-available": {
+    definition: "The security's own price return over its entire available history - not \"since inception\" (this app reserves that term for the PORTFOLIO's own start date, a different concept). The one return figure that's computable the moment any 2 real observations exist.",
+    calculation: "(latest close ÷ first close - 1) × 100, both anchors being the security's own first and latest REAL observations (never synthesized). Price return (close), not adjusted/total return - see this card's own info popover for why the two are currently expected to coincide. Cumulative over the period, not annualised - see CAGR for the annualised version of this same span. Minimum: 2 observations.",
+    source: "js/calculations.js:securitySinceDataAvailableReturn(), reading js/db.js:getHistoricalPrices() - currency and source shown are read from the security's own record and daily_prices.source.",
+  },
+  "security-ytd-return": {
+    definition: "Calendar year-to-date price return, from the first real observation on/after 1 Jan of the current year through the latest real observation - never a fabricated 1-Jan price if the security's own data starts later in the year.",
+    calculation: "(latest close ÷ first close-on-or-after-Jan-1 - 1) × 100. Price return (close), not adjusted/total return. \"As of\" is the latest real market observation, never today's calendar date if data is a day stale.",
+    source: "js/calculations.js:securityYtdReturn(), reading js/db.js:getHistoricalPrices().",
+  },
+  "security-1y-return": {
+    definition: "Trailing 1-year price return - only shown once real coverage spans close to a full year (350+ days), so a security with a few months of history is never mislabelled \"1Y Return\" over a shorter window.",
+    calculation: "(latest close ÷ closest-available-close-365-days-earlier - 1) × 100. Price return (close), not adjusted/total return. Minimum: earliest observation at least 350 days before the latest. Threshold lives in js/calculations.js:SECURITY_ANALYTICS_THRESHOLDS.",
+    source: "js/calculations.js:securityOneYearReturn(), reading js/db.js:getHistoricalPrices().",
+  },
+  "security-cagr": {
+    definition: "The annualised (compounded) growth rate over the security's full available history - a genuinely different number from \"average annual return\" (the arithmetic mean of individual calendar-year returns, not yet shown anywhere - that needs at least 2 full calendar years of data, which no currently tracked security has). Never called \"Average Annual Return\" for this reason.",
+    calculation: "(latest close ÷ first close) ^ (365 ÷ days elapsed) - 1, × 100. Price return (close) basis. Only computed once at least 180 days separate the two anchors - annualising a shorter window amplifies noise into a meaningless figure (a 5% move over 30 days would annualise past +900%). Threshold lives in js/calculations.js:SECURITY_ANALYTICS_THRESHOLDS.",
+    source: "js/calculations.js:securityCAGR(), reading js/db.js:getHistoricalPrices().",
+  },
+  "security-volatility": {
+    definition: "How much this security's daily price has bounced around, annualised - a measure of how bumpy the ride has been, not a prediction of future risk. Only shown once at least 60 real daily observations exist (~3 months); below that, a handful of outlier days would dominate the number.",
+    calculation: "Sample standard deviation (n-1) of daily close-to-close returns, × √252 - the standard annualisation convention (252 = trading days/year). Price return (close) basis, not adjusted/total return. Thresholds live in js/calculations.js:SECURITY_ANALYTICS_THRESHOLDS, not hardcoded inline.",
+    source: "js/calculations.js:securityVolatility(), reading js/db.js:getHistoricalPrices().",
+  },
+  "security-max-drawdown": {
+    definition: "The worst peak-to-trough decline observed within the AVAILABLE price history - not necessarily this security's true all-time worst drawdown, since current coverage is roughly one year (the market-data provider's free-tier limit). The measurement period is always shown alongside the number for exactly this reason.",
+    calculation: "drawdown_t = close_t / running-peak(close, through t) - 1; maximum drawdown is the minimum of that series over the available history. Close-based, not adjusted_close - the price you could actually have traded at. Minimum: 60 real daily observations, same threshold as Volatility.",
+    source: "js/calculations.js:securityMaxDrawdown(), reading js/db.js:getHistoricalPrices().",
+  },
 };
 
 // th[data-info]: table column headers (Portfolio Detail's Avg. Cost /

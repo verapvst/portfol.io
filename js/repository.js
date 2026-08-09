@@ -17,7 +17,7 @@
  * Contract - the returned object always has these domains:
  *
  *   portfolio: { holdings, accounts, cash, transactions }
- *   history:   { valueSeries, inceptionDate, benchmarks }
+ *   history:   { valueSeries, inceptionDate, benchmarks, marketData }
  *   analytics: { assetClassAllocation, productAllocation, accountAllocation,
  *                regions, countries, notCountrySpecificWeight, currency,
  *                health, performance }
@@ -390,7 +390,15 @@ function getMockPortfolioData() {
 
   return {
     portfolio: { holdings, accounts, cash, transactions },
-    history: { valueSeries, inceptionDate, benchmarks: null },
+    // marketData: real per-security price history (js/db.js:
+    // getHistoricalPrices(), backed by daily_prices) - genuinely empty
+    // here, not a stub to fill in later. Showcase/mock has no live
+    // market-data provider behind it and never will (see EODHD's own
+    // ToS - real provider data stays Private-only); Phase 2/3 UI must
+    // treat an empty marketData map as "no market-data feed for this
+    // mode", the same honest gap this file already applies everywhere
+    // else (e.g. totalReturnAvailable, investorReturnAvailable).
+    history: { valueSeries, inceptionDate, benchmarks: null, marketData: {} },
     analytics: {
       assetClassAllocation,
       productAllocation,

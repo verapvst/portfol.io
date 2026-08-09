@@ -165,3 +165,56 @@ async function loadBrokers() {
   if (error) throw error;
   return data || [];
 }
+
+/* ============================================================
+   Market-data layer (supabase/migrations/0004_daily_prices.sql) -
+   deliberately a NEW, separate seam from valueOfSecurityAsOf()
+   (calculations.js). That one reads `valuations` and answers "what was
+   my POSITION worth" (total EUR value of what I hold); these read
+   `daily_prices` and answer "what did the SECURITY ITSELF trade at"
+   (a real per-share/per-unit market price). The two only coincide today
+   because every current holding is a single, never-added-to lot - see
+   docs/implementation-roadmap.md's Performance & Analytics Architecture
+   section for why they're not the same concept in general.
+
+   Provider-agnostic on purpose: callers get {date, close, adjusted_close}
+   rows and never see which provider (daily_prices.source - "eodhd"
+   today) answered. Swapping or adding a provider later is a change to
+   the Edge Function that writes daily_prices, never to these callers.
+   ============================================================ */
+
+/** Full (or date-bounded) real price history for one security, oldest
+    first. No synthetic gap-filling - a security with only 40 real
+    trading days on record returns exactly 40 rows, same "never
+    interpolate the underlying data" discipline as valueOfSecurityAsOf(). */
+async function getHistoricalPrices(securityId, { from, to } = {}) {
+  let query = window.db
+    .from("daily_prices")
+    .select("date, close, adjusted_close, source, fetched_at")
+    .eq("security_id", securityId)
+    .order("date", { ascending: true });
+  if (from) query = query.gte("date", from);
+  if (to) query = query.lte("date", to);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+/** Nearest-prior real observation on or before `date` - never a future
+    price, never interpolated, same discipline as
+    valueOfSecurityAsOf(history, date) but reading daily_prices instead
+    of a holding's own valuations. Returns null if the security has no
+    qualifying observation yet (not yet covered by a provider, or genuinely
+    no trading day on/before that date). */
+async function getDailyPrice(securityId, date) {
+  const { data, error } = await window.db
+    .from("daily_prices")
+    .select("date, close, adjusted_close")
+    .eq("security_id", securityId)
+    .lte("date", date)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

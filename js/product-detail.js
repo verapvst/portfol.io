@@ -230,6 +230,87 @@ function performanceHTML(p) {
     </section>`;
 }
 
+/* ---------- Market-price performance (Phase 2 - real daily_prices) ----------
+   Deliberately a SEPARATE card from Performance & Risk above, not merged
+   into it - that card reads security_details columns (this product's own
+   researched/estimated figures, from the legacy dataset), this one reads
+   real EODHD daily observations through calculations.js:
+   securityMarketAnalytics(). Two different data sources answering a
+   similar-sounding question; keeping them visually distinct is the point,
+   not an oversight. See js/calculations.js's own header comment for the
+   full Security Return vs Position Return rationale. */
+
+function fmtDateShort(dateStr) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function marketStatHTML(label, docKey, result, valueKey, caption) {
+  const value = result ? fmtPctPlain(result[valueKey]) : "—";
+  return `
+    <div class="pd-stat">
+      <span class="pd-stat-label"${docKey ? ` data-info="${docKey}" tabindex="0" role="button" aria-label="About this metric"` : ""}>${label}</span>
+      <span class="pd-stat-value">${value}</span>
+      <span class="pd-stat-caption">${result ? caption(result) : "Not enough history yet"}</span>
+    </div>`;
+}
+
+function marketAnnualReturnsHTML(annual) {
+  const years = Object.keys(annual || {}).sort((a, b) => b - a);
+  if (!years.length) return "";
+  return `
+    <div class="pd-annual-returns">
+      <p class="pd-subsection-label">Calendar-Year Price Returns</p>
+      <div class="pd-annual-grid">
+        ${years.map((y) => {
+          const v = annual[y];
+          if (!v.hasObservationInYear) {
+            return `<div class="pd-annual-cell"><span class="pd-annual-year">${y}</span><span class="pd-annual-value text-muted">No data</span></div>`;
+          }
+          const tone = v.returnPct > 0 ? "up" : v.returnPct < 0 ? "down" : "text-muted";
+          const caption = v.isYTD ? "YTD" : v.isPartialYear ? "Partial year" : "";
+          return `
+            <div class="pd-annual-cell">
+              <span class="pd-annual-year">${y}</span>
+              <span class="pd-annual-value ${tone}">${fmtPctPlain(v.returnPct)}</span>
+              ${caption ? `<span class="pd-annual-caption">${caption} · ${fmtDateShort(v.rangeStart)} – ${fmtDateShort(v.rangeEnd)}</span>` : ""}
+            </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+function marketPerformanceHTML(security, ma) {
+  if (!ma.available) {
+    return `
+      <section class="card glass" id="pd-market-performance-card">
+        <div class="card-header">
+          <div class="card-header-title"><h2 class="section-title">Market-Price Performance</h2></div>
+        </div>
+        <p class="pd-market-unavailable">Market-price analytics unavailable for this security type - ${security.name} isn't exchange-traded with a verified market-data provider symbol, so no daily price history exists to analyse. Its performance is tracked instead through its own valuation history (see Portfolio Detail).</p>
+      </section>`;
+  }
+  const p = ma.provenance;
+  return `
+    <section class="card glass interactive" id="pd-market-performance-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="security-market-performance" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Market-Price Performance</h2>
+        </div>
+      </div>
+      <div class="pd-stat-row">
+        ${marketStatHTML("Since Data Available", "security-since-data-available", ma.sinceDataAvailable, "returnPct", (r) => `As of ${fmtDateShort(r.endDate)} · ${p.source || "—"} · ${p.currency || "—"}`)}
+        ${marketStatHTML("YTD Return", "security-ytd-return", ma.ytd, "returnPct", (r) => `As of ${fmtDateShort(r.endDate)} · ${p.source || "—"} · ${p.currency || "—"}`)}
+        ${marketStatHTML("1Y Return", "security-1y-return", ma.oneYear, "returnPct", (r) => `As of ${fmtDateShort(r.endDate)} · ${p.source || "—"} · ${p.currency || "—"}`)}
+        ${marketStatHTML("CAGR", "security-cagr", ma.cagr, "cagrPct", (r) => `Annualised over ${r.daysElapsed} days · ${fmtDateShort(r.startDate)}–${fmtDateShort(r.endDate)}`)}
+        ${marketStatHTML("Annualised Volatility", "security-volatility", ma.volatility, "annualisedVolatilityPct", (r) => `Annualised · ${r.observationCount} observations · ${fmtDateShort(r.periodStart)}–${fmtDateShort(r.periodEnd)}`)}
+        ${marketStatHTML("Max Drawdown", "security-max-drawdown", ma.maxDrawdown, "maxDrawdownPct", (r) => `Based on ${fmtDateShort(r.periodStart)}–${fmtDateShort(r.periodEnd)}`)}
+      </div>
+      ${marketAnnualReturnsHTML(ma.annualReturns)}
+      <p class="pd-stat-caption" style="margin-top: var(--sp-4);">Price return (close), ${p.currency || "native currency"} · ${p.observationCount} observations, ${fmtDateShort(p.firstObservationDate)} – ${fmtDateShort(p.lastObservationDate)} · Source: ${p.source || "—"} · Imported: ${fmtDateShort(p.importedAt)}</p>
+    </section>`;
+}
+
 function allocBarHTML(label, weight, tone) {
   if (weight == null) return "";
   return `
@@ -320,7 +401,7 @@ function initHorizonPills(p) {
 
 /* ---------- Page init ---------- */
 
-function renderProduct(p, held) {
+function renderProduct(p, held, marketAnalytics) {
   $("product-detail-body").innerHTML = `
     ${headerHTML(p, held)}
     ${scorecardHTML(p)}
@@ -328,6 +409,7 @@ function renderProduct(p, held) {
       <div class="pd-col">
         ${costsHTML(p)}
         ${performanceHTML(p)}
+        ${marketPerformanceHTML(p.securities, marketAnalytics)}
       </div>
       <div class="pd-col">
         ${allocationHTML(p)}
@@ -367,10 +449,15 @@ async function loadProductDetailPage() {
 
   $("product-detail-body").innerHTML = `<p class="costs-empty">Loading…</p>`;
   try {
-    const [product, portfolioId] = await Promise.all([loadProductDetail(id), ensurePortfolio()]);
+    const [product, portfolioId, priceHistory] = await Promise.all([
+      loadProductDetail(id),
+      ensurePortfolio(),
+      getHistoricalPrices(id),
+    ]);
     if (!product) { renderNotFound("This product doesn't have research data on file."); return; }
     const held = await isSecurityHeld(portfolioId, id);
-    renderProduct(product, held);
+    const marketAnalytics = securityMarketAnalytics(product.securities, priceHistory);
+    renderProduct(product, held, marketAnalytics);
   } catch (err) {
     renderNotFound(err.message || "Failed to load this product.");
   }

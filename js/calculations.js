@@ -273,6 +273,302 @@ function annualReturns(securityHistories, cashFlowDates, asOfDate, inceptionDate
   return years;
 }
 
+/* ============================================================
+   Security-level market-price analytics (Phase 2 of the market-data
+   roadmap - see docs/implementation-roadmap.md). Pure functions only:
+   every one of these takes an already-fetched price array (the shape
+   js/db.js:getHistoricalPrices() returns - {date, close, adjusted_close,
+   source}) and never touches Supabase/EODHD itself. That's the
+   architecture boundary this phase was explicitly required to keep:
+
+     daily_prices -> db.js (market-data access) -> HERE (security
+     analytics) -> Security UI
+
+   This answers "how did the SECURITY ITSELF perform" (a market price
+   moving) - a different question from valueOfSecurityAsOf()/
+   chainLinkedPortfolioReturn() above, which answer "what was MY
+   POSITION worth" (a portfolio holding's value). They're kept as
+   entirely separate functions on purpose, never sharing one calculation
+   just because both produce a percentage - conflating "the ETF was up
+   10%" with "my position was up 6%" (a real, expected divergence once
+   purchase timing/contributions/FX are involved) is exactly the mistake
+   this separation exists to prevent.
+
+   Every function here uses `close`, never `adjusted_close`, for price
+   return - `adjusted_close` is threaded through unused for now (see
+   dailyReturns()) so a distributing (non-Accumulating) security added
+   later can get true total-return figures without a data-model change,
+   without today's Accumulating-only holdings silently changing meaning.
+   ============================================================ */
+
+/** Minimum-history gates as configuration, not magic numbers scattered
+    through each function below - change one place to change the whole
+    policy. Each is a deliberate judgment call (see the Phase 2
+    methodology proposal this was approved against), not a mathematical
+    requirement - adjust freely. */
+const SECURITY_ANALYTICS_THRESHOLDS = {
+  minObservationsForDailyReturn: 2,
+  minDaysFor1YReturn: 350,
+  minDaysForAnnualisedReturn: 180,
+  minObservationsForVolatility: 60,
+  minObservationsForDrawdown: 60,
+  tradingDaysPerYear: 252,
+};
+
+function daysBetweenDates(dateA, dateB) {
+  return Math.round((new Date(dateB) - new Date(dateA)) / 86400000);
+}
+
+function shiftDateBy(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Nearest observation ON OR AFTER `date` - the right anchor for "start
+    of period" questions (YTD, calendar year, 1Y): a security whose own
+    history starts mid-year should anchor to ITS first real observation,
+    never a synthesized Jan-1 price. */
+function priceOnOrAfter(priceHistory, date) {
+  let best = null;
+  for (const p of priceHistory) {
+    if (p.date < date) continue;
+    if (best === null || p.date < best.date) best = p;
+  }
+  return best;
+}
+
+/** Nearest observation ON OR BEFORE `date` - the right anchor for "end
+    of period" (never a future price). */
+function priceOnOrBefore(priceHistory, date) {
+  let best = null;
+  for (const p of priceHistory) {
+    if (p.date > date) continue;
+    if (best === null || p.date > best.date) best = p;
+  }
+  return best;
+}
+
+/** Shared period-return primitive every metric below is built from - one
+    formula, not one per metric. Returns null (not 0%) when either anchor
+    is missing or the anchors collapse to the same/reversed observation -
+    "no qualifying data" must never look like "no growth". */
+function priceReturnBetween(priceHistory, rangeStart, rangeEnd) {
+  const startObs = priceOnOrAfter(priceHistory, rangeStart);
+  const endObs = priceOnOrBefore(priceHistory, rangeEnd);
+  if (!startObs || !endObs || startObs.date >= endObs.date) return null;
+  return {
+    returnPct: Math.round((endObs.close / startObs.close - 1) * 10000) / 100,
+    startDate: startObs.date,
+    startPrice: startObs.close,
+    endDate: endObs.date,
+    endPrice: endObs.close,
+    daysElapsed: daysBetweenDates(startObs.date, endObs.date),
+  };
+}
+
+/** Daily price-return series - r_t = close_t/close_{t-1} - 1 between
+    CONSECUTIVE available observations only, never gap-filled. Each point
+    carries its own daysElapsed so a missed fetch day (e.g. a 3-day gap
+    from a cron outage) stays visibly not-1-day rather than silently
+    posing as a normal daily return. adjusted_close is carried through
+    unused (adjustedReturnPct) - kept, not computed into anything yet,
+    so the price-return/adjusted-return distinction survives in the data
+    even though today's Accumulating-only holdings make them coincide. */
+function dailyReturns(priceHistory) {
+  const sorted = [...priceHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const returns = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1], curr = sorted[i];
+    if (!prev.close || !curr.close) continue;
+    const point = {
+      date: curr.date,
+      returnPct: (curr.close / prev.close - 1) * 100,
+      daysElapsed: daysBetweenDates(prev.date, curr.date),
+    };
+    if (prev.adjusted_close && curr.adjusted_close) {
+      point.adjustedReturnPct = (curr.adjusted_close / prev.adjusted_close - 1) * 100;
+    }
+    returns.push(point);
+  }
+  return returns;
+}
+
+/** Since the security's own first real observation through its latest -
+    the one return that's always computable the moment ANY 2 observations
+    exist, deliberately never labeled "since inception" (this app already
+    uses that term for the PORTFOLIO's own inception, a different date). */
+function securitySinceDataAvailableReturn(priceHistory, thresholds = SECURITY_ANALYTICS_THRESHOLDS) {
+  if (priceHistory.length < thresholds.minObservationsForDailyReturn) return null;
+  const sorted = [...priceHistory].sort((a, b) => a.date.localeCompare(b.date));
+  return priceReturnBetween(sorted, sorted[0].date, sorted[sorted.length - 1].date);
+}
+
+/** Year-to-date, anchored at the LATEST REAL observation, never today's
+    calendar date - a security whose data is a day stale still gets a
+    genuine YTD as of what's actually known, not a fabricated "as of
+    today" figure. */
+function securityYtdReturn(priceHistory, asOfDate) {
+  const year = asOfDate.slice(0, 4);
+  return priceReturnBetween(priceHistory, `${year}-01-01`, asOfDate);
+}
+
+/** Trailing 1-year - only computed once real coverage actually spans
+    close to a year (minDaysFor1YReturn), so a security with 4 months of
+    history never gets labeled "1Y Return" over a shorter window. */
+function securityOneYearReturn(priceHistory, asOfDate, thresholds = SECURITY_ANALYTICS_THRESHOLDS) {
+  const sorted = [...priceHistory].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) return null;
+  if (daysBetweenDates(sorted[0].date, asOfDate) < thresholds.minDaysFor1YReturn) return null;
+  return priceReturnBetween(sorted, shiftDateBy(asOfDate, -365), asOfDate);
+}
+
+/** CAGR over the full available (since-data-available) period - distinct
+    from "average annual return" (arithmetic mean of yearly figures, not
+    implemented here - needs >=2 FULL calendar years, which no currently
+    tracked security has yet). Gated on minDaysForAnnualisedReturn:
+    annualising a handful of weeks amplifies noise into a meaningless
+    number (a 5% move over 30 days annualises past +900%). */
+function securityCAGR(priceHistory, asOfDate, thresholds = SECURITY_ANALYTICS_THRESHOLDS) {
+  const period = securitySinceDataAvailableReturn(priceHistory, thresholds);
+  if (!period || period.daysElapsed < thresholds.minDaysForAnnualisedReturn) return null;
+  const years = period.daysElapsed / 365;
+  return {
+    ...period,
+    cagrPct: Math.round((Math.pow(period.endPrice / period.startPrice, 1 / years) - 1) * 10000) / 100,
+  };
+}
+
+/** Calendar-year breakdown, same anchor-clipping convention as the
+    portfolio-level annualReturns() above (first year clips to the
+    security's own first observation, not Jan-1) - reused deliberately,
+    not reinvented, so "partial year" means the same thing at both
+    levels. isPartialYear/isYTD are explicit flags so the UI can label
+    "Partial year - 11 Aug - 31 Dec" / "YTD - 1 Jan - 7 Aug" instead of
+    presenting either as an ordinary full calendar year - and
+    hasObservationInYear stays false (never a fabricated 0%) for any
+    year with no real observation at all. */
+function securityAnnualReturns(priceHistory, asOfDate) {
+  const sorted = [...priceHistory].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) return {};
+  const startYear = Number(sorted[0].date.slice(0, 4));
+  const endYear = Number(asOfDate.slice(0, 4));
+  const years = {};
+  for (let y = startYear; y <= endYear; y++) {
+    const rangeStart = y === startYear ? sorted[0].date : `${y}-01-01`;
+    const rangeEnd = y === endYear ? asOfDate : `${y}-12-31`;
+    const result = priceReturnBetween(sorted, rangeStart, rangeEnd);
+    years[y] = {
+      rangeStart,
+      rangeEnd,
+      returnPct: result ? result.returnPct : null,
+      hasObservationInYear: !!result,
+      isPartialYear: rangeStart !== `${y}-01-01`,
+      isYTD: y === endYear && rangeEnd !== `${y}-12-31`,
+    };
+  }
+  return years;
+}
+
+/** Annualised volatility = sample stdev (n-1, we're estimating from a
+    sample, not observing the full population) of DAILY returns x
+    sqrt(252) - your own stated preference, validated against the
+    methodology proposal. Gated on minObservationsForVolatility (60
+    trading days, ~3 months) - below that a handful of outlier days
+    dominates the estimate. averageDailyReturnPct is folded in here
+    (not a separate top-level metric, per your own instruction that it's
+    an analytical input, not a headline UI number) since volatility
+    already computes the mean as part of the stdev calculation - no
+    second pass needed. */
+function securityVolatility(priceHistory, thresholds = SECURITY_ANALYTICS_THRESHOLDS) {
+  const returns = dailyReturns(priceHistory);
+  if (returns.length < thresholds.minObservationsForVolatility) return null;
+  const values = returns.map((r) => r.returnPct / 100);
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
+  const dailyStdDev = Math.sqrt(variance);
+  return {
+    annualisedVolatilityPct: Math.round(dailyStdDev * Math.sqrt(thresholds.tradingDaysPerYear) * 10000) / 100,
+    averageDailyReturnPct: Math.round(mean * 10000) / 100,
+    observationCount: returns.length,
+    periodStart: returns[0].date,
+    periodEnd: returns[returns.length - 1].date,
+  };
+}
+
+/** Maximum drawdown over the full AVAILABLE history - close-based (the
+    price you could actually have traded at, not a distribution-adjusted
+    figure), never a rolling window. periodStart/periodEnd are always
+    returned alongside the number specifically so the UI can never
+    present this as "all-time" when coverage is really ~1 year - see
+    this app's own EODHD free-tier limitation. Gated on the same
+    60-observation minimum as volatility (same "too little data is just
+    noise" concern). */
+function securityMaxDrawdown(priceHistory, thresholds = SECURITY_ANALYTICS_THRESHOLDS) {
+  const sorted = [...priceHistory].sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length < thresholds.minObservationsForDrawdown) return null;
+  let peak = sorted[0].close;
+  let maxDrawdownPct = 0;
+  for (const p of sorted) {
+    if (p.close > peak) peak = p.close;
+    const drawdownPct = (p.close / peak - 1) * 100;
+    if (drawdownPct < maxDrawdownPct) maxDrawdownPct = drawdownPct;
+  }
+  return {
+    maxDrawdownPct: Math.round(maxDrawdownPct * 100) / 100,
+    periodStart: sorted[0].date,
+    periodEnd: sorted[sorted.length - 1].date,
+  };
+}
+
+/** The one entry point Security UI should call - bundles every metric
+    above plus provenance (source data-quality principle applied at the
+    security-market-data level: source/coverage/price field/currency, all
+    read straight from the data, never invented). `available: false` is
+    the honest, structural answer for anything with no daily_prices rows
+    at all (BPI Dinâmico - no data_provider_symbol, so getHistoricalPrices()
+    naturally returns []) - the UI's job is to render that as "market-
+    price analytics unavailable for this security type", never as empty
+    or zeroed cards. Sharpe and "average annual return" are deliberately
+    NOT included here - see this project's Phase 2 methodology proposal
+    for why (no sourced EUR risk-free rate; fewer than 2 full calendar
+    years on record for anything currently tracked). asOfDate is always
+    the latest REAL observation in priceHistory, never today's calendar
+    date - never an invented "as of". */
+function securityMarketAnalytics(security, priceHistory, thresholds = SECURITY_ANALYTICS_THRESHOLDS) {
+  if (!priceHistory || !priceHistory.length) {
+    return { available: false, reason: "no-market-data" };
+  }
+  const sorted = [...priceHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const asOfDate = sorted[sorted.length - 1].date;
+  return {
+    available: true,
+    provenance: {
+      source: sorted[sorted.length - 1].source || null,
+      priceFieldUsed: "close",
+      currency: security.currency || null,
+      firstObservationDate: sorted[0].date,
+      lastObservationDate: asOfDate,
+      // importedAt: when Portfol.io actually fetched/stored the latest
+      // observation (daily_prices.fetched_at) - kept explicitly distinct
+      // from lastObservationDate (the market's own as-of date, what the
+      // security traded at). For this automated daily_prices pipeline
+      // there's no separate "last confirmed" step beyond the fetch
+      // itself, so importedAt IS the closest thing to a "last updated"
+      // fact here too - not a second, invented timestamp.
+      importedAt: sorted[sorted.length - 1].fetched_at || null,
+      observationCount: sorted.length,
+    },
+    sinceDataAvailable: securitySinceDataAvailableReturn(sorted, thresholds),
+    ytd: securityYtdReturn(sorted, asOfDate),
+    oneYear: securityOneYearReturn(sorted, asOfDate, thresholds),
+    cagr: securityCAGR(sorted, asOfDate, thresholds),
+    annualReturns: securityAnnualReturns(sorted, asOfDate),
+    volatility: securityVolatility(sorted, thresholds),
+    maxDrawdown: securityMaxDrawdown(sorted, thresholds),
+  };
+}
+
 window.costBasisFromTransactions = costBasisFromTransactions;
 window.unrealisedPnL = unrealisedPnL;
 window.costDrag = costDrag;
@@ -280,3 +576,6 @@ window.productScore = productScore;
 window.valueOfSecurityAsOf = valueOfSecurityAsOf;
 window.chainLinkedPortfolioReturn = chainLinkedPortfolioReturn;
 window.annualReturns = annualReturns;
+window.SECURITY_ANALYTICS_THRESHOLDS = SECURITY_ANALYTICS_THRESHOLDS;
+window.dailyReturns = dailyReturns;
+window.securityMarketAnalytics = securityMarketAnalytics;
