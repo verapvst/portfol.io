@@ -46,3 +46,18 @@
 
 .coming-soon-back { font-size: 13.5px; color: var(--coral-2); font-weight: 500; }
 .coming-soon-back:hover { text-decoration: underline; }
+
+/* Settings-only, signed-out gated state - same recipe as Transactions'
+   own gated preview (css/transactions.css .transactions-gated-*),
+   independently declared rather than shared/imported across pages, per
+   this app's own per-page CSS convention. */
+.coming-soon-gated { margin: 0 0 var(--sp-6); }
+.coming-soon-gated-message { font-size: 13.5px; color: var(--muted); margin: 0 0 var(--sp-4); }
+.coming-soon-gated-cta {
+  padding: 10px 22px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 500;
+}

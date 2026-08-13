@@ -6,18 +6,16 @@
    entry in this map plus pointing a nav href at
    coming-soon.html?feature=<key>, never a new HTML file.
 
-   Deliberately not a redirect to Overview and not a dead "#" link
-   (see js/shell.js's own NAV_GROUPS comment on the old "editOnly" gap
-   for the same "make the limitation visible instead of hiding it"
-   principle) - clicking a not-yet-built feature should feel like
-   landing somewhere intentional, not like the click did nothing.
+   Deliberately not a redirect to Overview and not a dead "#" link -
+   clicking a not-yet-built feature should feel like landing somewhere
+   intentional, not like the click did nothing.
    ============================================================ */
 
 function $(id) { return document.getElementById(id); }
 
 /** icon keys match the same icon already assigned to each item in
-    NAV_GROUPS (shell.js) - not a new icon choice made here, just reused
-    so the nav item and its own landing page visually agree. */
+    NAV_CATEGORIES (shell.js) - not a new icon choice made here, just
+    reused so the nav item and its own landing page visually agree. */
 const FEATURES = {
   risk: {
     icon: "activity",
@@ -59,11 +57,22 @@ function featureFromURL() {
   return FEATURES[key] || FALLBACK_FEATURE;
 }
 
+/** Settings is the one feature here with a real signed-out/signed-in
+    distinction today (see FEATURES.settings' own description) - a
+    gated preview, same idea as Transactions' own renderSignedOutState()
+    (js/transactions.js), not a full page hide: a visitor should still
+    discover the page exists and understand why they can't use it yet,
+    never learn anything private in the process (there's nothing
+    private to learn here - Settings has no real data yet either way).
+    Re-run on auth change (see init() below), not just once at load, so
+    signing in while already sitting on this page updates it live. */
 function renderFeature() {
-  const f = featureFromURL();
+  const key = new URLSearchParams(window.location.search).get("feature");
+  const f = FEATURES[key] || FALLBACK_FEATURE;
   $("coming-soon-icon").innerHTML = icon(f.icon);
   $("coming-soon-title").textContent = f.title;
   $("coming-soon-description").textContent = f.description;
+  $("coming-soon-gated").hidden = !(key === "settings" && !currentUser());
 }
 
 function init() {
@@ -78,8 +87,10 @@ function init() {
   initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
+  $("coming-soon-gated-cta").addEventListener("click", () => window.openAuthModal());
 
   renderFeature();
+  onAuthChange(renderFeature);
   initAuth();
 }
 

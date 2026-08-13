@@ -244,41 +244,90 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 .nav-accordion-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
+  gap: 10px;
   width: 100%;
   padding: var(--sp-3) 12px;
   border-radius: var(--r-2xl);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
   text-align: left;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease;
 }
-.nav-accordion-header:hover { background: color-mix(in oklab, white 60%, transparent); color: var(--ink); }
-/* The section containing the current page stays legible even while
-   collapsed - a coral tint on the label, not the full active-item
-   gradient (that's reserved for the actual page below it). */
-.nav-accordion-header.has-active { color: var(--coral-2); }
+.nav-accordion-header:hover { background: color-mix(in oklab, white 60%, transparent); }
 
-.nav-accordion-chevron {
-  width: 13px;
-  height: 13px;
+.nav-accordion-icon {
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  color: var(--ink);
+  opacity: 0.6;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+.nav-accordion-icon svg { width: 100%; height: 100%; }
+.nav-accordion-header:hover .nav-accordion-icon { opacity: 0.85; }
+
+.nav-accordion-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0.8;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+.nav-accordion-header:hover .nav-accordion-label { opacity: 1; }
+
+/* The section containing the current page stays legible even while
+   collapsed - a coral tint on the icon+label, not the full active-item
+   gradient (that's reserved for the actual page below it). */
+.nav-accordion-header.has-active .nav-accordion-icon,
+.nav-accordion-header.has-active .nav-accordion-label { color: var(--coral-2); opacity: 1; }
+
+.nav-accordion-chevron {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted);
   transition: transform 0.2s ease;
 }
 .nav-accordion-chevron.expanded { transform: rotate(180deg); }
 .nav-accordion-chevron svg { width: 100%; height: 100%; }
 
-.nav-accordion-body { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 var(--sp-2); }
+/* Indented under the category's own icon+label (roughly icon width +
+   gap + header padding), so the "CATEGORY -> pages" nesting is legible
+   at a glance, not just implied by the accordion state. The reveal
+   keyframe (not a transition) plays correctly even though renderNav()
+   rebuilds this element fresh from markup on every toggle - a
+   transition needs an existing element's property to change, which a
+   freshly-inserted node never has, but an animation always plays on
+   mount regardless. */
+.nav-accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 var(--sp-2) 30px;
+  animation: nav-accordion-reveal 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
 .nav-accordion-body[hidden] { display: none; }
 
-.sb-nav-divider { height: 1px; background: var(--card-border); margin: var(--sp-3) 4px; }
+@keyframes nav-accordion-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* margin-top: auto (not a fixed spacer) pushes this divider - and
+   Data Hub/Settings after it, same flex column, normal flow - all the
+   way to the bottom of .sb-nav's available height, instead of sitting
+   right under the categories with dead space below. Still scrolls
+   correctly if content ever overflows (.sb-nav's own overflow-y: auto),
+   this only changes where the block sits when it doesn't. */
+.sb-nav-divider { height: 1px; background: var(--card-border); margin: auto 4px var(--sp-3); }
 
 /* Data Hub / Settings - deliberately quieter than the 4 categories
    above them (smaller, muted, no active-gradient treatment beyond a
@@ -297,50 +346,35 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 .nav-rail-utility:hover { background: color-mix(in oklab, white 60%, transparent); color: var(--ink); opacity: 1; }
 .nav-rail-utility.active { color: var(--coral-2); opacity: 1; }
 
-/* One per group (Portfolio/Investments/Research/Operations/Administration
-   - see js/shell.js's NAV_GROUPS). Quiet on purpose - structure, not a
-   call to action. */
-.nav-group-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  opacity: 0.75;
-  padding: var(--sp-4) 12px 6px;
+/* Was never actually sized (a pre-existing gap, not new) - the icon
+   span rendered with no width/height, so the raw unconstrained SVG
+   never showed up. Colour needs no separate rule - every icon strokes
+   with currentColor (js/utils.js's ICONS), so it already follows
+   .nav-rail-utility's own muted/hover/active colour for free. */
+.nav-rail-utility .nav-icon {
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.nav-group-label:first-child { padding-top: var(--sp-1); }
+.nav-rail-utility .nav-icon svg { width: 100%; height: 100%; }
 
-/* Marks Operations/Administration as standing in for real Edit Mode -
-   see the comment on navGroupHTML() in shell.js for why this exists. */
-.nav-group-tag {
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--coral-2);
-  opacity: 1;
-}
-
+/* Subpage row - plain text, no icon (see js/shell.js's navItemHTML()
+   for why) - quieter and smaller than the category header above it on
+   purpose, the "editorial list" half of the CATEGORY -> pages
+   hierarchy. */
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--r-2xl);
-  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: var(--r-xl);
+  font-size: 13px;
   font-weight: 400;
   color: var(--muted);
   transition: background 0.2s ease, color 0.2s ease;
 }
-
-.nav-item .nav-icon {
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.nav-item .nav-icon svg { width: 100%; height: 100%; }
 
 .nav-item:hover {
   background: color-mix(in oklab, white 60%, transparent);
@@ -350,10 +384,9 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 .nav-item.active {
   background: linear-gradient(135deg, rgba(255,208,106,0.32), rgba(245,109,154,0.24));
   color: var(--ink);
+  font-weight: 500;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
-
-.nav-item.active .nav-icon { color: var(--coral-2); }
 
 .nav-badge {
   margin-left: auto;

@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=74">
-<link rel="stylesheet" href="css/layout.css?v=74">
-<link rel="stylesheet" href="css/components.css?v=74">
-<link rel="stylesheet" href="css/coming-soon.css?v=74">
+<link rel="stylesheet" href="css/theme.css?v=84">
+<link rel="stylesheet" href="css/layout.css?v=84">
+<link rel="stylesheet" href="css/components.css?v=84">
+<link rel="stylesheet" href="css/coming-soon.css?v=84">
 </head>
 <body>
 <div id="app">
@@ -30,6 +30,15 @@
       <span class="coming-soon-badge">Coming Soon</span>
       <h1 class="coming-soon-title" id="coming-soon-title"></h1>
       <p class="coming-soon-description" id="coming-soon-description"></p>
+      <!-- Settings is the one feature with a real signed-out/signed-in
+           distinction today - see js/coming-soon.js's renderFeature().
+           Hidden by default; shown only for ?feature=settings while
+           signed out, same gated-preview idea as Transactions
+           (js/transactions.js:renderSignedOutState()). -->
+      <div class="coming-soon-gated" id="coming-soon-gated" hidden>
+        <p class="coming-soon-gated-message">Sign in to manage your account, currency and timezone preferences.</p>
+        <button type="button" id="coming-soon-gated-cta" class="coming-soon-gated-cta">Login to access</button>
+      </div>
       <a href="index.html" class="coming-soon-back">← Back to Overview</a>
     </section>
 
@@ -38,15 +47,15 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=74"></script>
-<script src="js/supabaseClient.js?v=74"></script>
+<script src="js/supabaseConfig.js?v=84"></script>
+<script src="js/supabaseClient.js?v=84"></script>
 
-<script src="js/utils.js?v=74"></script>
-<script src="js/calculations.js?v=74"></script>
-<script src="js/repository.js?v=74"></script>
-<script src="js/shell.js?v=74"></script>
-<script src="js/auth.js?v=74"></script>
-<script src="js/db.js?v=74"></script>
-<script src="js/coming-soon.js?v=74"></script>
+<script src="js/utils.js?v=84"></script>
+<script src="js/calculations.js?v=84"></script>
+<script src="js/repository.js?v=84"></script>
+<script src="js/shell.js?v=84"></script>
+<script src="js/auth.js?v=84"></script>
+<script src="js/db.js?v=84"></script>
+<script src="js/coming-soon.js?v=84"></script>
 </body>
 </html>

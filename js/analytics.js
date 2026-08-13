@@ -82,6 +82,22 @@ async function getPortfolioDataLive() {
   const cashHolding = holdingsRaw.find((h) => h.security.type === "Cash");
   const cash = cashHolding ? cashHolding.value : 0;
 
+  // ---------- Contributions vs. withdrawals ----------
+  // External cash movement only (type 'deposit'/'withdrawal', against
+  // the Cash security - see 0001_initial_schema.sql), deliberately NOT
+  // buy/sell - those already have their own meaning above
+  // (investedCapital), and counting a buy as a "contribution" too would
+  // double-count money that was deposited, then invested, as two
+  // separate contribution events. Real amounts, gated the same way
+  // every other € figure on this drawer already is (formatMoney/
+  // isOwnerMode() in shell.js) - nothing new to gate here.
+  const contributionsTotal = Math.round(
+    transactionsRaw.filter((t) => t.type === "deposit").reduce((s, t) => s + Number(t.amount || 0), 0) * 100
+  ) / 100;
+  const withdrawalsTotal = Math.round(
+    transactionsRaw.filter((t) => t.type === "withdrawal").reduce((s, t) => s + Number(t.amount || 0), 0) * 100
+  ) / 100;
+
   // ---------- Cash-flow boundaries (for TWR) ----------
   // Every buy/sell/deposit/withdrawal transaction date is treated as an
   // EXTERNAL portfolio cash flow. KNOWN, DOCUMENTED LIMITATION (see
@@ -212,10 +228,19 @@ async function getPortfolioDataLive() {
     };
   });
 
-  // currency carried through from the real accounts row (already fetched
-  // above) so currencyDrill (shell.js) can match holdings to a currency
-  // by real account data instead of a hardcoded account-name check.
-  const accounts = accountsRows.map((a) => ({ id: a.id, name: a.name, currency: a.currency, tone: tokenColor("account", a.name) }));
+  // currency/institution/accountType/jurisdiction all carried through
+  // from the real accounts row already fetched above (loadAccountsForPortfolio,
+  // db.js - the same query accounts.js itself reads) - no second query,
+  // just no longer dropping fields that were already in memory. currency
+  // matches accounts.js/currencyDrill's own real-data precedent; the
+  // other three feed shell.js:accountDrill()'s preview. Public mode's
+  // own accounts source (public_accounts() RPC, 0013) deliberately
+  // returns id/name/currency only, so institution/accountType/
+  // jurisdiction are naturally absent there - nothing to gate here.
+  const accounts = accountsRows.map((a) => ({
+    id: a.id, name: a.name, currency: a.currency, tone: tokenColor("account", a.name),
+    institution: a.institutions?.name || null, accountType: a.account_type || null, jurisdiction: a.jurisdiction || null,
+  }));
   const accountAllocation = accounts.map((a) => {
     const value = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.value, 0);
     return { name: a.name, value, weight: totalValue ? Math.round((value / totalValue) * 10000) / 100 : 0, tone: a.tone };
@@ -277,12 +302,11 @@ async function getPortfolioDataLive() {
         totalReturnPct, totalReturnAvailable,
         investorReturnPct, investorReturnAvailable,
         // Calendar-year breakdown (calculations.js:annualReturns()) -
-        // {2017: {returnPct}, 2018: {...}, ...}. Not yet rendered
-        // anywhere - the seam Performance can build a "2024: +X% / 2025:
-        // +X% / 2026 YTD: +X%" view on top of once there's a UI slot for
-        // it, per docs/implementation-roadmap.md's Performance &
-        // Analytics Architecture section.
+        // {2017: {returnPct}, 2018: {...}, ...}. Rendered on the
+        // Performance page (renderAnnualReturns) and in the Overview's
+        // Investment Performance drawer (shell.js:performanceDrill()).
         yearlyReturns,
+        contributionsTotal, withdrawalsTotal,
         todayChange: 0, todayChangePct: 0, cash,
       },
     },
@@ -441,6 +465,10 @@ async function getPortfolioDataPublic() {
         totalReturnPct, totalReturnAvailable,
         investorReturnPct: 0, investorReturnAvailable: false,
         yearlyReturns,
+        // Same reasoning as investorReturnPct above: real amounts,
+        // deliberately never exposed to anon (public_cash_flow_dates()
+        // returns date+type only, no amount) - null here, not a guess.
+        contributionsTotal: null, withdrawalsTotal: null,
         todayChange: null, todayChangePct: null, cash: null,
       },
     },

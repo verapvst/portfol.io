@@ -147,54 +147,62 @@ function indexValueSeries(series) {
     Monte Carlo/scenario-analysis/optimisation sub-tools) is one more
     entry in the relevant category's items array, never a structural
     change - that future-proofing was the explicit point of this shape. */
+/** Icons belong to the CATEGORY now, not the individual page - see
+    navItemHTML()/navCategoryHTML() below. Each category icon is chosen
+    to read as that area's own identity at a glance (pieChart = your
+    portfolio's own composition, wallet = accounts/money movement,
+    search = researching products you don't necessarily hold, barChart3
+    = analysis/measurement) - subpages are plain text, deliberately not
+    given their own icon, so the hierarchy reads as CATEGORY -> pages,
+    not sixteen equally-weighted rows. */
 const NAV_CATEGORIES = [
   {
     key: "portfolio",
     label: "Portfolio",
     icon: "pieChart",
     items: [
-      { label: "Overview", icon: "home", href: "index.html" },
-      { label: "Portfolio Detail", icon: "pieChart", href: "portfolio-detail.html" },
-      { label: "Performance", icon: "trendingUp", href: "performance.html" },
-      { label: "Allocation", icon: "pieChart", href: "allocation.html" },
+      { label: "Overview", href: "index.html" },
+      { label: "Portfolio Detail", href: "portfolio-detail.html" },
+      { label: "Performance", href: "performance.html" },
+      { label: "Allocation", href: "allocation.html" },
     ],
   },
   {
     key: "investments",
     label: "Investments",
-    icon: "landmark",
+    icon: "wallet",
     private: true,
     items: [
-      { label: "Accounts", icon: "landmark", href: "accounts.html" },
+      { label: "Accounts", href: "accounts.html" },
       // discoverable: this category itself stays visible signed out (so
       // a visitor can open it and find Transactions) even though the
       // category as a whole is private - Accounts/Valuations/Costs
       // still don't appear in its panel until signed in. See
       // transactions.js:renderSignedOutState() for the gated-preview
       // page this leads to.
-      { label: "Transactions", icon: "receipt", href: "transactions.html", discoverable: true },
-      { label: "Valuations", icon: "activity", href: "valuations.html" },
-      { label: "Costs", icon: "wallet", href: "costs.html" },
+      { label: "Transactions", href: "transactions.html", discoverable: true },
+      { label: "Valuations", href: "valuations.html" },
+      { label: "Costs", href: "costs.html" },
     ],
   },
   {
     key: "research",
     label: "Research",
-    icon: "trendingUp",
+    icon: "search",
     items: [
-      { label: "Securities", icon: "pieChart", href: "products.html" },
-      { label: "Broker Comparison", icon: "landmark", href: "brokers.html" },
+      { label: "Securities", href: "products.html" },
+      { label: "Broker Comparison", href: "brokers.html" },
     ],
   },
   {
     key: "analysis",
     label: "Analysis",
-    icon: "activity",
+    icon: "barChart3",
     items: [
-      { label: "Risk", icon: "activity", href: "coming-soon.html?feature=risk" },
-      { label: "Benchmarks", icon: "barChart3", href: "coming-soon.html?feature=benchmarks" },
-      { label: "Market Data", icon: "trendingUp", href: "coming-soon.html?feature=market-data" },
-      { label: "Simulator", icon: "sparkles", href: "coming-soon.html?feature=simulator" },
+      { label: "Risk", href: "coming-soon.html?feature=risk" },
+      { label: "Benchmarks", href: "coming-soon.html?feature=benchmarks" },
+      { label: "Market Data", href: "coming-soon.html?feature=market-data" },
+      { label: "Simulator", href: "coming-soon.html?feature=simulator" },
     ],
   },
 ];
@@ -222,11 +230,24 @@ function currentPageFile() {
   return path.slice(path.lastIndexOf("/") + 1) || "index.html";
 }
 
+/** currentPageFile() alone can't tell Risk from Benchmarks from
+    Settings - they're all coming-soon.html, distinguished only by
+    ?feature=. Every nav href comparison needs to match against this,
+    not the bare filename, or every coming-soon.html?feature=X page
+    (Risk/Benchmarks/Market Data/Simulator/Settings) silently never
+    highlights as active. For a plain page (no query string) this is
+    identical to currentPageFile() - safe for every other href too. */
+function currentPageHref() {
+  return currentPageFile() + window.location.search;
+}
+
+/** Deliberately no icon here - see NAV_CATEGORIES' own header comment.
+    A subpage is a plain indented text row; the icon budget belongs to
+    the category button above it (navCategoryHTML). */
 function navItemHTML(item) {
-  const active = item.href !== "#" && item.href === currentPageFile();
+  const active = item.href !== "#" && item.href === currentPageHref();
   return `
     <a class="nav-item${active ? " active" : ""}" href="${item.href}">
-      <span class="nav-icon">${icon(item.icon)}</span>
       <span>${item.label}</span>
       ${item.badge ? `<span class="nav-badge">${item.badge}</span>` : ""}
     </a>`;
@@ -246,19 +267,15 @@ function visibleCategoryItems(category) {
   return category.items;
 }
 
-/** Which category the CURRENT PAGE lives in - drives the rail's active
-    highlight AND which panel auto-opens, every time the drawer opens
-    (see initNavigation's open() below) - reopening always orients you
-    to where you actually are, never wherever you last manually browsed.
-    Falls back to the first visible category for pages that aren't in
-    any category's panel (a Coming Soon page reached from a category
-    that's since become hidden, or similar edge cases) - never crashes
-    on a page with no match. */
+/** Which category the CURRENT PAGE lives in - drives the header's active
+    highlight AND which section auto-opens on page load (see
+    initNavigation below). Falls back to the first visible category for
+    pages that aren't in any category's panel (a Coming Soon page
+    reached from a category that's since become hidden, or similar edge
+    cases) - never crashes on a page with no match. */
 function categoryForCurrentPage() {
-  const current = currentPageFile() + window.location.search;
-  const match = NAV_CATEGORIES.find((c) =>
-    visibleCategoryItems(c).some((i) => i.href === current || i.href === currentPageFile())
-  );
+  const current = currentPageHref();
+  const match = NAV_CATEGORIES.find((c) => visibleCategoryItems(c).some((i) => i.href === current));
   return (match || NAV_CATEGORIES[0]).key;
 }
 
@@ -267,16 +284,21 @@ function categoryForCurrentPage() {
     Single narrow column, no second panel - back to approximately the
     original sidebar width, per the revised design. hasActivePage marks
     the header even while collapsed, so you can always tell which
-    section your current page lives in at a glance. */
-function navCategoryHTML(category, expandedSet) {
+    section your current page lives in at a glance. expandedKey is a
+    single category key (exclusive-open accordion, not a Set) - only
+    one section's pages are ever visible at once, matching the "opening
+    one closes the other" behaviour asked for; see the module-level
+    expandedCategory below for why this replaced the old multi-open Set. */
+function navCategoryHTML(category, expandedKey) {
   const items = visibleCategoryItems(category);
   if (!items.length) return "";
-  const isExpanded = expandedSet.has(category.key);
-  const hasActivePage = items.some((i) => i.href === currentPageFile());
+  const isExpanded = expandedKey === category.key;
+  const hasActivePage = items.some((i) => i.href === currentPageHref());
   return `
     <div class="nav-accordion-group">
       <button class="nav-accordion-header${hasActivePage ? " has-active" : ""}" type="button" data-category-toggle="${category.key}" aria-expanded="${isExpanded}">
-        <span>${category.label}</span>
+        <span class="nav-accordion-icon">${icon(category.icon)}</span>
+        <span class="nav-accordion-label">${category.label}</span>
         <span class="nav-accordion-chevron${isExpanded ? " expanded" : ""}">${icon("chevronDown")}</span>
       </button>
       <div class="nav-accordion-body"${isExpanded ? "" : " hidden"}>
@@ -286,7 +308,7 @@ function navCategoryHTML(category, expandedSet) {
 }
 
 function navUtilityHTML(u) {
-  const active = u.href !== "#" && u.href === currentPageFile();
+  const active = u.href !== "#" && u.href === currentPageHref();
   return `
     <a class="nav-rail-utility${active ? " active" : ""}" href="${u.href}">
       <span class="nav-icon">${icon(u.icon)}</span>
@@ -294,17 +316,17 @@ function navUtilityHTML(u) {
     </a>`;
 }
 
-// Which categories are currently expanded - a Set, not a single active
-// key, since multiple can be open at once (the user's own manual
-// expansions are never force-collapsed just because they opened
-// another section too). Seeded fresh per page load in initNavigation();
-// reopening the drawer later only ADDS the current page's category if
-// it isn't already open, never resets what the user had open.
-let expandedCategories = new Set();
+// Which ONE category is currently expanded - an exclusive accordion
+// (opening one closes whichever else was open), not the old multi-open
+// Set. Seeded to the current page's own category on every page load
+// (initNavigation below) and on auth change (visible items can change
+// which category a page belongs to); a manual click always replaces
+// this value outright, never adds to a collection.
+let expandedCategory = null;
 
 function renderNav(drawer) {
   const navEl = drawer.querySelector("#sb-nav");
-  const categoryBlocks = NAV_CATEGORIES.map((c) => navCategoryHTML(c, expandedCategories)).join("");
+  const categoryBlocks = NAV_CATEGORIES.map((c) => navCategoryHTML(c, expandedCategory)).join("");
   const utilityLinks = NAV_UTILITIES.map(navUtilityHTML).join("");
 
   navEl.innerHTML = `
@@ -315,8 +337,7 @@ function renderNav(drawer) {
   navEl.querySelectorAll("[data-category-toggle]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const key = btn.dataset.categoryToggle;
-      if (expandedCategories.has(key)) expandedCategories.delete(key);
-      else expandedCategories.add(key);
+      expandedCategory = expandedCategory === key ? null : key;
       renderNav(drawer);
     });
   });
@@ -363,20 +384,21 @@ function initNavigation(user) {
   // breakpoint anymore (see this section's header comment).
   document.body.append(backdrop, drawer);
 
-  expandedCategories = new Set([categoryForCurrentPage()]);
+  expandedCategory = categoryForCurrentPage();
   renderNav(drawer);
-  onAuthChange(() => { expandedCategories = new Set([categoryForCurrentPage()]); renderNav(drawer); });
+  onAuthChange(() => { expandedCategory = categoryForCurrentPage(); renderNav(drawer); });
 
   const isOpen = () => document.body.classList.contains("nav-open");
 
+  // Opening the drawer never touches expandedCategory - it was already
+  // set correctly for the current page on load (above), and re-forcing
+  // it here would clobber a category the user manually switched to
+  // while browsing this same page view (e.g. opened Research to look
+  // around while sitting on an Analysis page). Navigating to a DIFFERENT
+  // page is a full page load in this app, which reruns initNavigation()
+  // and re-seeds correctly - that's what satisfies "the category
+  // containing the active page auto-expands", not this open() call.
   const open = () => {
-    // Ensures the current page's category is open every time the
-    // drawer opens - but only ADDS it, never resets what's already
-    // expanded, so a category you manually opened earlier in this page
-    // view stays open rather than being force-collapsed on every
-    // reopen.
-    expandedCategories.add(categoryForCurrentPage());
-    renderNav(drawer);
     document.body.classList.add("nav-open");
     logoBtn.setAttribute("aria-expanded", "true");
     document.addEventListener("keydown", onKey);
@@ -741,18 +763,20 @@ function initInfoPopovers() {
    architecture: every clickable element on the Overview calls
    drillDown(type, id) with a target descriptor, and this decides what
    to show. Content here is deliberately a *preview* built only from
-   data the repository already has - never a fabricated deep page. When
-   Phase 2 (Excel parser, fund holdings, fees, documents) lands, each
-   case below grows into the real page described in the architecture doc;
-   the call sites (donut legends, table rows, health tiles, insights)
-   never need to change. */
+   data the repository already has - never a fabricated deep page.
+   Fund holdings and fees already landed (Data Hub's PDF importer ->
+   security_details, linked from holdingDrill() below) - what's left
+   below is genuinely unbuilt (historical/time-series views, documents,
+   benchmark), not blocked on any single future component, so each item
+   is re-checked against the real data contract rather than assumed
+   still missing. */
 
 function rowHTML(label, value) {
   return `<div class="drawer-row"><span>${label}</span><span>${value}</span></div>`;
 }
 
 function comingSoon(items) {
-  return `<div class="drawer-coming-soon"><p class="drawer-hint">Coming soon, once the Excel parser is wired in:</p><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul></div>`;
+  return `<div class="drawer-coming-soon"><p class="drawer-hint">Not built yet:</p><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul></div>`;
 }
 
 /** The last data getPortfolioDataAuto() actually resolved to (mock or
@@ -769,20 +793,24 @@ function comingSoon(items) {
 let currentPortfolioData = null;
 function setCurrentPortfolioData(data) { currentPortfolioData = data; }
 
-function drillDown(type, id) {
+async function drillDown(type, id) {
   const data = currentPortfolioData || getPortfolioData();
   let payload;
 
   switch (type) {
     case "kpi": payload = kpiDrill(id, data); break;
     case "performance": payload = performanceDrill(data); break;
-    case "holding": payload = holdingDrill(id, data); break;
+    // holding/health("largest") fetch security_details (loadProductDetail,
+    // db.js) for the TER/composition preview - the only two drill types
+    // that need a network round trip, so this is the only place the
+    // router actually awaits anything.
+    case "holding": payload = await holdingDrill(id, data); break;
     case "assetClass": payload = assetClassDrill(id, data); break;
     case "account": payload = accountDrill(id, data); break;
     case "region": payload = regionDrill(id, data); break;
     case "country": payload = countryDrill(id, data); break;
     case "currency": payload = currencyDrill(id, data); break;
-    case "health": payload = healthDrill(id, data); break;
+    case "health": payload = await healthDrill(id, data); break;
     default: payload = { icon: "activity", title: id, bodyHTML: comingSoon(["This view"]) };
   }
 
@@ -804,22 +832,64 @@ function kpiDrill(key, data) {
     investorReturn: { icon: "barChart3", title: "Investor Return", value: fmtPct(perf.investorReturnPct) },
   };
   const m = map[key];
+  // Contributions/withdrawals: real (analytics.js:getPortfolioDataLive()),
+  // masked the same way every other € figure on this drawer already is
+  // (formatMoney -> isOwnerMode()) - null in public mode (see
+  // getPortfolioDataPublic()'s own comment on why amounts never cross
+  // that boundary), which formatMoney also renders as the mask, not a
+  // blank gap, so signed-out visitors see the same masked-row shape
+  // signed-in-but-hidden visitors do.
+  const cashFlowRows = `
+    <div class="drawer-rows">
+      ${rowHTML("Total Contributions", formatMoney(perf.contributionsTotal))}
+      ${rowHTML("Total Withdrawals", formatMoney(perf.withdrawalsTotal))}
+    </div>`;
   return {
     icon: m.icon, title: m.title, subtitle: m.value,
-    bodyHTML: comingSoon(["Full history", "Contributions vs. withdrawals", "Benchmark comparison"]),
+    // Full history is real and already the chart on this same page
+    // (data.history.valueSeries) - no need to promise it again here.
+    // Benchmark comparison is blocked on the same missing
+    // benchmark_history as everywhere else it appears.
+    bodyHTML: `<p class="drawer-hint">Full history is the chart above, since ${data.history.inceptionDate}.</p>${cashFlowRows}${comingSoon(["Benchmark comparison"])}`,
   };
 }
 
 function performanceDrill(data) {
   const perf = data.analytics.performance;
+  // Investor Return (XIRR) and Unrealised Gain are real (analytics.js),
+  // the same two fields performance.js's own Stats tiles read - shown
+  // here instead of listed as missing. Same *Available-flag and masking
+  // rules as that page, not re-derived: XIRR falls back to "Insufficient
+  // history" rather than a technically-computed-but-meaningless 0%;
+  // Unrealised Gain shows € for the owner, % otherwise (a %-gain reveals
+  // nothing about size, same reasoning as Total Return above it).
+  const owner = isOwnerMode();
+  const summaryRows = `
+    <div class="drawer-rows">
+      ${rowHTML("Investor Return (XIRR)", perf.investorReturnAvailable ? fmtPct(perf.investorReturnPct) : "Insufficient history")}
+      ${rowHTML("Unrealised Gain", owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : fmtPct(perf.unrealisedGainPct))}
+    </div>`;
+  // Calendar-year returns are real (calculations.js:annualReturns(),
+  // the same perf.yearlyReturns performance.js's own Performance page
+  // renders) - shown here directly instead of listed as missing. Years
+  // with no observation are skipped rather than shown "insufficient" -
+  // this drawer is a preview, not the full page.
+  const currentYear = new Date().getFullYear();
+  const yearRows = Object.entries(perf.yearlyReturns || {})
+    .filter(([, y]) => y.hasObservationInYear)
+    .sort(([a], [b]) => Number(b) - Number(a))
+    .map(([year, y]) => rowHTML(Number(year) === currentYear ? `${year} YTD` : year, fmtPct(y.returnPct)));
   return {
     icon: "trendingUp", title: "Investment Performance",
     subtitle: `${fmtPct(perf.totalReturnPct)} (TWR) since ${data.history.inceptionDate}`,
-    bodyHTML: comingSoon(["Drawdown", "Benchmark comparison", "Rolling returns", "Calendar returns"]),
+    bodyHTML: `
+      ${summaryRows}
+      ${yearRows.length ? `<div class="drawer-rows">${yearRows.join("")}</div>` : ""}
+      ${comingSoon(["Drawdown", "Rolling returns", "Benchmark comparison"])}`,
   };
 }
 
-function holdingDrill(id, data) {
+async function holdingDrill(id, data) {
   const h = data.portfolio.holdings.find((x) => x.id === id);
   if (!h) return { icon: "pieChart", title: "Holding", bodyHTML: "" };
   const account = data.portfolio.accounts.find((a) => a.id === h.accountId);
@@ -831,8 +901,34 @@ function holdingDrill(id, data) {
   const costRows = (isOwnerMode() && h.costBasis != null) ? `
         ${rowHTML("Avg. Cost Basis", formatMoney(h.costBasis))}
         ${rowHTML("Unrealised P&L", `${formatMoney(h.pnl, { signed: true })}${h.pnlPct != null ? ` (${fmtPct(h.pnlPct)})` : ""}`)}` : "";
+
+  // TER + a short Top Holdings preview: real (security_details, via the
+  // Data Hub PDF importer) - the SAME loadProductDetail() query Security
+  // Detail itself runs (db.js), never a second/different read of this
+  // row, so this preview and that full page can't drift apart. Best-
+  // effort: security_details is authenticated-only RLS (same scope as
+  // Security Detail/Securities generally, unchanged here) - a signed-out
+  // fetch resolves to nothing, and a genuine network failure is no
+  // different, so both just fall through to "detail = null" and the
+  // sections below quietly don't render, matching how costRows above
+  // already handles gated-when-signed-out data in this same drawer.
+  let detail = null;
+  try { detail = await loadProductDetail(h.id); } catch (e) { detail = null; }
+
+  const currency = detail?.securities?.currency;
+  const costsRows = detail?.ter_pct != null ? `
+      <p class="drawer-hint">Costs</p>
+      <div class="drawer-rows">${rowHTML("TER", fmtPct(detail.ter_pct, { signed: false }))}</div>
+      ${lastUpdatedHTML(detail.costs_as_of)}` : "";
+
+  const topHoldings = detail?.top_holdings;
+  const compositionRows = (topHoldings && topHoldings.length) ? `
+      <p class="drawer-hint">Top Holdings</p>
+      <div class="drawer-rows">${topHoldings.slice(0, 5).map((t) => rowHTML(t.asset, t.weight_pct != null ? fmtPct(t.weight_pct, { signed: false }) : "—")).join("")}</div>
+      ${lastUpdatedHTML(detail.composition_as_of)}` : "";
+
   return {
-    icon: "pieChart", title: h.name, subtitle: `${h.ticker !== "—" ? h.ticker + " · " : ""}${h.type}`,
+    icon: "pieChart", title: h.name, subtitle: `${h.ticker !== "—" ? h.ticker + " · " : ""}${h.type}${currency ? " · " + currency : ""}`,
     bodyHTML: `
       <div class="drawer-rows">
         ${rowHTML("Weight", `${h.weight.toFixed(2)}%`)}
@@ -841,8 +937,10 @@ function holdingDrill(id, data) {
         ${rowHTML("Total Return", `${h.returnPct > 0 ? "+" : ""}${h.returnPct.toFixed(2)}%`)}
         ${rowHTML("Account", account ? account.name : "—")}
       </div>
+      ${costsRows}
+      ${compositionRows}
       <a class="drawer-security-link" href="product-detail.html?id=${h.id}">View Security Detail →</a>
-      ${comingSoon(["Fees (TER)", "Historical holdings", "Fund/ETF top holdings", "Documents"])}`,
+      ${comingSoon(["Historical holdings (composition over time)", "Documents"])}`,
   };
 }
 
@@ -888,9 +986,24 @@ function accountDrill(name, data) {
   const subtitle = !acc ? "" : isOwnerMode()
     ? `${fmtEUR(acc.value)} · ${acc.weight.toFixed(2)}% of portfolio`
     : `${acc.weight.toFixed(2)}% of portfolio`;
+  // Currency/Institution/Account Type/Jurisdiction: all real
+  // (analytics.js's accounts mapping - the same accounts table
+  // accounts.js itself reads). Currency is safe in both modes (already
+  // part of the public accounts source too); the other three are
+  // authenticated-only since public_accounts() (0013) never returns
+  // them - absent, not masked, so they simply don't render rather than
+  // showing a mask for something that was never fetched at all.
+  const detailRows = [
+    accountRecord?.currency ? rowHTML("Currency", accountRecord.currency) : "",
+    accountRecord?.institution ? rowHTML("Institution", accountRecord.institution) : "",
+    accountRecord?.accountType ? rowHTML("Account Type", accountRecord.accountType) : "",
+    accountRecord?.jurisdiction ? rowHTML("Jurisdiction", accountRecord.jurisdiction) : "",
+  ].filter(Boolean).join("");
   return {
     icon: "landmark", title: name, subtitle,
-    bodyHTML: `<div class="drawer-rows">${holdings.map((h) => rowHTML(h.name, formatMoney(h.value))).join("")}</div>`,
+    bodyHTML: `
+      ${detailRows ? `<div class="drawer-rows">${detailRows}</div>` : ""}
+      <div class="drawer-rows">${holdings.map((h) => rowHTML(h.name, formatMoney(h.value))).join("")}</div>`,
   };
 }
 
@@ -899,11 +1012,24 @@ function regionDrill(name, data) {
   // regionForCountry lives in utils.js - shared with ui.js so the two
   // can't drift out of sync again (they already did once).
   const countries = data.analytics.countries.filter((c) => regionForCountry(c.name) === name);
+  // "Which products contribute here" stays genuinely unbuilt:
+  // analytics.countries/regions is a single pre-blended aggregate table
+  // (repository.js - real MSCI/Avantis index look-through, done once,
+  // offline), not a roll-up of any per-holding country/region field -
+  // no such field exists anywhere in the data model to filter by.
+  // Reconstructing it would mean writing a new allocation calculation,
+  // not exposing an existing one.
+  //
+  // The zero-countries case (a region like "World" whose holdings were
+  // never country-specific) is NOT a missing feature, so it doesn't use
+  // comingSoon()'s "Not built yet" framing - it's a plain explanatory
+  // hint about what this region's weight actually represents.
+  const bodyHTML = countries.length
+    ? `<div class="drawer-rows">${countries.map((c) => rowHTML(c.name, `${c.weight.toFixed(1)}%`)).join("")}</div>${comingSoon(["Which products contribute here"])}`
+    : `<p class="drawer-hint">This region's real weight comes from holdings that were never country-specific (e.g. a global tracker) - see the Detailed Portfolio sheet.</p>`;
   return {
     icon: "globe", title: name, subtitle: region ? `${region.weight.toFixed(2)}% of the portfolio` : "",
-    bodyHTML: countries.length
-      ? `<div class="drawer-rows">${countries.map((c) => rowHTML(c.name, `${c.weight.toFixed(1)}%`)).join("")}</div>${comingSoon(["Which products contribute here"])}`
-      : comingSoon(["This region's real weight comes from holdings that were never country-specific (e.g. a global tracker) - see the Detailed Portfolio sheet"]),
+    bodyHTML,
   };
 }
 
@@ -912,6 +1038,10 @@ function countryDrill(isoCode, data) {
   // topojson feature ids (zero-padded, e.g. "076" for Brazil), which
   // won't string-match a plain iso number for any country under 100.
   const country = data.analytics.countries.find((c) => c.iso === Number(isoCode));
+  // Both items genuinely unbuilt, same reasoning as regionDrill above:
+  // no per-holding country field exists to filter by (would be a new
+  // calculation, not an existing one exposed), and no time-series
+  // geographic data exists anywhere in the schema.
   return {
     icon: "globe", title: country ? country.name : "Country", subtitle: country ? `${country.weight.toFixed(1)}% exposure` : "Not yet mapped",
     bodyHTML: comingSoon(["Which products hold this country", "Historical evolution"]),
