@@ -18,3 +18,69 @@
   .holdings-detail-table { min-width: 560px; }
   .holdings-detail-table.showcase { min-width: 380px; }
 }
+
+/* ---------- Per-holding Update action + modal ----------
+   Row button reuses .row-actions/.row-action-btn (transactions.css/
+   accounts.css's own pattern, copied here since these classes are
+   page-scoped CSS, not shared - same visual language, not a new one).
+   Modal reuses the exact #valuation-modal/.val-form-* skeleton
+   (valuations.css) under fresh IDs (this page doesn't load
+   valuations.js, so no collision risk either way, but distinct IDs
+   keep the two pages' modals unambiguous in devtools). */
+.row-actions { display: flex; gap: var(--sp-2); justify-content: flex-end; }
+.row-action-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  border: 1px solid var(--glass-quiet-border);
+  background: var(--glass-quiet-bg);
+}
+.row-action-btn svg { width: 14px; height: 14px; }
+.row-action-btn:hover { color: var(--ink); }
+
+#holding-update-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+
+#holding-update-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#holding-update-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(400px, 92vw);
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#holding-update-modal-root.open { pointer-events: auto; }
+#holding-update-modal-root.open #holding-update-modal-backdrop { opacity: 1; }
+#holding-update-modal-root.open #holding-update-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+/* Same context-highlight pattern as .sb-profile (the signed-in user
+   chip in the nav drawer) - a glass-quiet block naming exactly what
+   you're about to update, so the security is never in doubt even
+   though it's no longer an editable field in this form. */
+.hu-security-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-2xl);
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+.hu-security-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.hu-security-hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }

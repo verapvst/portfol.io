@@ -43,6 +43,41 @@
   font-weight: 500;
 }
 
+/* ---------- Signed-out gated state ----------
+   Deliberately belongs to the same visual system as the rest of the
+   app (glass card spacing/tone tokens), not a bare "please sign in"
+   line - the point is to read as an intentional feature preview, per
+   the access-model brief. */
+.transactions-gated-state {
+  margin-top: var(--sp-6);
+  padding: var(--sp-10) var(--sp-6);
+  text-align: center;
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-lg);
+}
+.transactions-gated-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--glass-quiet-bg);
+  color: var(--muted);
+  margin-bottom: var(--sp-4);
+}
+.transactions-gated-icon svg { width: 20px; height: 20px; }
+.transactions-gated-title { font-size: 16px; font-weight: 600; color: var(--ink); margin: 0 0 var(--sp-2); }
+.transactions-gated-message { font-size: 13.5px; color: var(--muted); margin: 0 0 var(--sp-5); }
+.transactions-gated-cta {
+  padding: 10px 22px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
 .transactions-toolbar {
   display: flex;
   align-items: center;

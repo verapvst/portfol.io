@@ -5,17 +5,10 @@
    are new primitives.
    ============================================================ */
 
-.product-library-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-6);
-}
+.product-library-controls { margin-bottom: var(--sp-4); }
 
 .product-search {
-  flex: 1;
-  min-width: 200px;
+  width: 100%;
   padding: 10px var(--sp-4);
   border-radius: var(--r-pill);
   border: 1px solid var(--card-border);
@@ -26,6 +19,43 @@
 }
 .product-search::placeholder { color: var(--muted); }
 .product-search:disabled { opacity: 0.5; }
+
+/* Filter bar - search sits on its own line above (full width, the
+   thing you reach for first); Type/Held/Provider are grouped together
+   underneath as one coherent row, each with its own small label, per
+   the revised "Search / Type / Held / Provider" structure. Separated
+   from the list below by a border, so the filter controls read as
+   their own zone rather than blending into the table. */
+.product-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-6);
+  padding-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--card-border);
+}
+.product-filter-group { display: flex; flex-direction: column; gap: 6px; }
+.product-filter-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Provider filter - same pill shape as .product-search, a <select> not
+   a text input, so styled separately rather than sharing that class. */
+.product-select {
+  padding: 10px var(--sp-4);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--card-border);
+  background: var(--glass-quiet-bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13.5px;
+}
+.product-select:disabled { opacity: 0.5; }
 
 .product-table th:nth-child(2),
 .product-table td:nth-child(2),

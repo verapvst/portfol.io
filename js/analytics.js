@@ -291,6 +291,164 @@ async function getPortfolioDataLive() {
   };
 }
 
+/** getPortfolioDataPublic() - real portfolio structure/performance for
+    SIGNED-OUT visitors, with zero monetary values ever transmitted.
+    Reads only supabase/migrations/0013_public_portfolio_functions.sql's
+    three RPC functions - anon has no other path to any real table, and
+    none of those three functions has a monetary return column, full
+    stop (see that migration's own verification query).
+
+    The trick that keeps this both safe AND accurate: every security's
+    real €-valued history arrives already divided by one portfolio-wide
+    constant (0013's own comment explains why), so it's a dimensionless
+    ratio, never €. Fed into the EXACT SAME valueOfSecurityAsOf()/
+    chainLinkedPortfolioReturn()/annualReturns() the authenticated path
+    uses (calculations.js) - scaling every input by one constant never
+    changes a ratio-based calculation's result, so this produces
+    numerically IDENTICAL percentages to the real computation, with zero
+    new TWR math written here to get wrong.
+
+    Deliberately NOT computed here: Investor Return (XIRR). XIRR is
+    money-WEIGHTED by construction - it needs each cash flow's real
+    relative SIZE, which this function set intentionally never exposes
+    (matching Vera's own separate, stricter, earlier requirement that
+    Transactions stays a full gated preview - amounts hidden - even
+    signed in with values off). investorReturnAvailable stays honestly
+    false here rather than approximating a money-weighted number from
+    data that was deliberately withheld.
+
+    Also NOT included: history.marketData (Security Detail's own real
+    EODHD data - that page stays authenticated-only, out of scope for
+    this pass) and portfolio.transactions (a labelled activity feed -
+    0013's public_cash_flow_dates() returns date+type only specifically
+    so it can feed TWR's boundaries without ever building a
+    reconstructible "what happened when" list, per that function's own
+    comment). */
+async function getPortfolioDataPublic() {
+  const [snapshotRes, flowsRes, accountsRes] = await Promise.all([
+    window.db.rpc("public_portfolio_snapshot"),
+    window.db.rpc("public_cash_flow_dates"),
+    window.db.rpc("public_accounts"),
+  ]);
+  if (snapshotRes.error) throw snapshotRes.error;
+  if (flowsRes.error) throw flowsRes.error;
+  if (accountsRes.error) throw accountsRes.error;
+
+  const snapshot = snapshotRes.data || [];
+  const flows = flowsRes.data || [];
+  const accountsRows = accountsRes.data || [];
+
+  // ---------- Per-security scaled history, same shape valueOfSecurityAsOf()
+  // already expects (date, value_eur) - "value_eur" here is the scaled
+  // ratio, not euros, but the function itself is scale-agnostic (it
+  // just finds the nearest-prior point), so nothing about it needs to
+  // change to consume this safely.
+  const securitiesById = new Map();
+  const securityHistories = {};
+  for (const row of snapshot) {
+    if (!securitiesById.has(row.security_id)) {
+      securitiesById.set(row.security_id, { id: row.security_id, name: row.security_name, type: row.security_type, accountId: row.account_id });
+    }
+    const list = securityHistories[row.security_id] || (securityHistories[row.security_id] = []);
+    list.push({ date: row.date, value_eur: row.scaled_value });
+  }
+  for (const list of Object.values(securityHistories)) list.sort((a, b) => a.date.localeCompare(b.date));
+
+  const allObservationDates = [...new Set(snapshot.map((r) => r.date))].sort();
+  const latestDate = allObservationDates[allObservationDates.length - 1] || "0000-00-00";
+  const valueSeries = allObservationDates.map((date) => ({
+    date,
+    value: Object.values(securityHistories).reduce((s, h) => s + valueOfSecurityAsOf(h, date), 0),
+    real: true,
+  }));
+
+  const cashFlowDates = [...new Set(flows.map((f) => f.date))].sort();
+  const inceptionDate = cashFlowDates[0] || null;
+
+  const twrResult = cashFlowDates.length
+    ? chainLinkedPortfolioReturn(securityHistories, cashFlowDates, latestDate)
+    : { subPeriods: [], totalReturnPct: null };
+  const totalReturnAvailable = twrResult.totalReturnPct != null;
+  const totalReturnPct = totalReturnAvailable ? twrResult.totalReturnPct : 0;
+  const yearlyReturns = inceptionDate ? annualReturns(securityHistories, cashFlowDates, latestDate, inceptionDate) : {};
+
+  // ---------- Holdings: weight/return %, no value ----------
+  const totalScaled = [...securitiesById.keys()].reduce((s, id) => s + valueOfSecurityAsOf(securityHistories[id], latestDate), 0);
+  const holdings = [...securitiesById.values()].map((sec) => {
+    const hist = securityHistories[sec.id];
+    const latestVal = valueOfSecurityAsOf(hist, latestDate);
+    const ownReturnPct = hist.length >= 2
+      ? Math.round(((hist[hist.length - 1].value_eur / hist[0].value_eur) - 1) * 10000) / 100
+      : 0;
+    return {
+      id: sec.id, name: sec.name, ticker: "—", type: sec.type, accountId: sec.accountId,
+      value: null, costBasis: null, pnl: null, pnlPct: null,
+      weight: totalScaled ? Math.round((latestVal / totalScaled) * 10000) / 100 : 0,
+      returnPct: ownReturnPct,
+      tone: tokenColor("asset", sec.name.replace(/[^a-zA-Z0-9]/g, "_")),
+    };
+  });
+
+  const accounts = accountsRows.map((a) => ({ id: a.id, name: a.name, currency: a.currency, tone: tokenColor("account", a.name) }));
+  const accountAllocation = accounts.map((a) => {
+    const weight = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.weight, 0);
+    return { name: a.name, value: null, weight: Math.round(weight * 100) / 100, tone: a.tone };
+  });
+  const productAllocation = holdings.map((h) => ({ id: h.id, name: h.name, ticker: h.ticker, weight: h.weight, tone: h.tone }));
+
+  const currencyMap = new Map();
+  for (const a of accountAllocation) {
+    const account = accountsRows.find((row) => row.name === a.name);
+    const code = account?.currency || "EUR";
+    currencyMap.set(code, (currencyMap.get(code) || 0) + a.weight);
+  }
+  const currency = [...currencyMap.entries()].map(([code, weight]) => ({
+    code, weight: Math.round(weight * 100) / 100, tone: code === "EUR" ? "coral" : "blue",
+  }));
+
+  // ---------- Still-real, not-yet-migrated fields - same source and
+  // same reasoning as getPortfolioDataLive() above: real, non-monetary,
+  // shown identically regardless of auth state. ----------
+  const staticReal = getMockPortfolioData().analytics;
+
+  const largest = holdings.length ? [...holdings].sort((a, b) => b.weight - a.weight)[0] : null;
+  const cashHolding = holdings.find((h) => h.type === "Cash");
+  const health = {
+    holdingsCount: holdings.length,
+    accountsCount: accounts.length,
+    transactionsCount: flows.length,
+    countriesCount: staticReal.countries.length,
+    assetClassesCount: staticReal.assetClassAllocation.length,
+    currenciesCount: currency.length,
+    largestPosition: largest ? { name: largest.name, weight: largest.weight } : { name: "—", weight: 0 },
+    cashRatio: cashHolding ? cashHolding.weight : 0,
+  };
+
+  return {
+    portfolio: { holdings, accounts, cash: null, transactions: [] },
+    history: { valueSeries, inceptionDate, benchmarks: null, marketData: {} },
+    analytics: {
+      assetClassAllocation: staticReal.assetClassAllocation,
+      productAllocation,
+      accountAllocation,
+      regions: staticReal.regions,
+      countries: staticReal.countries,
+      notCountrySpecificWeight: staticReal.notCountrySpecificWeight,
+      currency,
+      health,
+      performance: {
+        totalValue: null, investedCapital: null, unrealisedGain: null, unrealisedGainPct: null,
+        totalReturnPct, totalReturnAvailable,
+        investorReturnPct: 0, investorReturnAvailable: false,
+        yearlyReturns,
+        todayChange: null, todayChangePct: null, cash: null,
+      },
+    },
+    settings: { currency: "EUR", benchmark: null, timezone: "Europe/Lisbon" },
+    metadata: { lastUpdated: new Date().toISOString(), source: "public-real", version: "1.0.0" },
+  };
+}
+
 /** The single entry point app.js calls - lets init() stay one call site
     regardless of which backend actually answers it. Falls back to the
     mock on any failure (signed out, RLS empty, a real error) so Overview
@@ -308,6 +466,22 @@ async function getPortfolioDataAuto() {
       // stale mock data because something broke" - those look identical
       // otherwise, which is exactly what made a real Supabase edit
       // (updated valuations) appear to do nothing.
+      const fallback = getMockPortfolioData();
+      fallback.metadata.source = "mock-fallback-error";
+      fallback.metadata.loadError = err.message || String(err);
+      return fallback;
+    }
+  }
+  if (window.db) {
+    try {
+      return await getPortfolioDataPublic();
+    } catch (err) {
+      // Signed-out AND the public RPC path failed (0013's functions not
+      // deployed yet, a real error, etc.) - same "don't render blank,
+      // don't hide a real bug" reasoning as the authenticated branch
+      // above, tagged with its own distinct source so this specific
+      // failure mode is identifiable too.
+      console.warn("Public portfolio data load failed, falling back to mock:", err);
       const fallback = getMockPortfolioData();
       fallback.metadata.source = "mock-fallback-error";
       fallback.metadata.loadError = err.message || String(err);

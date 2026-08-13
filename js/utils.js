@@ -181,6 +181,11 @@ function normalizeName(name) {
 /* ---------- Formatting ---------- */
 
 function fmtEUR(v, opts = {}) {
+  // Genuinely unknown/withheld (e.g. the public signed-out data path,
+  // which deliberately never has a real € figure to show) reads as "—",
+  // never a crash - v.toFixed()-style formatters throw on null/undefined,
+  // and NaN would otherwise render as the literal string "NaN".
+  if (v == null || Number.isNaN(v)) return "—";
   const { signed = false, decimals = 2 } = opts;
   const sign = signed && v > 0 ? "+" : "";
   return sign + new Intl.NumberFormat("en-IE", {
@@ -192,6 +197,7 @@ function fmtEUR(v, opts = {}) {
 }
 
 function fmtPct(v, opts = {}) {
+  if (v == null || Number.isNaN(v)) return "—";
   const { signed = true, decimals = 2 } = opts;
   const sign = signed && v > 0 ? "+" : "";
   return `${sign}${v.toFixed(decimals)}%`;
@@ -251,6 +257,8 @@ const ICONS = {
   fileCheck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2h7l5 5v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v5h5"/><path d="M9 15l2 2 4-4.5"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   edit3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 13h4"/></svg>',
   xCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>',
 };

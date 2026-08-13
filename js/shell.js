@@ -29,18 +29,20 @@ const VALUES_VISIBLE_KEY = "portfolio_io_values_visible";
     of sign-in state itself. Signing in already grants real read/write
     access (Layer 2) - this only controls whether money renders on screen
     right now, for the "showing someone Portfol.io in person while signed
-    in" case. Defaults to visible (true) the first time you're ever signed
-    in, since that's the common case; explicit choices persist across
-    reloads via localStorage (there is exactly one real user of this app,
-    so a shared browser-level flag is the right scope - it isn't meant to
-    survive a sign-out/sign-in as a different person, which this app
-    doesn't support anyway). This is NOT a second authentication layer, by
-    design - it's a display preference, and every table it protects is
-    still fully RLS-gated on the real Supabase session regardless of this
-    flag's value. */
+    in" case. Defaults to HIDDEN the first time you're ever signed in -
+    deliberately, so signing in on a shared/borrowed screen (or signing in
+    privately, updating the portfolio, then showing someone the app later)
+    never flashes real numbers before you've made an explicit choice to
+    reveal them. Explicit choices persist across reloads via localStorage
+    (there is exactly one real user of this app, so a shared browser-level
+    flag is the right scope - it isn't meant to survive a sign-out/sign-in
+    as a different person, which this app doesn't support anyway). This is
+    NOT a second authentication layer, by design - it's a display
+    preference, and every table it protects is still fully RLS-gated on
+    the real Supabase session regardless of this flag's value. */
 function valuesVisible() {
   const stored = localStorage.getItem(VALUES_VISIBLE_KEY);
-  return stored === null ? true : stored === "true";
+  return stored === "true";
 }
 
 /** Reloads on purpose rather than trying to re-render every open page's
@@ -138,49 +140,79 @@ function indexValueSeries(series) {
  * "#" placeholder until it's actually built - a dead link reads honestly
  * as "not built yet", a fake href would silently 404.
  */
-const NAV_GROUPS = [
+/** Two-level navigation (approved design, replacing the old flat
+    5-group/16-item scrolling list): a primary rail of just 4 categories,
+    each opening a contextual panel of its own pages - never all 16
+    pages visible at once. Adding a future page (Simulator's eventual
+    Monte Carlo/scenario-analysis/optimisation sub-tools) is one more
+    entry in the relevant category's items array, never a structural
+    change - that future-proofing was the explicit point of this shape. */
+const NAV_CATEGORIES = [
   {
-    group: "Portfolio",
+    key: "portfolio",
+    label: "Portfolio",
+    icon: "pieChart",
     items: [
       { label: "Overview", icon: "home", href: "index.html" },
       { label: "Portfolio Detail", icon: "pieChart", href: "portfolio-detail.html" },
       { label: "Performance", icon: "trendingUp", href: "performance.html" },
       { label: "Allocation", icon: "pieChart", href: "allocation.html" },
-      { label: "Risk", icon: "activity", href: "#" },
     ],
   },
   {
-    group: "Investments",
+    key: "investments",
+    label: "Investments",
+    icon: "landmark",
     private: true,
     items: [
       { label: "Accounts", icon: "landmark", href: "accounts.html" },
-      { label: "Transactions", icon: "receipt", href: "transactions.html" },
+      // discoverable: this category itself stays visible signed out (so
+      // a visitor can open it and find Transactions) even though the
+      // category as a whole is private - Accounts/Valuations/Costs
+      // still don't appear in its panel until signed in. See
+      // transactions.js:renderSignedOutState() for the gated-preview
+      // page this leads to.
+      { label: "Transactions", icon: "receipt", href: "transactions.html", discoverable: true },
       { label: "Valuations", icon: "activity", href: "valuations.html" },
       { label: "Costs", icon: "wallet", href: "costs.html" },
     ],
   },
   {
-    group: "Research",
+    key: "research",
+    label: "Research",
+    icon: "trendingUp",
     items: [
       { label: "Securities", icon: "pieChart", href: "products.html" },
       { label: "Broker Comparison", icon: "landmark", href: "brokers.html" },
-      { label: "Benchmarks", icon: "barChart3", href: "#" },
-      { label: "Market Data", icon: "trendingUp", href: "#" },
-      { label: "Simulator", icon: "sparkles", href: "#" },
     ],
   },
   {
-    group: "Operations",
-    private: true,
-    editOnly: true,
-    items: [{ label: "Data Hub", icon: "upload", href: "data-hub.html" }],
+    key: "analysis",
+    label: "Analysis",
+    icon: "activity",
+    items: [
+      { label: "Risk", icon: "activity", href: "coming-soon.html?feature=risk" },
+      { label: "Benchmarks", icon: "barChart3", href: "coming-soon.html?feature=benchmarks" },
+      { label: "Market Data", icon: "trendingUp", href: "coming-soon.html?feature=market-data" },
+      { label: "Simulator", icon: "sparkles", href: "coming-soon.html?feature=simulator" },
+    ],
   },
-  {
-    group: "Administration",
-    private: true,
-    editOnly: true,
-    items: [{ label: "Settings", icon: "settings", href: "#" }],
-  },
+];
+
+/** System-level utilities, not investment workflow - deliberately kept
+    out of the four main categories, shown smaller/muted below a divider
+    in the nav. Data Hub is genuinely public - its own page already only
+    gates the final "load to database" step behind sign-in
+    (js/data-hub.js:dbLoadBlockHTML()), parsing/preview works for anyone,
+    so hiding the nav link itself when signed out was never necessary.
+    Settings isn't a real page yet (still Coming Soon, same content
+    either way), so there's nothing to gate - once it becomes real, it
+    should adopt the same gated-preview pattern Transactions already
+    uses (js/transactions.js:renderSignedOutState()), not a full nav
+    hide. */
+const NAV_UTILITIES = [
+  { label: "Data Hub", icon: "upload", href: "data-hub.html" },
+  { label: "Settings", icon: "settings", href: "coming-soon.html?feature=settings" },
 ];
 
 /** Active state is which page is actually loaded, not a hardcoded flag -
@@ -200,24 +232,96 @@ function navItemHTML(item) {
     </a>`;
 }
 
-/** editOnly groups (Operations/Administration) are shown to any signed-in
-    user today, not gated on real Edit Mode - edit_sessions doesn't exist
-    as working code yet (docs/information-architecture.md §2 specifies
-    Edit-only for these two). The "· Edit" tag makes that gap visible in
-    the UI itself rather than hiding a known simplification silently -
-    remove the tag the same day edit_sessions ships and this becomes the
-    real thing it's currently standing in for. */
-function navGroupHTML(group) {
-  if (group.private && !currentUser()) return "";
-  const tag = group.editOnly ? ` <span class="nav-group-tag">· Edit</span>` : "";
-  return `
-    <div class="nav-group-label">${group.group}${tag}</div>
-    ${group.items.map(navItemHTML).join("")}`;
+/** Items actually visible for this category right now - the exact same
+    private/discoverable rule the old flat 5-group list used (see the
+    git history on this function for that version's own comment), just
+    applied per-category instead of per-group. A private category with
+    no discoverable items signed out is filtered out of the rail
+    entirely by navRailHTML below, exactly like the old empty-group
+    case. */
+function visibleCategoryItems(category) {
+  if (category.private && !currentUser()) {
+    return category.items.filter((i) => i.discoverable);
+  }
+  return category.items;
 }
 
-function renderNavGroups(navEl) {
-  navEl.innerHTML = NAV_GROUPS.map(navGroupHTML).join("");
-  navEl.querySelectorAll(".nav-item").forEach((el) => el.addEventListener("click", () => close()));
+/** Which category the CURRENT PAGE lives in - drives the rail's active
+    highlight AND which panel auto-opens, every time the drawer opens
+    (see initNavigation's open() below) - reopening always orients you
+    to where you actually are, never wherever you last manually browsed.
+    Falls back to the first visible category for pages that aren't in
+    any category's panel (a Coming Soon page reached from a category
+    that's since become hidden, or similar edge cases) - never crashes
+    on a page with no match. */
+function categoryForCurrentPage() {
+  const current = currentPageFile() + window.location.search;
+  const match = NAV_CATEGORIES.find((c) =>
+    visibleCategoryItems(c).some((i) => i.href === current || i.href === currentPageFile())
+  );
+  return (match || NAV_CATEGORIES[0]).key;
+}
+
+/** One collapsible category section - a header button (toggles open/
+    closed, never navigates) plus its pages underneath when expanded.
+    Single narrow column, no second panel - back to approximately the
+    original sidebar width, per the revised design. hasActivePage marks
+    the header even while collapsed, so you can always tell which
+    section your current page lives in at a glance. */
+function navCategoryHTML(category, expandedSet) {
+  const items = visibleCategoryItems(category);
+  if (!items.length) return "";
+  const isExpanded = expandedSet.has(category.key);
+  const hasActivePage = items.some((i) => i.href === currentPageFile());
+  return `
+    <div class="nav-accordion-group">
+      <button class="nav-accordion-header${hasActivePage ? " has-active" : ""}" type="button" data-category-toggle="${category.key}" aria-expanded="${isExpanded}">
+        <span>${category.label}</span>
+        <span class="nav-accordion-chevron${isExpanded ? " expanded" : ""}">${icon("chevronDown")}</span>
+      </button>
+      <div class="nav-accordion-body"${isExpanded ? "" : " hidden"}>
+        ${items.map(navItemHTML).join("")}
+      </div>
+    </div>`;
+}
+
+function navUtilityHTML(u) {
+  const active = u.href !== "#" && u.href === currentPageFile();
+  return `
+    <a class="nav-rail-utility${active ? " active" : ""}" href="${u.href}">
+      <span class="nav-icon">${icon(u.icon)}</span>
+      <span>${u.label}</span>
+    </a>`;
+}
+
+// Which categories are currently expanded - a Set, not a single active
+// key, since multiple can be open at once (the user's own manual
+// expansions are never force-collapsed just because they opened
+// another section too). Seeded fresh per page load in initNavigation();
+// reopening the drawer later only ADDS the current page's category if
+// it isn't already open, never resets what the user had open.
+let expandedCategories = new Set();
+
+function renderNav(drawer) {
+  const navEl = drawer.querySelector("#sb-nav");
+  const categoryBlocks = NAV_CATEGORIES.map((c) => navCategoryHTML(c, expandedCategories)).join("");
+  const utilityLinks = NAV_UTILITIES.map(navUtilityHTML).join("");
+
+  navEl.innerHTML = `
+    ${categoryBlocks}
+    <div class="sb-nav-divider"></div>
+    ${utilityLinks}`;
+
+  navEl.querySelectorAll("[data-category-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.categoryToggle;
+      if (expandedCategories.has(key)) expandedCategories.delete(key);
+      else expandedCategories.add(key);
+      renderNav(drawer);
+    });
+  });
+
+  navEl.querySelectorAll(".nav-item, .nav-rail-utility").forEach((el) => el.addEventListener("click", () => close()));
 }
 
 let closeNavDrawer = () => {};
@@ -259,12 +363,20 @@ function initNavigation(user) {
   // breakpoint anymore (see this section's header comment).
   document.body.append(backdrop, drawer);
 
-  renderNavGroups(drawer.querySelector("#sb-nav"));
-  onAuthChange(() => renderNavGroups(drawer.querySelector("#sb-nav")));
+  expandedCategories = new Set([categoryForCurrentPage()]);
+  renderNav(drawer);
+  onAuthChange(() => { expandedCategories = new Set([categoryForCurrentPage()]); renderNav(drawer); });
 
   const isOpen = () => document.body.classList.contains("nav-open");
 
   const open = () => {
+    // Ensures the current page's category is open every time the
+    // drawer opens - but only ADDS it, never resets what's already
+    // expanded, so a category you manually opened earlier in this page
+    // view stays open rather than being force-collapsed on every
+    // reopen.
+    expandedCategories.add(categoryForCurrentPage());
+    renderNav(drawer);
     document.body.classList.add("nav-open");
     logoBtn.setAttribute("aria-expanded", "true");
     document.addEventListener("keydown", onKey);
@@ -300,7 +412,23 @@ function timeGreeting() {
     it doesn't create it - that's why renderTopbar() has to run before
     initNavigation() in every page's init(), not after (this was the
     other way around before this pass). */
+/** Masks the small gap above the sticky topbar (position:sticky leaves
+    var(--sp-4) of uncovered space between the true viewport top and
+    where the topbar's own box starts) so scrolled-past content can
+    never visibly poke above the header - see #topbar-curtain in
+    layout.css for the full story. Idempotent (checked once per page,
+    every page's init() calls renderTopbar() exactly once) and appended
+    to body directly, same reasoning as the nav backdrop/drawer: it
+    must never participate in page layout, only float above it. */
+function ensureTopbarCurtain() {
+  if (document.getElementById("topbar-curtain")) return;
+  const curtain = document.createElement("div");
+  curtain.id = "topbar-curtain";
+  document.body.appendChild(curtain);
+}
+
 function renderTopbar(container, user, { heading = "Portfolio Overview", subtitle = "Track, analyze and grow your wealth." } = {}) {
+  ensureTopbarCurtain();
   container.innerHTML = `
     <div class="topbar-heading-group">
       <button id="nav-logo-btn" class="nav-logo-btn" type="button" aria-label="Open menu" aria-expanded="false">
@@ -541,6 +669,16 @@ const METRIC_DOCS = {
     calculation: "drawdown_t = close_t / running-peak(close, through t) - 1; maximum drawdown is the minimum of that series over the available history. Close-based, not adjusted_close - the price you could actually have traded at. Minimum: 60 real daily observations, same threshold as Volatility.",
     source: "js/calculations.js:securityMaxDrawdown(), reading js/db.js:getHistoricalPrices().",
   },
+  "security-legacy-performance": {
+    definition: "Research figures transcribed from the old Portfol.io app's Excel-derived database (1Y/3Y/5Y return, volatility, Sharpe/Sortino, beta, max drawdown, calendar-year returns) - a DIFFERENT data source from Market-Price Performance below it, which is computed live from real EODHD daily prices. The two can legitimately disagree, or one can be populated while the other is empty - they're not two views of the same calculation, they're two different provenances that happen to describe similar-sounding metrics.",
+    calculation: "No calculation here - these are the product's own researched/stated figures as transcribed, not recomputed by this app. See Market-Price Performance's own info popovers for the real, live-computed equivalents where available.",
+    source: "supabase/migrations/0005/0006 (security_details columns) - see this row's own data_quality badge and \"Philosophy & Data Provenance\" card below for how substantiated these specific figures are.",
+  },
+  "current-portfolio-composition": {
+    definition: "What this fund/ETF currently holds - Asset Mix, Geographic Exposure, and (where a real factsheet has been imported) a Top Holdings list. Current state only, never a history of past months' compositions - importing a new factsheet replaces this wholesale rather than accumulating one row per holding per month, since nothing in this app currently has an analytical use for that history.",
+    calculation: "Asset Mix / Geographic Exposure: no calculation - real percentages from the product's own reference data. Top Holdings: no calculation either - the ranked list as printed on the source factsheet, parsed but not reweighted or filtered.",
+    source: "Asset Mix/Geographic Exposure: security_details (allocation_as_of). Top Holdings: security_details.top_holdings, written by js/data-hub.js's Data Hub import (composition_as_of = the factsheet's own reporting date, never the import date) - see that card's own \"Data as of\"/\"Imported\" captions for this specific security's actual dates. Genuinely absent (not a placeholder) until a factsheet has actually been imported for this security.",
+  },
 };
 
 // th[data-info]: table column headers (Portfolio Detail's Avg. Cost /
@@ -703,13 +841,23 @@ function holdingDrill(id, data) {
         ${rowHTML("Total Return", `${h.returnPct > 0 ? "+" : ""}${h.returnPct.toFixed(2)}%`)}
         ${rowHTML("Account", account ? account.name : "—")}
       </div>
-      ${comingSoon(["Fees (TER)", "Historical holdings", "Fund/ETF top holdings", "Asset & geographic allocation", "Documents"])}`,
+      <a class="drawer-security-link" href="product-detail.html?id=${h.id}">View Security Detail →</a>
+      ${comingSoon(["Fees (TER)", "Historical holdings", "Fund/ETF top holdings", "Documents"])}`,
   };
 }
 
 function assetClassDrill(name, data) {
   const item = data.analytics.assetClassAllocation.find((a) => a.name === name);
-  const t212Holdings = data.portfolio.holdings.filter((h) => h.accountId !== "bpi");
+  // Looked up by name -> real account id, same fix as accountDrill()
+  // above needed for the same reason: a real Supabase account id is a
+  // UUID, never the mock's hardcoded "bpi" literal. This one was missed
+  // when that fix landed - on live data every holding's accountId
+  // (including BPI Dinâmico's own) is trivially !== "bpi", so
+  // t212Holdings wrongly included BPI Dinâmico itself, t212Total wrongly
+  // summed close to 100%, and bpiPortion (item.weight - t212Total) went
+  // sharply negative - the exact "Equities = -42%" bug this fixes.
+  const bpiAccount = data.portfolio.accounts.find((a) => a.name === "BPI");
+  const t212Holdings = data.portfolio.holdings.filter((h) => h.accountId !== bpiAccount?.id);
   // Every class except Equities comes entirely from BPI Dinâmico's own
   // internal split (Trading212 is 100% equity ETFs, a real fact) - so
   // BPI shows as one "portion" row, not a fabricated per-holding split

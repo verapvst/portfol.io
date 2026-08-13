@@ -111,6 +111,41 @@
 .pd-subsection-label { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 var(--sp-3); }
 .pd-subsection-label-spaced { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--card-border); }
 
+/* Top Holdings (js/product-detail.js:topHoldingsHTML) - a plain ranked
+   list, not a bar chart like Asset Mix/Geographic Exposure above it
+   (those are 2-4 segments summing near 100%; a top-10 holdings list
+   isn't a segmented whole in the same way, so a list reads more
+   honestly than implying precision a bar comparison doesn't have). */
+.pd-holdings-list { display: flex; flex-direction: column; }
+.pd-holding-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--card-border);
+  font-size: 13.5px;
+}
+.pd-holding-row:first-child { border-top: none; }
+.pd-holding-rank { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.pd-holding-name { color: var(--ink); }
+.pd-holding-weight { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Full holdings list (js/product-detail.js:allHoldingsSectionHTML()) -
+   collapsed by default, and even expanded it scrolls within a fixed
+   height rather than stretching the whole page to fit ~118 rows -
+   "don't make the page unnecessarily heavy" applies to the rendered
+   layout, not just the data model. */
+.pd-all-holdings-toggle {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--coral-2);
+  padding: 6px 0;
+}
+.pd-all-holdings-toggle:hover { text-decoration: underline; }
+.pd-all-holdings-list { max-height: 360px; overflow-y: auto; margin-top: var(--sp-2); }
+.pd-all-holdings-list[hidden] { display: none; }
+
 .pd-annual-returns { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--card-border); }
 .pd-annual-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: var(--sp-3); }
 .pd-annual-cell { display: flex; flex-direction: column; gap: 2px; }

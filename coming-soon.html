@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfol.io — Portfolio Detail</title>
+<title>Portfol.io — Coming Soon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/theme.css?v=74">
 <link rel="stylesheet" href="css/layout.css?v=74">
 <link rel="stylesheet" href="css/components.css?v=74">
-<link rel="stylesheet" href="css/portfolio-detail.css?v=74">
+<link rel="stylesheet" href="css/coming-soon.css?v=74">
 </head>
 <body>
 <div id="app">
@@ -18,19 +18,19 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <!-- "What do I have?" - per docs/information-architecture.md §2, this
-         page owns the full position list, avg. cost and unrealised P&L;
-         it deliberately does NOT repeat Performance's TWR/XIRR or
-         Allocation's breakdown tabs, both of which link back here from
-         Overview instead of duplicating this content themselves. -->
-    <section class="card glass interactive" id="holdings-detail-card">
-      <div class="card-header">
-        <div class="card-header-title" data-info="portfolio-detail" tabindex="0" role="button" aria-label="About this page">
-          <h2 class="section-title">Holdings</h2>
-        </div>
-      </div>
-      <p class="section-hint" id="holdings-detail-summary"></p>
-      <div id="holdings-detail-table"></div>
+    <!-- Reusable architecture, not a one-off page: every not-yet-built
+         nav destination (Risk, Benchmarks, Market Data, Simulator today
+         - any future one tomorrow) points here with ?feature=<key>,
+         which js/coming-soon.js resolves against its own small config
+         map. One page, one component, instead of four near-duplicate
+         HTML files - adding the next future feature is a config entry,
+         not a new page. -->
+    <section class="card glass" id="coming-soon-card">
+      <div class="coming-soon-icon" id="coming-soon-icon"></div>
+      <span class="coming-soon-badge">Coming Soon</span>
+      <h1 class="coming-soon-title" id="coming-soon-title"></h1>
+      <p class="coming-soon-description" id="coming-soon-description"></p>
+      <a href="index.html" class="coming-soon-back">← Back to Overview</a>
     </section>
 
   </main>
@@ -44,11 +44,9 @@
 <script src="js/utils.js?v=74"></script>
 <script src="js/calculations.js?v=74"></script>
 <script src="js/repository.js?v=74"></script>
-
 <script src="js/shell.js?v=74"></script>
 <script src="js/auth.js?v=74"></script>
 <script src="js/db.js?v=74"></script>
-<script src="js/analytics.js?v=74"></script>
-<script src="js/portfolio-detail.js?v=74"></script>
+<script src="js/coming-soon.js?v=74"></script>
 </body>
 </html>

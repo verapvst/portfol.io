@@ -320,7 +320,14 @@ function accountOptionsHTML() {
 }
 
 function dbLoadBlockHTML(groupKey, group) {
-  if (!group.fichaMensal) return "";
+  // Was `if (!group.fichaMensal) return ""` - hid the entire Load to
+  // Database section, button included, whenever a Ficha Mensal wasn't
+  // ALSO present, even if a Carteira Detalhada was sitting there ready
+  // to load on its own. loadCostsToDatabase() below already handles fm
+  // and hr (Carteira Detalhada) independently - this gate just never
+  // let you reach the button for an hr-only group. Fixed to only hide
+  // when NEITHER document exists.
+  if (!group.fichaMensal && !group.holdingsReport) return "";
 
   if (!window.db) {
     return `<div class="db-load-block"><p class="db-load-signedout">Supabase isn't configured yet.</p></div>`;
@@ -355,7 +362,7 @@ function dbLoadBlockHTML(groupKey, group) {
           </select>
         </div>
       </div>
-      <button class="load-db-btn" type="button" data-load-db="${groupKey}">Load Costs to Database</button>
+      <button class="load-db-btn" type="button" data-load-db="${groupKey}">Load to Database</button>
       <p class="load-db-status" id="db-status-${cssId(groupKey)}"></p>
     </div>`;
 }
@@ -524,24 +531,84 @@ async function loadCostsToDatabase(groupKey) {
   btn.disabled = true;
 
   try {
+    // fm (Ficha Mensal) and hr (Carteira Detalhada/Detailed Portfolio)
+    // are genuinely different documents - a group can have either, both,
+    // or (impossible to reach this button, but defensively) neither.
+    // Nothing below assumes fm exists unconditionally anymore - it used
+    // to, which meant a holdings-report-only group would crash here.
     const fm = group.fichaMensal;
-    const date = fm.fund.reference_date.value;
-    if (!date) throw new Error("This report has no reference date - can't record dated costs without one.");
+    const hr = group.holdingsReport;
+    const date = fm ? fm.fund.reference_date.value : (hr ? hr.fund.as_of_date.value : null);
+    if (!date) throw new Error("This report has no reference date - can't record dated data without one.");
 
     let securityId = securitySelect.value;
     if (!securityId) {
       securityId = await findOrCreateSecurity({ name: group.fundName, type: "Fund", currency: "EUR" }, state.securities);
     }
 
-    const rows = costRowsFromFichaMensal(fm, securityId, accountSelect.value, date);
-    if (!rows.length) throw new Error("No fee fields were extracted from this report - nothing to load.");
+    // Reflects exactly what's actually being loaded in THIS click, not
+    // a generic constant - so if both documents are loaded together,
+    // neither upsert below silently overwrites the other's provenance
+    // with a partial description (source is one shared column, same
+    // established pattern as costs/performance/allocation already
+    // sharing it - see 0007's own reasoning).
+    const sourceParts = [];
+    if (fm) sourceParts.push("BPI Ficha Mensal");
+    if (hr) sourceParts.push("BPI Carteira Detalhada");
+    const sourceLabel = `${sourceParts.join(" + ")} (Data Hub import)`;
 
-    rows.forEach((r) => { r.portfolio_id = state.portfolioId; });
-    const { error } = await window.db.from("costs").insert(rows);
-    if (error) throw error;
+    const loaded = [];
+
+    if (fm) {
+      const costRows = costRowsFromFichaMensal(fm, securityId, accountSelect.value, date);
+      if (costRows.length) {
+        costRows.forEach((r) => { r.portfolio_id = state.portfolioId; });
+        const { error } = await window.db.from("costs").insert(costRows);
+        if (error) throw error;
+        loaded.push(`${costRows.length} cost row(s)`);
+      }
+
+      // Current-state composition (0011_security_current_composition.sql) -
+      // replaced wholesale on every import, never appended, per Vera's own
+      // "don't accumulate historical composition rows forever" decision.
+      // Upsert (not update) because a brand-new security has no
+      // security_details row yet to update - security_id is that table's
+      // real primary key, so this is a genuine 1:1 upsert, never a
+      // duplicate. "none" confidence means the section wasn't found in
+      // this PDF at all (see field()/confidence throughout
+      // monthlyFactsheetParser.js) - skipped, not saved as an empty list,
+      // so a parsing miss can never look identical to "this fund
+      // genuinely has zero holdings".
+      if (fm.top_holdings.holdings.length && fm.top_holdings.confidence !== "none") {
+        const { error } = await window.db.from("security_details").upsert(
+          { security_id: securityId, top_holdings: fm.top_holdings.holdings, composition_as_of: date, source: sourceLabel },
+          { onConflict: "security_id" }
+        );
+        if (error) throw error;
+        loaded.push(`${fm.top_holdings.holdings.length} top holding(s)`);
+      }
+    }
+
+    // Full current holdings list (0012_security_full_holdings.sql) - the
+    // ~118-row real list, from the Carteira Detalhada specifically
+    // (js/importer/holdingsReportParser.js already parses it in full;
+    // nothing had ever persisted that output before this). Kept
+    // independent of the Ficha Mensal branch above - a security can get
+    // this without ever having a Ficha Mensal loaded at all.
+    if (hr && hr.holdings.length) {
+      const hrDate = (hr.fund.as_of_date && hr.fund.as_of_date.value) || date;
+      const { error } = await window.db.from("security_details").upsert(
+        { security_id: securityId, all_holdings: hr.holdings, all_holdings_as_of: hrDate, source: sourceLabel },
+        { onConflict: "security_id" }
+      );
+      if (error) throw error;
+      loaded.push(`${hr.holdings.length} full holding(s)`);
+    }
+
+    if (!loaded.length) throw new Error("No fee fields, top holdings, or detailed holdings were extracted from this report - nothing to load.");
 
     statusEl.className = "load-db-status is-success";
-    statusEl.textContent = `${rows.length} cost row(s) loaded ✓`;
+    statusEl.textContent = `${loaded.join(" + ")} loaded ✓`;
     btn.textContent = "Loaded ✓";
   } catch (err) {
     statusEl.className = "load-db-status is-error";

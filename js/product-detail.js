@@ -213,7 +213,7 @@ function performanceHTML(p) {
   return `
     <section class="card glass interactive" id="pd-performance-card">
       <div class="card-header">
-        <div class="card-header-title"><h2 class="section-title">Performance &amp; Risk</h2></div>
+        <div class="card-header-title" data-info="security-legacy-performance" tabindex="0" role="button" aria-label="About this metric"><h2 class="section-title">Performance &amp; Risk</h2></div>
       </div>
       <div class="pd-stat-row">
         <div class="pd-stat"><span class="pd-stat-label">1Y Return</span><span class="pd-stat-value">${fmtPctPlain(p.return_1y_pct)}</span></div>
@@ -323,11 +323,90 @@ function allocBarHTML(label, weight, tone) {
     </div>`;
 }
 
+/** "Current Portfolio Composition" - what THIS fund/ETF currently holds
+    (asset mix + geographic exposure, both real security_details fields -
+    see 0005/0008's own migrations), not a history of what it held in
+    past months. Sector breakdown and a real top-holdings list aren't
+    here yet - the underlying parser (js/importer/monthlyFactsheetParser.js)
+    already extracts top_holdings from a factsheet PDF, but nothing
+    persists that output today (see the Data Hub architecture review) -
+    genuinely missing, not hidden, so no placeholder row pretends
+    otherwise. */
+/** Top Holdings - real data once a BPI Ficha Mensal has actually been
+    imported through the Data Hub (js/data-hub.js:loadCostsToDatabase(),
+    security_details.top_holdings, 0011_security_current_composition.sql)
+    - current state only, replaced wholesale on each new import, never
+    an accumulated history. Omitted entirely (not a placeholder row)
+    when nothing's been imported yet - null must never look like "this
+    fund has zero holdings". Its own composition_as_of caption is
+    separate from the Asset Mix/Geographic Exposure fields below it
+    (allocation_as_of) since they can genuinely come from different
+    imports/dates. */
+function topHoldingsHTML(holdings, asOf) {
+  if (!holdings || !holdings.length) return "";
+  const rows = holdings.map((h, i) => `
+    <div class="pd-holding-row">
+      <span class="pd-holding-rank">${i + 1}</span>
+      <span class="pd-holding-name">${h.asset}</span>
+      <span class="pd-holding-weight">${h.weight_pct != null ? fmtPctPlain(h.weight_pct, 2) : "—"}</span>
+    </div>`).join("");
+  return `
+    <p class="pd-subsection-label pd-subsection-label-spaced">Top Holdings</p>
+    <div class="pd-holdings-list">${rows}</div>
+    ${lastUpdatedHTML(asOf)}`;
+}
+
+/** The FULL current holdings list (~118 for BPI Dinâmico) - distinct
+    from topHoldingsHTML() above, which is the Ficha Mensal's own
+    shorter summary. Collapsed by default and only rendered into the
+    DOM when expanded (not just hidden via CSS) - a genuinely different
+    document (security_details.all_holdings, 0012), so it gets its own
+    toggle and its own "Data as of" caption rather than being folded
+    into Top Holdings. Never auto-expanded: 118 rows is real weight on
+    the page, shown only once actually asked for. */
+function allHoldingsSectionHTML(holdings, asOf) {
+  if (!holdings || !holdings.length) return "";
+  return `
+    <div class="pd-subsection-label-spaced">
+      <button type="button" class="pd-all-holdings-toggle" id="pd-all-holdings-toggle" aria-expanded="false">
+        Show all ${holdings.length} holdings
+      </button>
+      <div class="pd-holdings-list pd-all-holdings-list" id="pd-all-holdings-list" hidden></div>
+      ${lastUpdatedHTML(asOf)}
+    </div>`;
+}
+
+/** Renders the actual rows lazily, the first time the toggle opens -
+    not up front in allHoldingsSectionHTML()'s own string, so a
+    collapsed page never pays the cost of building/parsing ~118 rows of
+    markup it may never show. */
+function initAllHoldingsToggle(holdings) {
+  const btn = $("pd-all-holdings-toggle");
+  if (!btn) return;
+  const list = $("pd-all-holdings-list");
+  let rendered = false;
+  btn.addEventListener("click", () => {
+    const expanded = btn.getAttribute("aria-expanded") === "true";
+    if (!expanded && !rendered) {
+      list.innerHTML = holdings.map((h, i) => `
+        <div class="pd-holding-row">
+          <span class="pd-holding-rank">${i + 1}</span>
+          <span class="pd-holding-name">${h.name}</span>
+          <span class="pd-holding-weight">${h.weight_pct != null ? fmtPctPlain(h.weight_pct, 2) : "—"}</span>
+        </div>`).join("");
+      rendered = true;
+    }
+    btn.setAttribute("aria-expanded", String(!expanded));
+    btn.textContent = expanded ? `Show all ${holdings.length} holdings` : "Hide full holdings list";
+    list.hidden = expanded;
+  });
+}
+
 function allocationHTML(p) {
   return `
     <section class="card glass interactive" id="pd-allocation-card">
       <div class="card-header">
-        <div class="card-header-title"><h2 class="section-title">Allocation &amp; Exposure</h2></div>
+        <div class="card-header-title" data-info="current-portfolio-composition" tabindex="0" role="button" aria-label="About this metric"><h2 class="section-title">Current Portfolio Composition</h2></div>
       </div>
       <p class="pd-subsection-label">Asset Mix</p>
       ${allocBarHTML("Stocks", p.alloc_stocks_pct, "blue")}
@@ -342,6 +421,8 @@ function allocationHTML(p) {
         <div class="pd-stat"><span class="pd-stat-label">Top 10 Concentration</span><span class="pd-stat-value">${p.concentration_top10 != null ? fmtPctPlain(p.concentration_top10 * 100, 1) : "—"}</span></div>
       </div>
       ${lastUpdatedHTML(p.allocation_as_of)}
+      ${topHoldingsHTML(p.top_holdings, p.composition_as_of)}
+      ${allHoldingsSectionHTML(p.all_holdings, p.all_holdings_as_of)}
     </section>`;
 }
 
@@ -420,6 +501,7 @@ function renderProduct(p, held, marketAnalytics) {
   `;
   initHorizonPills(p);
   renderCostDrag(p);
+  initAllHoldingsToggle(p.all_holdings || []);
 }
 
 function renderNotFound(reason) {

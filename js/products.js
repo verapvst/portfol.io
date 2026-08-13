@@ -14,6 +14,8 @@ function $(id) { return document.getElementById(id); }
 let productsCache = [];
 let heldSecurityIds = new Set();
 let currentTypeFilter = "";
+let currentHeldFilter = ""; // "" | "held" | "not-held"
+let currentProviderFilter = "";
 let currentSearch = "";
 
 const PRODUCT_TYPES = ["Fund", "ETF", "PPR", "Insurance"];
@@ -58,6 +60,10 @@ function renderProducts(container) {
   const rows = productsCache.filter((p) => {
     const s = p.securities;
     if (currentTypeFilter && s.type !== currentTypeFilter) return false;
+    const held = heldSecurityIds.has(s.id);
+    if (currentHeldFilter === "held" && !held) return false;
+    if (currentHeldFilter === "not-held" && held) return false;
+    if (currentProviderFilter && (!s.institutions || s.institutions.name !== currentProviderFilter)) return false;
     if (q && !s.name.toLowerCase().includes(q) && !(s.institutions && s.institutions.name.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -101,6 +107,50 @@ function renderTypeTabs(tabsEl) {
   });
 }
 
+/** "Held / Not Held" - the key requirement this filter pass exists for
+    (Vera: "I should immediately be able to see which securities I
+    actually hold"). heldSecurityIds comes from a real Transactions
+    query, never inferred from the product catalogue itself - a
+    researched-but-never-bought product must never read as "held". */
+function renderHeldTabs(tabsEl) {
+  const options = [["", "All"], ["held", "Held"], ["not-held", "Not Held"]];
+  tabsEl.innerHTML = options
+    .map(([v, label]) => `<button class="tab-btn${v === currentHeldFilter ? " active" : ""}" data-held="${v}" role="tab" aria-selected="${v === currentHeldFilter}">${label}</button>`)
+    .join("");
+  tabsEl.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      currentHeldFilter = btn.dataset.held;
+      tabsEl.querySelectorAll(".tab-btn").forEach((b) => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
+      btn.classList.add("active");
+      btn.setAttribute("aria-selected", "true");
+      renderProducts($("product-library-body"));
+    });
+  });
+}
+
+/** Provider = the security's own issuer/institution (securities.
+    institutions - already real, already joined by loadProductLibrary(),
+    the same fact already shown in each row's subtitle). Not a new
+    category - just exposing an existing field as a filter. Built from
+    whichever institutions are actually present in the loaded catalogue,
+    not a hardcoded list, so it never drifts from the real data. Exchange
+    was considered too (per the brief) but skipped: it isn't its own
+    field anywhere in the schema today (data_provider_symbol embeds it as
+    a suffix, e.g. "UETW.XETRA", not a clean queryable column) - adding
+    an Exchange filter now would mean inventing a category the taxonomy
+    doesn't actually have yet. */
+function renderProviderFilter(selectEl) {
+  const providers = [...new Set(
+    productsCache.map((p) => p.securities.institutions && p.securities.institutions.name).filter(Boolean)
+  )].sort();
+  selectEl.innerHTML = `<option value="">All providers</option>` +
+    providers.map((name) => `<option value="${name}"${name === currentProviderFilter ? " selected" : ""}>${name}</option>`).join("");
+  selectEl.addEventListener("change", (e) => {
+    currentProviderFilter = e.target.value;
+    renderProducts($("product-library-body"));
+  });
+}
+
 function renderSummary() {
   const n = productsCache.length;
   $("product-library-summary").textContent = `${n} product${n === 1 ? "" : "s"} on file - funds, ETFs, PPRs and unit-linked insurance, real and researched.`;
@@ -117,6 +167,7 @@ function renderSignedOutState() {
     </div>`;
   $("product-library-signin-cta").addEventListener("click", () => window.openAuthModal());
   $("product-search").disabled = true;
+  $("product-provider-filter").disabled = true;
 }
 
 async function loadProductLibraryPage() {
@@ -147,6 +198,7 @@ async function loadProductLibraryPage() {
     heldSecurityIds = new Set((transactions.data || []).map((t) => t.security_id).filter(Boolean));
 
     renderSummary();
+    renderProviderFilter($("product-provider-filter"));
     renderProducts(body);
   } catch (err) {
     const missingTable = /relation .*security_details.* does not exist/i.test(err.message || "");
@@ -172,6 +224,7 @@ function init() {
   initAuthButton($("auth-slot"));
 
   renderTypeTabs($("product-type-tabs"));
+  renderHeldTabs($("product-held-tabs"));
   $("product-search").addEventListener("input", (e) => {
     currentSearch = e.target.value;
     renderProducts($("product-library-body"));

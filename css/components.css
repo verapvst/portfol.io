@@ -225,13 +225,77 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 .sb-name { font-weight: 500; font-size: 14px; }
 .sb-role { font-size: 12px; color: var(--muted); }
 
+/* ---------- Collapsible accordion navigation ----------
+   Single narrow column again (back to approximately the original
+   sidebar width - the two-panel split felt too wide/heavy) - each of
+   the 4 categories is a collapsible section, never all 16 pages shown
+   flat at once. See js/shell.js's NAV_CATEGORIES/NAV_UTILITIES/
+   renderNav() for the data and interaction this renders. */
 .sb-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: 2px;
   flex: 1;
   overflow-y: auto;
 }
+
+.nav-accordion-group { display: flex; flex-direction: column; }
+
+.nav-accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-3) 12px;
+  border-radius: var(--r-2xl);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.nav-accordion-header:hover { background: color-mix(in oklab, white 60%, transparent); color: var(--ink); }
+/* The section containing the current page stays legible even while
+   collapsed - a coral tint on the label, not the full active-item
+   gradient (that's reserved for the actual page below it). */
+.nav-accordion-header.has-active { color: var(--coral-2); }
+
+.nav-accordion-chevron {
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.nav-accordion-chevron.expanded { transform: rotate(180deg); }
+.nav-accordion-chevron svg { width: 100%; height: 100%; }
+
+.nav-accordion-body { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 var(--sp-2); }
+.nav-accordion-body[hidden] { display: none; }
+
+.sb-nav-divider { height: 1px; background: var(--card-border); margin: var(--sp-3) 4px; }
+
+/* Data Hub / Settings - deliberately quieter than the 4 categories
+   above them (smaller, muted, no active-gradient treatment beyond a
+   simple colour change) - system utilities, not investment workflow. */
+.nav-rail-utility {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-2xl);
+  font-size: 12.5px;
+  color: var(--muted);
+  opacity: 0.85;
+  transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+.nav-rail-utility:hover { background: color-mix(in oklab, white 60%, transparent); color: var(--ink); opacity: 1; }
+.nav-rail-utility.active { color: var(--coral-2); opacity: 1; }
 
 /* One per group (Portfolio/Investments/Research/Operations/Administration
    - see js/shell.js's NAV_GROUPS). Quiet on purpose - structure, not a
@@ -303,7 +367,10 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 
 /* ---------- Per-breakpoint sizing - same overlay everywhere, only its
    width/inset changes, per your explicit instruction that this should
-   be the only difference between breakpoints. ---------- */
+   be the only difference between breakpoints. Back to the original
+   320px/280px now that navigation is single-column again - the wider
+   380px/340px sizing only existed to give the two-panel split room to
+   breathe, and that split is gone. ---------- */
 @media (min-width: 1024px) {
   #nav-drawer { width: 320px; top: var(--sp-6); left: var(--sp-6); bottom: var(--sp-6); }
 }
@@ -963,6 +1030,15 @@ th[data-info]:focus-visible {
 .drawer-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--card-border); }
 .drawer-row span:first-child { font-weight: 300; color: color-mix(in oklab, var(--ink) 80%, transparent); }
 .drawer-row span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.drawer-security-link {
+  display: inline-block;
+  margin-top: var(--sp-5);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--coral-2);
+}
+.drawer-security-link:hover { text-decoration: underline; }
 
 .drawer-coming-soon { margin-top: var(--sp-6); padding: var(--sp-4); border-radius: var(--r-lg); background: color-mix(in oklab, var(--grey-1) 60%, transparent); }
 .drawer-hint { font-size: 12px; color: var(--muted); }

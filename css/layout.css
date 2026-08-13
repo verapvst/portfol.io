@@ -15,6 +15,33 @@ body {
   letter-spacing: -0.011em;
 }
 
+/* Root cause of the "content overlapping the header" bug reported on
+   Security Detail (and structurally present on every page, just most
+   visible on tall two-column ones): .topbar is `position: sticky; top:
+   var(--sp-4)` (components.css), which leaves a var(--sp-4) strip
+   between the true viewport top and where the topbar's own box starts.
+   That strip was never covered by anything - not a z-index problem
+   (nothing was there to stack against), just uncovered space, so
+   whatever page content scrolled to occupy it rendered there in plain
+   view, reading as content "poking above" the header. #topbar-curtain
+   (a real element, injected once by js/shell.js:renderTopbar() - a
+   ::before pseudo-element was tried first but proved unreliable to
+   verify/hit-test) pins exactly over that strip, same solid page
+   background as everywhere else, so nothing can ever show through it
+   again - invisible at rest (identical to the blank space that was
+   already there unscrolled), effective the moment anything scrolls
+   into it. */
+#topbar-curtain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--sp-4);
+  background: var(--bg);
+  z-index: 41;
+  pointer-events: none;
+}
+
 img { display: block; max-width: 100%; }
 
 button, input {

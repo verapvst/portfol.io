@@ -244,6 +244,13 @@
   align-items: center;
   gap: 4px;
 }
+/* This icon() call existed before "chevronDown" was a real entry in
+   utils.js's ICONS map (added for the nav accordion) - previously
+   silently empty, so nothing here ever needed a size rule. Now that the
+   icon is real, it renders at the SVG's own unconstrained intrinsic
+   size without one - hence the huge icon. Same 14px every other inline
+   button icon in this app uses. */
+.raw-tables-toggle svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 .raw-tables { margin-top: var(--sp-4); display: none; flex-direction: column; gap: var(--sp-6); }
 .raw-tables.open { display: flex; }

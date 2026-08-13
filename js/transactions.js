@@ -296,13 +296,23 @@ function openTransactionModal(transactionId) {
 
 /* ---------- Page init ---------- */
 
+/** A deliberate feature-preview/authenticated-gate state, not a
+    sign-in nudge bolted onto an otherwise-empty page. The point (per
+    the access-model brief) is that a signed-out visitor should learn
+    "this platform has a transaction-management feature" without
+    learning anything about the real data - so nothing here is a masked
+    or truncated version of a real transaction; no query for
+    transactions/accounts/securities ever runs before `user` is checked
+    (see loadTransactionsPage() below), so there is nothing to
+    accidentally leak even a count or shape of. */
 function renderSignedOutState() {
   const container = $("transactions-table-container");
   container.innerHTML = `
-    <div class="transactions-signin-note">
-      Sign in to view and manage your transactions.
-      <br/>
-      <button type="button" id="transactions-signin-cta">Sign In</button>
+    <div class="transactions-gated-state">
+      <span class="transactions-gated-icon">${icon("lock")}</span>
+      <h3 class="transactions-gated-title">Transactions</h3>
+      <p class="transactions-gated-message">Your transaction history is private.</p>
+      <button type="button" id="transactions-signin-cta" class="transactions-gated-cta">Login to access</button>
     </div>`;
   $("transactions-signin-cta").addEventListener("click", () => window.openAuthModal());
   $("add-transaction-btn").disabled = true;
