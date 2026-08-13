@@ -105,9 +105,10 @@ function renderAll(data) {
    security (the exact risk that made "BPI Dinâmico" vs "BPI Smart
    Dinâmico PPR" confusing in the free-text datalist).
 
-   "Update" is the label, not the behaviour - every submit is a plain
-   INSERT into valuations (same insert-only discipline as
-   js/valuations.js), never an UPDATE/overwrite of an existing row. Date
+   "Update" is the label, not the behaviour - every submit calls
+   recordValuations() (db.js), the one shared insert-only write path
+   Data Hub's Manual Update and Trading 212 CSV importer also go
+   through, never an UPDATE/overwrite of an existing row. Date
    defaults to today but stays fully editable specifically so a missed
    day can be backfilled (Update -> Date: 10 Aug, Update -> Date: 11 Aug,
    ...) without needing three different date pickers or a special
@@ -198,16 +199,14 @@ function initHoldingUpdateModal() {
 
     submitBtn.disabled = true;
     try {
-      const payload = {
+      await recordValuations([{
         portfolio_id: currentPortfolioId,
         security_id: securityId,
         date,
         value_eur: Number(value),
         units: $("hu-units").value === "" ? null : Number($("hu-units").value),
         source: $("hu-source").value.trim() || null,
-      };
-      const { error } = await window.db.from("valuations").insert(payload);
-      if (error) throw error;
+      }]);
 
       close();
       const data = await getPortfolioDataAuto();

@@ -119,6 +119,21 @@ async function findOrCreateSecurity({ name, type, currency }, cache) {
   return data.id;
 }
 
+/** The one write path every "update my portfolio" entry point goes
+    through - Portfolio Detail's per-holding Update, Data Hub's Manual
+    Update, and the Trading 212 CSV importer all call this instead of
+    each hand-rolling their own valuations insert. Always a plain
+    INSERT, one row per observation, never an UPDATE/overwrite of an
+    existing row - same "Update means a new dated row, not a rewrite"
+    discipline as everywhere else valuations gets written (see
+    portfolio-detail.js's own Holdings Update header comment for why).
+    rows: [{ portfolio_id, security_id, date, value_eur, units, source }, ...] */
+async function recordValuations(rows) {
+  if (!rows.length) return;
+  const { error } = await window.db.from("valuations").insert(rows);
+  if (error) throw error;
+}
+
 /** Securities's data source (supabase/migrations/0005/0006). Inner
     join on purpose - a security with no security_details row isn't a
     researchable product yet, so it has no place in this list (it might

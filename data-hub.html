@@ -7,10 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=84">
-<link rel="stylesheet" href="css/layout.css?v=84">
-<link rel="stylesheet" href="css/components.css?v=84">
-<link rel="stylesheet" href="css/data-hub.css?v=84">
+<link rel="stylesheet" href="css/theme.css?v=85">
+<link rel="stylesheet" href="css/layout.css?v=85">
+<link rel="stylesheet" href="css/components.css?v=85">
+<!-- valuations.css: only for its generic .val-form-*/modal-skeleton
+     primitives (label+input, cancel/submit, error line) - reused as-is
+     for Manual Update / Trading 212's own modals below, not
+     redeclared. Its page-specific .valuations-* rules never match
+     anything on this page. -->
+<link rel="stylesheet" href="css/valuations.css?v=85">
+<link rel="stylesheet" href="css/data-hub.css?v=85">
 </head>
 <body>
 <div id="app">
@@ -20,14 +26,36 @@
 
     <div class="datahub-grid">
 
-      <!-- 1. Import Reports -->
+      <!-- ============ Portfolio Data ============
+           What YOUR holdings are currently worth - never research data
+           about a product. Every method here ends the same way: a
+           reviewed list of {security, value, date} handed to
+           recordValuations() (db.js) - the same insert-only write path
+           Portfolio Detail's own per-holding Update already uses. -->
+      <p class="datahub-section-label">Portfolio Data</p>
+      <section class="card glass" id="update-portfolio-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="data-hub-update-portfolio" tabindex="0" role="button" aria-label="About this section">
+            <h2 class="section-title">Update Portfolio</h2>
+          </div>
+        </div>
+        <p class="section-hint">Update what your holdings are worth right now.</p>
+        <div class="update-portfolio-methods" id="update-portfolio-methods"></div>
+      </section>
+
+      <!-- ============ Research Data ============
+           What a product itself is/contains - real, but not yours
+           until you hold it. Unchanged from before this pass: same
+           drop zone, same classify -> parse -> consolidate pipeline,
+           same upsert-current-composition behaviour. -->
+      <p class="datahub-section-label">Research Data</p>
       <section class="card glass" id="import-card">
         <div class="card-header">
           <div class="card-header-title" data-info="data-hub-import" tabindex="0" role="button" aria-label="About this section">
-            <h2 class="section-title">Import Reports</h2>
+            <h2 class="section-title">Update Research Data</h2>
           </div>
         </div>
-        <p class="section-hint">Every piece of data enters Portfol.io through here.</p>
+        <p class="section-hint">Fund factsheets and detailed portfolio reports - current composition only, never accumulated history (see the section title for why).</p>
 
         <div class="drop-zone glass-quiet" id="drop-zone" tabindex="0" role="button" aria-label="Upload report files">
           <span class="drop-zone-icon" id="drop-zone-icon"></span>
@@ -50,28 +78,105 @@
 
 </div>
 
+<!-- ============ Manual Update modal ============ -->
+<div id="manual-update-modal-root">
+  <div id="manual-update-modal-backdrop"></div>
+  <div id="manual-update-modal" class="glass" role="dialog" aria-modal="true" aria-label="Manual Update">
+    <h2 class="owner-modal-title">Manual Update</h2>
+    <div class="val-form-field">
+      <label for="mu-security">Security</label>
+      <select id="mu-security"></select>
+    </div>
+    <div class="val-form-field">
+      <label for="mu-date">Date</label>
+      <input id="mu-date" type="date">
+    </div>
+    <div class="val-form-field">
+      <label for="mu-value">Value (EUR)</label>
+      <input id="mu-value" type="number" step="any">
+    </div>
+    <div class="val-form-field">
+      <label for="mu-units">Units (optional)</label>
+      <input id="mu-units" type="number" step="any">
+    </div>
+    <p class="val-form-error" id="mu-form-error"></p>
+    <div class="val-form-actions">
+      <button class="val-form-cancel" type="button" id="mu-form-cancel">Cancel</button>
+      <button class="val-form-submit" type="button" id="mu-form-submit">Save Update</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Trading 212 CSV import modal ============ -->
+<div id="t212-modal-root">
+  <div id="t212-modal-backdrop"></div>
+  <div id="t212-modal" class="glass" role="dialog" aria-modal="true" aria-label="Import Trading 212 Portfolio">
+
+    <div id="t212-step-input">
+      <h2 class="owner-modal-title">Import Trading 212 Portfolio</h2>
+      <div class="t212-mode-toggle">
+        <button type="button" class="t212-mode-btn active" data-t212-mode="upload">Upload CSV</button>
+        <button type="button" class="t212-mode-btn" data-t212-mode="paste">Paste CSV</button>
+      </div>
+      <div id="t212-upload-panel">
+        <div class="drop-zone glass-quiet" id="t212-drop-zone" tabindex="0" role="button" aria-label="Upload Trading 212 CSV">
+          <span class="drop-zone-icon" id="t212-drop-zone-icon"></span>
+          <p class="drop-zone-title" id="t212-file-label">Tap to choose your Trading 212 CSV export</p>
+          <input type="file" id="t212-file-input" accept=".csv,text/csv" hidden>
+        </div>
+      </div>
+      <div id="t212-paste-panel" hidden>
+        <textarea id="t212-paste-textarea" class="t212-paste-textarea" placeholder="Paste your Trading 212 CSV export here…"></textarea>
+      </div>
+      <p class="val-form-error" id="t212-input-error"></p>
+      <div class="val-form-actions">
+        <button class="val-form-cancel" type="button" id="t212-input-cancel">Cancel</button>
+        <button class="val-form-submit" type="button" id="t212-parse-btn">Preview &amp; Match</button>
+      </div>
+    </div>
+
+    <div id="t212-step-review" hidden>
+      <h2 class="owner-modal-title">Review Updates</h2>
+      <div class="val-form-field">
+        <label for="t212-date">Valuation Date</label>
+        <input id="t212-date" type="date">
+      </div>
+      <div class="t212-review-table-scroll">
+        <table class="t212-review-table" id="t212-review-table"></table>
+      </div>
+      <p class="t212-review-summary" id="t212-review-summary"></p>
+      <p class="val-form-error" id="t212-review-error"></p>
+      <div class="val-form-actions">
+        <button class="val-form-cancel" type="button" id="t212-back-btn">Back</button>
+        <button class="val-form-submit" type="button" id="t212-confirm-btn">Confirm Updates</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=84"></script>
-<script src="js/supabaseClient.js?v=84"></script>
+<script src="js/supabaseConfig.js?v=85"></script>
+<script src="js/supabaseClient.js?v=85"></script>
 
-<script src="js/utils.js?v=84"></script>
-<script src="js/calculations.js?v=84"></script>
-<script src="js/repository.js?v=84"></script>
-<script src="js/shell.js?v=84"></script>
-<script src="js/auth.js?v=84"></script>
-<script src="js/db.js?v=84"></script>
+<script src="js/utils.js?v=85"></script>
+<script src="js/calculations.js?v=85"></script>
+<script src="js/repository.js?v=85"></script>
+<script src="js/shell.js?v=85"></script>
+<script src="js/auth.js?v=85"></script>
+<script src="js/db.js?v=85"></script>
 
-<script src="js/importer/vendor/pdf.min.js?v=84"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc = "js/importer/vendor/pdf.worker.min.js?v=84";</script>
-<script src="js/importer/field.js?v=84"></script>
-<script src="js/importer/numbers.js?v=84"></script>
-<script src="js/importer/pdfReader.js?v=84"></script>
-<script src="js/importer/classifier.js?v=84"></script>
-<script src="js/importer/monthlyFactsheetParser.js?v=84"></script>
-<script src="js/importer/holdingsReportParser.js?v=84"></script>
-<script src="js/importer/consolidate.js?v=84"></script>
-<script src="js/importer/geoClassifier.js?v=84"></script>
+<script src="js/importer/vendor/pdf.min.js?v=85"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = "js/importer/vendor/pdf.worker.min.js?v=85";</script>
+<script src="js/importer/field.js?v=85"></script>
+<script src="js/importer/numbers.js?v=85"></script>
+<script src="js/importer/pdfReader.js?v=85"></script>
+<script src="js/importer/classifier.js?v=85"></script>
+<script src="js/importer/monthlyFactsheetParser.js?v=85"></script>
+<script src="js/importer/holdingsReportParser.js?v=85"></script>
+<script src="js/importer/consolidate.js?v=85"></script>
+<script src="js/importer/geoClassifier.js?v=85"></script>
 
-<script src="js/data-hub.js?v=84"></script>
+<script src="js/data-hub.js?v=85"></script>
 </body>
 </html>

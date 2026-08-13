@@ -284,3 +284,190 @@
   .fund-group-actions { flex-direction: column; align-items: stretch; }
   .import-btn { width: 100%; text-align: center; }
 }
+
+/* ---------- Portfolio Data section label + Update Portfolio methods ----------
+   .datahub-section-label marks "Portfolio Data" / "Research Data" -
+   structure, not a call to action, same quiet treatment as the nav's
+   own category labels (components.css .nav-accordion-label) rather
+   than a new heading style invented here. */
+.datahub-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.75;
+  margin: 0 4px calc(-1 * var(--sp-4));
+}
+.datahub-section-label:first-child { margin-top: 0; }
+
+.update-portfolio-methods {
+  margin-top: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.update-method-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-2xl);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+  text-align: left;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.update-method-btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--coral-2); }
+.update-method-btn:disabled { opacity: 0.55; cursor: default; }
+
+.update-method-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: color-mix(in oklab, var(--coral-1) 16%, transparent);
+  color: var(--coral-2);
+}
+.update-method-icon svg { width: 17px; height: 17px; }
+.update-method-btn:disabled .update-method-icon { background: var(--grey-1); color: var(--muted); }
+
+.update-method-body { flex: 1; min-width: 0; }
+.update-method-title { font-size: 14px; font-weight: 500; color: var(--ink); display: flex; align-items: center; gap: var(--sp-2); }
+.update-method-sub { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
+
+.update-method-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--grey-1);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+
+/* ---------- Manual Update modal - same skeleton as portfolio-detail.css's
+   #holding-update-modal (this is a deliberately separate DOM root, not
+   a shared component, since the two pages never load each other's CSS -
+   kept visually identical on purpose, not redesigned). ---------- */
+#manual-update-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+#manual-update-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#manual-update-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(400px, 92vw);
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#manual-update-modal-root.open { pointer-events: auto; }
+#manual-update-modal-root.open #manual-update-modal-backdrop { opacity: 1; }
+#manual-update-modal-root.open #manual-update-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+/* ---------- Trading 212 import modal - wider than Manual Update's
+   (a review table needs the room), same backdrop/positioning recipe. ---------- */
+#t212-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+#t212-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#t212-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#t212-modal-root.open { pointer-events: auto; }
+#t212-modal-root.open #t212-modal-backdrop { opacity: 1; }
+#t212-modal-root.open #t212-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.t212-mode-toggle {
+  margin-top: var(--sp-5);
+  display: flex;
+  gap: var(--sp-2);
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--glass-quiet-bg);
+  border: 1px solid var(--glass-quiet-border);
+}
+.t212-mode-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.t212-mode-btn.active { background: var(--ink); color: #fff; }
+
+#t212-upload-panel .drop-zone { margin-top: var(--sp-5); padding: var(--sp-6); }
+.t212-paste-textarea {
+  margin-top: var(--sp-5);
+  width: 100%;
+  min-height: 160px;
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.t212-paste-textarea:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+
+.t212-review-table-scroll { margin-top: var(--sp-4); overflow-x: auto; }
+.t212-review-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t212-review-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 0 var(--sp-3) 8px 0;
+  white-space: nowrap;
+}
+.t212-review-table td { padding: 10px var(--sp-3) 10px 0; border-top: 1px solid var(--card-border); color: var(--ink); vertical-align: top; }
+.t212-review-table td.amount-cell { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.t212-review-security { font-size: 13px; color: var(--ink); }
+.t212-review-security.is-unmatched { color: var(--muted); font-style: italic; }
+.t212-review-context { margin-top: 2px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.t212-status-matched { display: inline-flex; align-items: center; gap: 4px; color: var(--positive); font-size: 12px; white-space: nowrap; }
+.t212-status-review { display: inline-flex; align-items: center; gap: 4px; color: var(--orange-2); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.t212-status-matched svg, .t212-status-review svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+.t212-review-summary { margin-top: var(--sp-4); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+@media (max-width: 480px) {
+  #manual-update-modal, #t212-modal { padding: var(--sp-6); }
+}

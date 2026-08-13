@@ -43,6 +43,11 @@ const PROCESSING_STEPS = [
 const state = {
   groups: new Map(), groupGeo: new Map(), pendingDictionaryAdditions: [],
   portfolioId: null, securities: [], accounts: [],
+  // Update Portfolio (Trading 212 CSV) - the currently parsed+matched
+  // rows between "Preview & Match" and "Confirm", and the raw text of
+  // a file chosen (not yet parsed) so Upload/Paste can share one Parse
+  // step. Cleared on every modal open/close (resetT212Modal below).
+  t212Rows: [], t212PendingText: null,
 };
 
 function slugify(name) {
@@ -655,6 +660,389 @@ function renderSourceChips() {
     </span>`).join("");
 }
 
+/* ============================================================
+   Update Portfolio - Portfolio Data, not Research Data (see this
+   file's own header + data-hub.html's section comments for the
+   distinction). Every method below ends by calling recordValuations()
+   (db.js) - the exact same insert-only write path Portfolio Detail's
+   own per-holding Update already uses (js/portfolio-detail.js) - so
+   there is only ever one real definition of "what does updating my
+   portfolio mean", regardless of which method supplied the data.
+   ============================================================ */
+
+const UPDATE_METHODS = [
+  { key: "manual", icon: "edit3", title: "Manual Update", sub: "Update one holding by hand", enabled: true },
+  { key: "t212", icon: "upload", title: "Trading 212 CSV", sub: "Upload or paste your Trading 212 export", enabled: true },
+  // Deliberately left here, disabled, rather than omitted - the point
+  // (per the Data Hub research pass this followed) is that the
+  // architecture is ready for this to slot in as a fourth method
+  // later (OCR on a BPI app screenshot) without restructuring anything
+  // above it, not that it doesn't exist yet.
+  { key: "bpi-screenshot", icon: "fileText", title: "BPI Screenshot", sub: "Update from a screenshot of the BPI app", enabled: false },
+];
+
+function updateMethodsHTML() {
+  return UPDATE_METHODS.map((m) => `
+    <button type="button" class="update-method-btn" data-update-method="${m.key}"${m.enabled ? "" : " disabled"}>
+      <span class="update-method-icon">${icon(m.icon)}</span>
+      <span class="update-method-body">
+        <span class="update-method-title">${m.title}${m.enabled ? "" : ` <span class="update-method-badge">Coming Soon</span>`}</span>
+        <span class="update-method-sub">${m.sub}</span>
+      </span>
+    </button>`).join("");
+}
+
+function initUpdatePortfolioMethods() {
+  $("update-portfolio-methods").innerHTML = updateMethodsHTML();
+  $("update-portfolio-methods").querySelectorAll("[data-update-method]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.updateMethod;
+      if (key === "manual") openManualUpdateModal();
+      if (key === "t212") openT212Modal();
+    });
+  });
+}
+
+/* ---------- Manual Update modal ----------
+   The security is picked from a <select> of EXISTING securities, never
+   free text - so unlike the old Add Valuation pattern, there is no
+   findOrCreateSecurity() call here and no way for this modal to ever
+   create a new security row. Deliberately no Source field (unlike
+   Portfolio Detail's own Update modal) - this entry point is meant to
+   be fast on a phone, so the source is fixed to "Manual (Data Hub)"
+   rather than one more field to fill in. */
+function securityOptionsHTML() {
+  return state.securities
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((s) => `<option value="${s.id}">${s.name}</option>`)
+    .join("");
+}
+
+function muKeyHandler(e) { if (e.key === "Escape") window.closeManualUpdateModal(); }
+
+function initManualUpdateModal() {
+  const root = $("manual-update-modal-root");
+  const close = () => {
+    root.classList.remove("open");
+    document.removeEventListener("keydown", muKeyHandler);
+  };
+  $("manual-update-modal-backdrop").addEventListener("click", close);
+  $("mu-form-cancel").addEventListener("click", close);
+  window.closeManualUpdateModal = close;
+
+  $("mu-form-submit").addEventListener("click", async () => {
+    const errorEl = $("mu-form-error");
+    const submitBtn = $("mu-form-submit");
+    errorEl.textContent = "";
+
+    // Signed-out visitors can still open this modal and see what it
+    // does (same "make the limitation visible, not hidden" principle
+    // as the rest of Data Hub) - only the actual write gates on
+    // sign-in, and does so with a real prompt, not a silent RLS error.
+    if (!currentUser()) { errorEl.textContent = "Sign in to save updates."; window.openAuthModal(); return; }
+
+    const securityId = $("mu-security").value;
+    const date = $("mu-date").value;
+    const value = $("mu-value").value;
+    if (!securityId) { errorEl.textContent = "Choose a security."; return; }
+    if (!date) { errorEl.textContent = "Date is required."; return; }
+    if (value === "") { errorEl.textContent = "Value is required."; return; }
+
+    submitBtn.disabled = true;
+    try {
+      await recordValuations([{
+        portfolio_id: state.portfolioId,
+        security_id: securityId,
+        date,
+        value_eur: Number(value),
+        units: $("mu-units").value === "" ? null : Number($("mu-units").value),
+        source: "Manual (Data Hub)",
+      }]);
+      close();
+    } catch (err) {
+      errorEl.textContent = err.message || "Something went wrong.";
+    }
+    submitBtn.disabled = false;
+  });
+}
+
+function openManualUpdateModal() {
+  $("mu-security").innerHTML = securityOptionsHTML();
+  $("mu-date").value = new Date().toISOString().slice(0, 10);
+  $("mu-value").value = "";
+  $("mu-units").value = "";
+  $("mu-form-error").textContent = "";
+  $("manual-update-modal-root").classList.add("open");
+  document.addEventListener("keydown", muKeyHandler);
+}
+
+/* ---------- Trading 212 CSV import ---------- */
+
+/** Minimal RFC4180-ish CSV line splitter - handles quoted fields
+    (embedded commas, "" escaped quotes), which a plain .split(",")
+    breaks on the moment any field contains a comma. No external
+    dependency - a portfolio export doesn't need more than this. */
+function parseCsvLine(line) {
+  const cells = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+      } else cur += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      cells.push(cur);
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  cells.push(cur);
+  return cells;
+}
+
+function parseCsvRows(text) {
+  return text.split(/\r\n|\n|\r/).filter((l) => l.trim() !== "").map(parseCsvLine);
+}
+
+/** Trading 212's own portfolio/pie export. "Slice" is the pie
+    component's own ticker; "Total" in Slice always marks the pie-level
+    summary row, whose OWN "Name" cell holds the pie's name (e.g.
+    "Global Factor Tilt") - never a security, never treated as one, on
+    purpose (see the confirmed real export's own row: "Total","Global
+    Factor Tilt",160,...).
+
+    Columns are looked up by HEADER NAME, not position, and a row with
+    an unparseable Value is skipped rather than aborting the whole
+    import - confirmed against Vera's real export that values differ
+    slightly run to run; this shouldn't break on that kind of normal
+    variation, only on a genuinely different file shape (missing
+    Slice/Name/Value entirely). */
+function parseTrading212Csv(text) {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) throw new Error("This CSV has no data rows.");
+
+  const header = rows[0].map((h) => h.trim());
+  const col = (name) => header.indexOf(name);
+  const iSlice = col("Slice"), iName = col("Name"), iValue = col("Value"),
+    iInvested = col("Invested value"), iResult = col("Result"), iQty = col("Owned quantity");
+
+  if (iSlice === -1 || iName === -1 || iValue === -1) {
+    throw new Error("This doesn't look like a Trading 212 portfolio export - missing Slice/Name/Value columns.");
+  }
+
+  const parsed = [];
+  for (const r of rows.slice(1)) {
+    const slice = (r[iSlice] || "").trim();
+    const name = (r[iName] || "").trim();
+    if (!slice || slice.toLowerCase() === "total") continue; // pie-level summary row, not a security
+
+    const value = parseFloat(r[iValue]);
+    if (Number.isNaN(value)) continue;
+
+    const invested = iInvested !== -1 ? parseFloat(r[iInvested]) : NaN;
+    const result = iResult !== -1 ? parseFloat(r[iResult]) : NaN;
+    const qtyRaw = iQty !== -1 ? (r[iQty] || "").trim() : "";
+    const units = qtyRaw && qtyRaw !== "-" ? parseFloat(qtyRaw) : NaN;
+
+    parsed.push({
+      slice, name, value,
+      invested: Number.isNaN(invested) ? null : invested,
+      result: Number.isNaN(result) ? null : result,
+      units: Number.isNaN(units) ? null : units,
+    });
+  }
+  return parsed;
+}
+
+/** Matching order, exactly as specified: ticker/Slice first (exact,
+    case-insensitive - the strongest signal this CSV actually has),
+    then ISIN (not present in this CSV format yet, but kept as a real,
+    reachable step so a future enrichment source can slot in without
+    restructuring this function), then normalizeName() fallback - the
+    same fuzzy-name function every other import path in this app
+    already uses (utils.js), not a second definition of "same name".
+
+    An AMBIGUOUS match (more than one security matches the same key) is
+    treated as NO match, not a guess - and no match of any kind ever
+    creates a security here. This is the whole point of this function:
+    a free-text/auto-create path is exactly what produced the "BPI
+    Smart Ações PPR" vs "BPI SMART Ações PPR" duplicate; this one only
+    ever resolves to an EXISTING row's id, or null. */
+function matchTrading212Row(row, securities) {
+  const bySlice = securities.filter((s) => s.ticker && s.ticker.toUpperCase() === row.slice.toUpperCase());
+  if (bySlice.length === 1) return { security: bySlice[0], matchedBy: "ticker" };
+
+  if (row.isin) {
+    const byIsin = securities.filter((s) => s.isin && s.isin === row.isin);
+    if (byIsin.length === 1) return { security: byIsin[0], matchedBy: "isin" };
+  }
+
+  const norm = normalizeName(row.name);
+  const byName = securities.filter((s) => normalizeName(s.name) === norm);
+  if (byName.length === 1) return { security: byName[0], matchedBy: "name" };
+
+  return { security: null, matchedBy: null };
+}
+
+function t212StatusHTML(matched) {
+  return matched
+    ? `<span class="t212-status-matched">${icon("checkCircle")} Matched</span>`
+    : `<span class="t212-status-review">${icon("activity")} Needs review</span>`;
+}
+
+/** Invested/Result shown as small context under Value, per Vera's own
+    distinction - Value is the actual valuation being recorded,
+    Invested/Result are shown for context only and are never written
+    anywhere (see the confirm handler below - only .value ever reaches
+    recordValuations()). */
+function renderT212ReviewTable(rows) {
+  const head = "<thead><tr><th>Trading 212</th><th>Matched Security</th><th>Value</th><th>Quantity</th><th>Status</th></tr></thead>";
+  const body = rows.map((r) => {
+    const context = [];
+    if (r.invested != null) context.push(`invested ${fmtEUR(r.invested)}`);
+    if (r.result != null) context.push(fmtEUR(r.result, { signed: true }));
+    return `
+      <tr>
+        <td>${r.slice}</td>
+        <td><span class="t212-review-security${r.security ? "" : " is-unmatched"}">${r.security ? r.security.name : r.name}</span></td>
+        <td class="amount-cell">${fmtEUR(r.value)}${context.length ? `<div class="t212-review-context">${context.join(" · ")}</div>` : ""}</td>
+        <td class="amount-cell">${r.units != null ? r.units.toFixed(4) : "—"}</td>
+        <td>${t212StatusHTML(!!r.security)}</td>
+      </tr>`;
+  }).join("");
+  $("t212-review-table").innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+function t212KeyHandler(e) { if (e.key === "Escape") window.closeT212Modal(); }
+
+function resetT212Modal() {
+  $("t212-step-review").hidden = true;
+  $("t212-step-input").hidden = false;
+  $("t212-file-input").value = "";
+  $("t212-file-label").textContent = "Tap to choose your Trading 212 CSV export";
+  $("t212-paste-textarea").value = "";
+  $("t212-input-error").textContent = "";
+  $("t212-review-error").textContent = "";
+  state.t212PendingText = null;
+  state.t212Rows = [];
+}
+
+function initT212Modal() {
+  const root = $("t212-modal-root");
+  const closeAll = () => {
+    root.classList.remove("open");
+    document.removeEventListener("keydown", t212KeyHandler);
+    resetT212Modal();
+  };
+  $("t212-modal-backdrop").addEventListener("click", closeAll);
+  $("t212-input-cancel").addEventListener("click", closeAll);
+  window.closeT212Modal = closeAll;
+
+  root.querySelectorAll("[data-t212-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      root.querySelectorAll("[data-t212-mode]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const mode = btn.dataset.t212Mode;
+      $("t212-upload-panel").hidden = mode !== "upload";
+      $("t212-paste-panel").hidden = mode !== "paste";
+    });
+  });
+
+  $("t212-drop-zone").addEventListener("click", () => $("t212-file-input").click());
+  $("t212-drop-zone").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("t212-file-input").click(); }
+  });
+  const takeFile = async (file) => {
+    if (!file) return;
+    $("t212-file-label").textContent = file.name;
+    state.t212PendingText = await file.text();
+  };
+  $("t212-file-input").addEventListener("change", (e) => takeFile(e.target.files[0]));
+  ["dragenter", "dragover"].forEach((evt) => $("t212-drop-zone").addEventListener(evt, (e) => { e.preventDefault(); $("t212-drop-zone").classList.add("drag-active"); }));
+  ["dragleave", "drop"].forEach((evt) => $("t212-drop-zone").addEventListener(evt, (e) => { e.preventDefault(); $("t212-drop-zone").classList.remove("drag-active"); }));
+  $("t212-drop-zone").addEventListener("drop", (e) => takeFile(e.dataTransfer.files[0]));
+
+  $("t212-parse-btn").addEventListener("click", () => {
+    const errorEl = $("t212-input-error");
+    errorEl.textContent = "";
+    const pasteMode = !$("t212-paste-panel").hidden;
+    const text = pasteMode ? $("t212-paste-textarea").value : state.t212PendingText;
+    if (!text || !text.trim()) {
+      errorEl.textContent = pasteMode ? "Paste your CSV first." : "Choose a CSV file first.";
+      return;
+    }
+
+    let parsedRows;
+    try {
+      parsedRows = parseTrading212Csv(text);
+    } catch (err) {
+      errorEl.textContent = err.message;
+      return;
+    }
+    if (!parsedRows.length) { errorEl.textContent = "No holdings found in this CSV."; return; }
+
+    state.t212Rows = parsedRows.map((row) => ({ ...row, ...matchTrading212Row(row, state.securities) }));
+
+    $("t212-step-input").hidden = true;
+    $("t212-step-review").hidden = false;
+    $("t212-date").value = new Date().toISOString().slice(0, 10);
+    renderT212ReviewTable(state.t212Rows);
+
+    const matchedCount = state.t212Rows.filter((r) => r.security).length;
+    const reviewCount = state.t212Rows.length - matchedCount;
+    $("t212-review-summary").textContent = reviewCount
+      ? `${matchedCount} matched, ${reviewCount} need${reviewCount === 1 ? "s" : ""} review - unmatched rows won't be updated. Use Manual Update for those instead.`
+      : `${matchedCount} matched.`;
+  });
+
+  $("t212-back-btn").addEventListener("click", () => {
+    $("t212-step-review").hidden = true;
+    $("t212-step-input").hidden = false;
+  });
+
+  $("t212-confirm-btn").addEventListener("click", async () => {
+    const errorEl = $("t212-review-error");
+    const submitBtn = $("t212-confirm-btn");
+    errorEl.textContent = "";
+
+    if (!currentUser()) { errorEl.textContent = "Sign in to save updates."; window.openAuthModal(); return; }
+
+    const date = $("t212-date").value;
+    if (!date) { errorEl.textContent = "Choose a valuation date."; return; }
+
+    const matchedRows = state.t212Rows.filter((r) => r.security);
+    if (!matchedRows.length) { errorEl.textContent = "No matched rows to update."; return; }
+
+    submitBtn.disabled = true;
+    try {
+      await recordValuations(matchedRows.map((r) => ({
+        portfolio_id: state.portfolioId,
+        security_id: r.security.id,
+        date,
+        value_eur: r.value,
+        units: r.units,
+        source: "Trading 212 CSV",
+      })));
+      closeAll();
+    } catch (err) {
+      errorEl.textContent = err.message || "Something went wrong.";
+    }
+    submitBtn.disabled = false;
+  });
+}
+
+function openT212Modal() {
+  resetT212Modal();
+  $("t212-modal-root").classList.add("open");
+  document.addEventListener("keydown", t212KeyHandler);
+}
+
 function init() {
   const user = { initial: "V", name: "Vera Sousa", role: "Long-term investor", greetingName: "Vera" };
 
@@ -670,6 +1058,10 @@ function init() {
 
   renderSourceChips();
   initDropZone();
+
+  initUpdatePortfolioMethods();
+  initManualUpdateModal();
+  initT212Modal();
 
   onAuthChange(() => loadDbContext().then(renderGroups));
   initAuth().then(loadDbContext);
