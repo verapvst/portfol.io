@@ -515,29 +515,18 @@ function renderNotFound(reason) {
 async function loadProductDetailPage() {
   const id = productIdFromURL();
   if (!id) { renderNotFound("No product specified."); return; }
-
-  const user = currentUser();
   if (!window.db) { renderNotFound("Supabase isn't configured yet (js/supabaseConfig.js)."); return; }
-  if (!user) {
-    $("product-detail-body").innerHTML = `
-      <div class="costs-signin-note">
-        Sign in to view product detail.
-        <br/>
-        <button type="button" id="pd-signin-cta">Sign In</button>
-      </div>`;
-    $("pd-signin-cta").addEventListener("click", () => window.openAuthModal());
-    return;
-  }
 
   $("product-detail-body").innerHTML = `<p class="costs-empty">Loading…</p>`;
   try {
+    const user = currentUser();
     const [product, portfolioId, priceHistory] = await Promise.all([
       loadProductDetail(id),
-      ensurePortfolio(),
+      user ? ensurePortfolio() : Promise.resolve(null),
       getHistoricalPrices(id),
     ]);
     if (!product) { renderNotFound("This product doesn't have research data on file."); return; }
-    const held = await isSecurityHeld(portfolioId, id);
+    const held = user ? await isSecurityHeld(portfolioId, id) : false;
     const marketAnalytics = securityMarketAnalytics(product.securities, priceHistory);
     renderProduct(product, held, marketAnalytics);
   } catch (err) {

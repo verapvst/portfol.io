@@ -74,8 +74,32 @@ function concentrationTileHTML(label, value, note) {
     </div>`;
 }
 
+/** Shared empty-state for the three sections below - productAllocation/
+    accountAllocation are deliberately empty for signed-out visitors
+    (analytics.js's getPortfolioDataPublic() never computes exact
+    per-security or per-account weights, see 0015's own comment) - a
+    sign-in prompt, not a blank list pretending there's nothing here. */
+function signinNoteHTML(label) {
+  return `
+    <div class="costs-signin-note">
+      Sign in to see ${label}.
+      <br/>
+      <button type="button" class="alloc-signin-cta">Sign In</button>
+    </div>`;
+}
+function wireSigninCTAs(container) {
+  container.querySelectorAll(".alloc-signin-cta").forEach((btn) => btn.addEventListener("click", () => window.openAuthModal()));
+}
+
 function renderConcentration(data) {
   const { sorted, top1, top3, top5 } = computeConcentration(data.analytics.productAllocation);
+
+  if (!sorted.length && !currentUser()) {
+    $("concentration-stats").innerHTML = "";
+    $("concentration-list").innerHTML = signinNoteHTML("individual holdings");
+    wireSigninCTAs($("concentration-list"));
+    return;
+  }
 
   $("concentration-stats").innerHTML = [
     concentrationTileHTML("Top 1 Holding", top1, sorted[0] ? sorted[0].name : "—"),
@@ -92,6 +116,11 @@ function renderConcentration(data) {
 
 function renderSecurityAllocation(data) {
   const items = [...data.analytics.productAllocation].sort((a, b) => b.weight - a.weight);
+  if (!items.length && !currentUser()) {
+    $("security-allocation-body").innerHTML = signinNoteHTML("the full security-by-security breakdown");
+    wireSigninCTAs($("security-allocation-body"));
+    return;
+  }
   $("security-allocation-body").innerHTML = items.map((h) => barRowHTML({
     label: `${h.name}${h.ticker !== "—" ? ` · ${h.ticker}` : ""}`, weight: h.weight, tone: h.tone,
     drillType: "holding", drillId: h.id,
@@ -101,11 +130,19 @@ function renderSecurityAllocation(data) {
 /* ---------- Account Allocation ----------
    Account name shown either mode (structural, same convention already
    approved on Portfolio Detail); only the € value is Private-only - per
-   the Mode x Capability matrix, Showcase gets percentages, never money. */
+   the Mode x Capability matrix, Showcase gets percentages, never money.
+   Signed-out gets neither name nor weight now - which account holds
+   what is exactly the broker-identity fact that must stay private (see
+   analytics.js's getPortfolioDataPublic()). */
 
 function renderAccountAllocation(data) {
   const owner = isOwnerMode();
   const items = [...data.analytics.accountAllocation].sort((a, b) => b.weight - a.weight);
+  if (!items.length && !currentUser()) {
+    $("account-allocation-body").innerHTML = signinNoteHTML("account-level allocation");
+    wireSigninCTAs($("account-allocation-body"));
+    return;
+  }
   $("account-allocation-body").innerHTML = items.map((a) => barRowHTML({
     label: a.name, weight: a.weight, tone: a.tone,
     drillType: "account", drillId: a.name,

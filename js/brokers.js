@@ -150,28 +150,11 @@ function renderSummary() {
   $("brokers-summary").textContent = `${n} broker${n === 1 ? "" : "s"} on file - real costs, protection, and scores, not a recommendation.`;
 }
 
-function renderSignedOutState() {
-  $("brokers-body").innerHTML = `
-    <div class="costs-signin-note">
-      Sign in to browse Broker Comparison.
-      <br/>
-      <button type="button" id="brokers-signin-cta">Sign In</button>
-    </div>`;
-  $("brokers-signin-cta").addEventListener("click", () => window.openAuthModal());
-  $("broker-search").disabled = true;
-}
-
 async function loadBrokersPage() {
   const body = $("brokers-body");
-  const user = currentUser();
 
   if (!window.db) {
     body.innerHTML = `<p class="costs-error">Supabase isn't configured yet (js/supabaseConfig.js).</p>`;
-    return;
-  }
-  if (!user) {
-    renderSignedOutState();
-    $("brokers-summary").textContent = "Sign in to see broker research.";
     return;
   }
 

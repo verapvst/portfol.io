@@ -132,6 +132,16 @@ function holdingsRowHTML(h) {
 }
 
 function renderHoldingsTable(container, holdings) {
+  if (!holdings.length && !currentUser()) {
+    container.innerHTML = `
+      <div class="costs-signin-note">
+        Sign in to see individual holdings.
+        <br/>
+        <button type="button" id="holdings-signin-cta">Sign In</button>
+      </div>`;
+    $("holdings-signin-cta").addEventListener("click", () => window.openAuthModal());
+    return;
+  }
   const top5 = [...holdings].sort((a, b) => b.weight - a.weight).slice(0, 5);
   container.innerHTML = `
     <div class="table-scroll">
@@ -191,7 +201,7 @@ function exposureRegionData(data) {
     country (a "European Union" bond, an MSCI World tracker, ...) - not
     a placeholder, a real number with no country to paint it on. */
 function renderCountryLegend(container, mapEl, data) {
-  const maxWeight = Math.max(...data.analytics.countries.map((c) => c.weight));
+  const maxWeight = data.analytics.countries.length ? Math.max(...data.analytics.countries.map((c) => c.weight)) : 0;
   const countryRows = data.analytics.countries.map((c) => `
     <div class="legend-row drill-row" data-drill-type="country" data-drill-id="${c.iso}" data-code="${String(c.iso).padStart(3, "0")}" tabindex="0" role="button">
       <span class="legend-dot" style="background:${interpolatePrimaryGradient(c.weight / maxWeight)}"></span>
@@ -264,7 +274,30 @@ const EXPOSURE_GROUPINGS = {
   },
 };
 
+/** Signed-out visitors get real, aggregated region weights
+    (public_portfolio_allocation(), 0015) but never per-country data -
+    that would require exposing each security's own composition at a
+    granularity fine enough to start re-identifying which securities are
+    held (see analytics.js's getPortfolioDataPublic() for the full
+    reasoning). No map, no tabs - just the same legend-row markup the
+    Region tab already uses, one honest step coarser than signed-in. */
+function renderExposureAggregateOnly(elements, data) {
+  const { tabsEl, vizEl, hintEl, titleEl } = elements;
+  tabsEl.innerHTML = "";
+  hintEl.textContent = "Aggregated by region — sign in to see the full country-level map.";
+  titleEl.dataset.info = "exposure-region";
+  vizEl.innerHTML = `<div class="legend-list" id="exposure-legend"></div>`;
+  vizEl.querySelector("#exposure-legend").innerHTML = data.analytics.regions.map((r) => `
+    <div class="legend-row">
+      <span class="legend-dot" style="background:${familyGradientCSS(r.tone)}"></span>
+      <span class="legend-name">${r.name}</span>
+      <span class="legend-value">${r.weight.toFixed(2)}%</span>
+    </div>`).join("");
+}
+
 function renderExposure(elements, data) {
+  if (!data.analytics.countries.length) { renderExposureAggregateOnly(elements, data); return; }
+
   const { tabsEl, vizEl, hintEl, titleEl } = elements;
   const keys = Object.keys(EXPOSURE_GROUPINGS);
 

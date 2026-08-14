@@ -1,4 +1,10 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* The native [hidden] behaviour is only display:none in the UA
+   stylesheet - any author rule with equal specificity (.card's own
+   display:flex, .tab-bar's inline-flex, ...) wins the cascade and
+   leaves an empty box on screen. This one rule keeps `el.hidden = true`
+   working everywhere, for every current and future element. */
+[hidden] { display: none !important; }
 
 /* overflow-x:hidden on exactly one of html/body (not both - setting it on
    both, combined with height:100% on both, makes each its own independent

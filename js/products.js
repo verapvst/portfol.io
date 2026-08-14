@@ -158,18 +158,9 @@ function renderSummary() {
 
 /* ---------- Page init ---------- */
 
-function renderSignedOutState() {
-  $("product-library-body").innerHTML = `
-    <div class="costs-signin-note">
-      Sign in to browse the Securities.
-      <br/>
-      <button type="button" id="product-library-signin-cta">Sign In</button>
-    </div>`;
-  $("product-library-signin-cta").addEventListener("click", () => window.openAuthModal());
-  $("product-search").disabled = true;
-  $("product-provider-filter").disabled = true;
-}
-
+/** Securities is public research (see 0014's own comment) - sign-in
+    only ever gates the "Held" badge/filter, computed below, never the
+    catalogue itself. */
 async function loadProductLibraryPage() {
   const body = $("product-library-body");
   const user = currentUser();
@@ -179,23 +170,28 @@ async function loadProductLibraryPage() {
     return;
   }
 
-  if (!user) {
-    renderSignedOutState();
-    $("product-library-summary").textContent = "Sign in to see research on real products.";
-    return;
-  }
-
   $("product-search").disabled = false;
+  $("product-provider-filter").disabled = false;
+  $("product-held-tabs").hidden = !user;
+  if (!user && currentHeldFilter) {
+    currentHeldFilter = "";
+    renderHeldTabs($("product-held-tabs"));
+  }
   body.innerHTML = `<p class="costs-empty">Loading…</p>`;
 
   try {
-    const portfolioId = await ensurePortfolio();
-    const [products, transactions] = await Promise.all([
-      loadProductLibrary(),
-      window.db.from("transactions").select("security_id").eq("portfolio_id", portfolioId),
-    ]);
-    productsCache = products;
-    heldSecurityIds = new Set((transactions.data || []).map((t) => t.security_id).filter(Boolean));
+    if (user) {
+      const portfolioId = await ensurePortfolio();
+      const [products, transactions] = await Promise.all([
+        loadProductLibrary(),
+        window.db.from("transactions").select("security_id").eq("portfolio_id", portfolioId),
+      ]);
+      productsCache = products;
+      heldSecurityIds = new Set((transactions.data || []).map((t) => t.security_id).filter(Boolean));
+    } else {
+      productsCache = await loadProductLibrary();
+      heldSecurityIds = new Set();
+    }
 
     renderSummary();
     renderProviderFilter($("product-provider-filter"));

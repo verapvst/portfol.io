@@ -91,8 +91,21 @@ function renderAll(data) {
   // and ready for that page once it's built, just not called from here.
   renderAllocationSummary($("allocation-summary"), data);
 
-  renderPortfolioHealth($("portfolio-health"), data);
-  renderInsights($("portfolio-insights"), data);
+  // Health/Insights lean on per-holding facts (largest position, exact
+  // holdings/accounts counts) that the public data path deliberately
+  // never computes (analytics.js's getPortfolioDataPublic(), 0015) -
+  // hidden for signed-out visitors rather than shown with zeroed-out
+  // numbers that would misread as "this portfolio is empty".
+  // .card's own display:flex outranks the [hidden] UA rule, so the
+  // `hidden` attribute alone leaves an empty flex box on screen - set
+  // display directly instead.
+  const signedIn = !!currentUser();
+  $("health-card").style.display = signedIn ? "" : "none";
+  $("insights-card").style.display = signedIn ? "" : "none";
+  if (signedIn) {
+    renderPortfolioHealth($("portfolio-health"), data);
+    renderInsights($("portfolio-insights"), data);
+  }
 }
 
 async function init() {

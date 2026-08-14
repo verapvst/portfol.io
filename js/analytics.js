@@ -316,75 +316,78 @@ async function getPortfolioDataLive() {
 }
 
 /** getPortfolioDataPublic() - real portfolio structure/performance for
-    SIGNED-OUT visitors, with zero monetary values ever transmitted.
-    Reads only supabase/migrations/0013_public_portfolio_functions.sql's
-    three RPC functions - anon has no other path to any real table, and
-    none of those three functions has a monetary return column, full
-    stop (see that migration's own verification query).
+    SIGNED-OUT visitors, with zero monetary values AND zero security-
+    or account-level identity ever transmitted. Reads only
+    supabase/migrations/0015_public_portfolio_allocation.sql's aggregate-
+    only functions plus 0013's public_cash_flow_dates() - anon has no
+    other path to any real table.
 
-    The trick that keeps this both safe AND accurate: every security's
-    real €-valued history arrives already divided by one portfolio-wide
-    constant (0013's own comment explains why), so it's a dimensionless
-    ratio, never €. Fed into the EXACT SAME valueOfSecurityAsOf()/
-    chainLinkedPortfolioReturn()/annualReturns() the authenticated path
-    uses (calculations.js) - scaling every input by one constant never
-    changes a ratio-based calculation's result, so this produces
-    numerically IDENTICAL percentages to the real computation, with zero
-    new TWR math written here to get wrong.
+    This is Layer 2 ("Public Portfolio Insights") of the three-layer
+    model: Layer 1 is the public research catalogue (Securities/Brokers -
+    products.js/brokers.js), Layer 3 is private personal holdings
+    (exact securities, weights, accounts - authenticated only). This
+    function must never blur into either neighbour: it returns real,
+    aggregated, category-level facts (asset-class %, geographic %, the
+    portfolio-level value curve/TWR) and NOTHING that identifies a
+    specific security or account. A previous version of this function
+    called public_portfolio_snapshot()/public_accounts() (0013), which
+    returned real security names and account names - that was a genuine
+    privacy leak, not a design choice; 0015's own header comment covers
+    the full history.
 
-    Deliberately NOT computed here: Investor Return (XIRR). XIRR is
-    money-WEIGHTED by construction - it needs each cash flow's real
-    relative SIZE, which this function set intentionally never exposes
-    (matching Vera's own separate, stricter, earlier requirement that
-    Transactions stays a full gated preview - amounts hidden - even
-    signed in with values off). investorReturnAvailable stays honestly
-    false here rather than approximating a money-weighted number from
-    data that was deliberately withheld.
+    The trick that keeps the value curve both safe AND accurate: the
+    portfolio's real €-valued total, on every date, arrives already
+    divided by one portfolio-wide constant (public_portfolio_value_
+    history(), 0015 - same idea 0013 used, just summed to one series
+    before it ever leaves the database). Fed as a single-entry
+    securityHistories map into the EXACT SAME chainLinkedPortfolioReturn()/
+    annualReturns() the authenticated path uses (calculations.js) - those
+    functions only need *a* history to sum over, and one entry whose
+    value already IS the portfolio total behaves identically to summing
+    many partial ones. Zero new TWR math written here to get wrong.
 
-    Also NOT included: history.marketData (Security Detail's own real
-    EODHD data - that page stays authenticated-only, out of scope for
-    this pass) and portfolio.transactions (a labelled activity feed -
-    0013's public_cash_flow_dates() returns date+type only specifically
-    so it can feed TWR's boundaries without ever building a
-    reconstructible "what happened when" list, per that function's own
-    comment). */
+    assetClassAllocation/regions come from public_portfolio_allocation()
+    (0015) - genuinely computed server-side from each held security's own
+    public research composition (security_details) weighted by its real,
+    private portfolio weight. This is a real, different computation from
+    getPortfolioDataLive()'s still-static repository.js numbers (see this
+    file's own header comment) - the two may not agree exactly until
+    Phase 4/5 unifies both onto the same source; that divergence is
+    honest, not a bug.
+
+    Deliberately empty/null: portfolio.holdings, portfolio.accounts,
+    productAllocation, accountAllocation, countries (per-country map
+    data), currency (account-currency exposure - in this app currency
+    maps 1:1 to a specific account, so it's exactly the broker-identity
+    fact that must stay private). Deliberately NOT computed: Investor
+    Return (XIRR, money-weighted by construction - needs real cash-flow
+    SIZE, which public_cash_flow_dates() never exposes) and
+    history.marketData/portfolio.transactions (unchanged from before -
+    out of scope for the public path). */
 async function getPortfolioDataPublic() {
-  const [snapshotRes, flowsRes, accountsRes] = await Promise.all([
-    window.db.rpc("public_portfolio_snapshot"),
+  const [historyRes, flowsRes, allocRes] = await Promise.all([
+    window.db.rpc("public_portfolio_value_history"),
     window.db.rpc("public_cash_flow_dates"),
-    window.db.rpc("public_accounts"),
+    window.db.rpc("public_portfolio_allocation"),
   ]);
-  if (snapshotRes.error) throw snapshotRes.error;
+  if (historyRes.error) throw historyRes.error;
   if (flowsRes.error) throw flowsRes.error;
-  if (accountsRes.error) throw accountsRes.error;
+  if (allocRes.error) throw allocRes.error;
 
-  const snapshot = snapshotRes.data || [];
+  const historyRows = historyRes.data || [];
   const flows = flowsRes.data || [];
-  const accountsRows = accountsRes.data || [];
+  const allocRows = allocRes.data || [];
 
-  // ---------- Per-security scaled history, same shape valueOfSecurityAsOf()
-  // already expects (date, value_eur) - "value_eur" here is the scaled
-  // ratio, not euros, but the function itself is scale-agnostic (it
-  // just finds the nearest-prior point), so nothing about it needs to
-  // change to consume this safely.
-  const securitiesById = new Map();
-  const securityHistories = {};
-  for (const row of snapshot) {
-    if (!securitiesById.has(row.security_id)) {
-      securitiesById.set(row.security_id, { id: row.security_id, name: row.security_name, type: row.security_type, accountId: row.account_id });
-    }
-    const list = securityHistories[row.security_id] || (securityHistories[row.security_id] = []);
-    list.push({ date: row.date, value_eur: row.scaled_value });
-  }
-  for (const list of Object.values(securityHistories)) list.sort((a, b) => a.date.localeCompare(b.date));
+  // One synthetic "portfolio" history - see this function's own header
+  // comment for why a single entry is equivalent input here.
+  const portfolioHistory = historyRows
+    .map((r) => ({ date: r.date, value_eur: r.scaled_value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const securityHistories = { portfolio: portfolioHistory };
 
-  const allObservationDates = [...new Set(snapshot.map((r) => r.date))].sort();
+  const allObservationDates = portfolioHistory.map((p) => p.date);
   const latestDate = allObservationDates[allObservationDates.length - 1] || "0000-00-00";
-  const valueSeries = allObservationDates.map((date) => ({
-    date,
-    value: Object.values(securityHistories).reduce((s, h) => s + valueOfSecurityAsOf(h, date), 0),
-    real: true,
-  }));
+  const valueSeries = portfolioHistory.map((p) => ({ date: p.date, value: p.value_eur, real: true }));
 
   const cashFlowDates = [...new Set(flows.map((f) => f.date))].sort();
   const inceptionDate = cashFlowDates[0] || null;
@@ -396,69 +399,42 @@ async function getPortfolioDataPublic() {
   const totalReturnPct = totalReturnAvailable ? twrResult.totalReturnPct : 0;
   const yearlyReturns = inceptionDate ? annualReturns(securityHistories, cashFlowDates, latestDate, inceptionDate) : {};
 
-  // ---------- Holdings: weight/return %, no value ----------
-  const totalScaled = [...securitiesById.keys()].reduce((s, id) => s + valueOfSecurityAsOf(securityHistories[id], latestDate), 0);
-  const holdings = [...securitiesById.values()].map((sec) => {
-    const hist = securityHistories[sec.id];
-    const latestVal = valueOfSecurityAsOf(hist, latestDate);
-    const ownReturnPct = hist.length >= 2
-      ? Math.round(((hist[hist.length - 1].value_eur / hist[0].value_eur) - 1) * 10000) / 100
-      : 0;
-    return {
-      id: sec.id, name: sec.name, ticker: "—", type: sec.type, accountId: sec.accountId,
-      value: null, costBasis: null, pnl: null, pnlPct: null,
-      weight: totalScaled ? Math.round((latestVal / totalScaled) * 10000) / 100 : 0,
-      returnPct: ownReturnPct,
-      tone: tokenColor("asset", sec.name.replace(/[^a-zA-Z0-9]/g, "_")),
-    };
-  });
+  // ---------- Layer 2 aggregate allocation - category-level only ----------
+  const byDimension = (dim) => allocRows.filter((r) => r.dimension === dim && r.weight_pct > 0);
+  const assetClassAllocation = byDimension("asset_class")
+    .map((r) => ({ name: r.category, weight: r.weight_pct, tone: tokenColor("assetClass", r.category) }));
+  const REGION_TONE = { "United States": "orange", "Europe": "blue", "Emerging Markets": "green", "Other": "grey" };
+  const regions = byDimension("geography")
+    .map((r) => ({ name: r.category, weight: r.weight_pct, tone: REGION_TONE[r.category] || "grey" }));
 
-  const accounts = accountsRows.map((a) => ({ id: a.id, name: a.name, currency: a.currency, tone: tokenColor("account", a.name) }));
-  const accountAllocation = accounts.map((a) => {
-    const weight = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.weight, 0);
-    return { name: a.name, value: null, weight: Math.round(weight * 100) / 100, tone: a.tone };
-  });
-  const productAllocation = holdings.map((h) => ({ id: h.id, name: h.name, ticker: h.ticker, weight: h.weight, tone: h.tone }));
-
-  const currencyMap = new Map();
-  for (const a of accountAllocation) {
-    const account = accountsRows.find((row) => row.name === a.name);
-    const code = account?.currency || "EUR";
-    currencyMap.set(code, (currencyMap.get(code) || 0) + a.weight);
-  }
-  const currency = [...currencyMap.entries()].map(([code, weight]) => ({
-    code, weight: Math.round(weight * 100) / 100, tone: code === "EUR" ? "coral" : "blue",
-  }));
-
-  // ---------- Still-real, not-yet-migrated fields - same source and
-  // same reasoning as getPortfolioDataLive() above: real, non-monetary,
-  // shown identically regardless of auth state. ----------
-  const staticReal = getMockPortfolioData().analytics;
-
-  const largest = holdings.length ? [...holdings].sort((a, b) => b.weight - a.weight)[0] : null;
-  const cashHolding = holdings.find((h) => h.type === "Cash");
+  const cashBucket = assetClassAllocation.find((a) => a.name === "Cash");
   const health = {
-    holdingsCount: holdings.length,
-    accountsCount: accounts.length,
+    // Per-holding/per-account counts aren't computable without the
+    // identity data this path deliberately never fetches - left null
+    // rather than a misleading 0 (see app.js's renderAll(), which hides
+    // the Health/Insights cards entirely for signed-out visitors instead
+    // of rendering these).
+    holdingsCount: null,
+    accountsCount: null,
     transactionsCount: flows.length,
-    countriesCount: staticReal.countries.length,
-    assetClassesCount: staticReal.assetClassAllocation.length,
-    currenciesCount: currency.length,
-    largestPosition: largest ? { name: largest.name, weight: largest.weight } : { name: "—", weight: 0 },
-    cashRatio: cashHolding ? cashHolding.weight : 0,
+    countriesCount: null,
+    assetClassesCount: assetClassAllocation.length,
+    currenciesCount: null,
+    largestPosition: null,
+    cashRatio: cashBucket ? cashBucket.weight : 0,
   };
 
   return {
-    portfolio: { holdings, accounts, cash: null, transactions: [] },
+    portfolio: { holdings: [], accounts: [], cash: null, transactions: [] },
     history: { valueSeries, inceptionDate, benchmarks: null, marketData: {} },
     analytics: {
-      assetClassAllocation: staticReal.assetClassAllocation,
-      productAllocation,
-      accountAllocation,
-      regions: staticReal.regions,
-      countries: staticReal.countries,
-      notCountrySpecificWeight: staticReal.notCountrySpecificWeight,
-      currency,
+      assetClassAllocation,
+      productAllocation: [],
+      accountAllocation: [],
+      regions,
+      countries: [],
+      notCountrySpecificWeight: 100,
+      currency: [],
       health,
       performance: {
         totalValue: null, investedCapital: null, unrealisedGain: null, unrealisedGainPct: null,
@@ -477,10 +453,47 @@ async function getPortfolioDataPublic() {
   };
 }
 
+/** getMockPortfolioData() is Vera's REAL portfolio, hand-transcribed
+    into a static JS mirror (repository.js's own header comment) - not a
+    fake demo dataset. Safe as a fallback for a SIGNED-IN load failure
+    (only Vera herself ever sees that screen), but never safe as a
+    signed-out fallback: falling back to it there would hand an
+    anonymous visitor the exact security names/weights/accounts Layer 2/
+    Layer 3 exist specifically to keep private, the moment the public RPC
+    path fails for any reason (network hiccup, a migration not yet run,
+    a real bug). This returns the same empty/neutral shape
+    getPortfolioDataPublic() itself returns when there's simply nothing
+    to show - graceful degradation, never a silent leak. */
+function getPortfolioDataPublicUnavailable(loadError) {
+  return {
+    portfolio: { holdings: [], accounts: [], cash: null, transactions: [] },
+    history: { valueSeries: [], inceptionDate: null, benchmarks: null, marketData: {} },
+    analytics: {
+      assetClassAllocation: [], productAllocation: [], accountAllocation: [],
+      regions: [], countries: [], notCountrySpecificWeight: 100, currency: [],
+      health: {
+        holdingsCount: null, accountsCount: null, transactionsCount: null, countriesCount: null,
+        assetClassesCount: null, currenciesCount: null, largestPosition: null, cashRatio: 0,
+      },
+      performance: {
+        totalValue: null, investedCapital: null, unrealisedGain: null, unrealisedGainPct: null,
+        totalReturnPct: 0, totalReturnAvailable: false,
+        investorReturnPct: 0, investorReturnAvailable: false,
+        yearlyReturns: {}, contributionsTotal: null, withdrawalsTotal: null,
+        todayChange: null, todayChangePct: null, cash: null,
+      },
+    },
+    settings: { currency: "EUR", benchmark: null, timezone: "Europe/Lisbon" },
+    metadata: { lastUpdated: new Date().toISOString(), source: "public-unavailable", version: "1.0.0", loadError: loadError ? (loadError.message || String(loadError)) : null },
+  };
+}
+
 /** The single entry point app.js calls - lets init() stay one call site
     regardless of which backend actually answers it. Falls back to the
-    mock on any failure (signed out, RLS empty, a real error) so Overview
-    never renders blank; console.warn so a real bug doesn't hide silently. */
+    mock on a SIGNED-IN failure (only Vera sees that) so Overview never
+    renders blank; console.warn so a real bug doesn't hide silently. A
+    signed-out failure never falls back to the mock - see
+    getPortfolioDataPublicUnavailable()'s own comment for why. */
 async function getPortfolioDataAuto() {
   if (window.db && currentUser()) {
     try {
@@ -504,16 +517,11 @@ async function getPortfolioDataAuto() {
     try {
       return await getPortfolioDataPublic();
     } catch (err) {
-      // Signed-out AND the public RPC path failed (0013's functions not
-      // deployed yet, a real error, etc.) - same "don't render blank,
-      // don't hide a real bug" reasoning as the authenticated branch
-      // above, tagged with its own distinct source so this specific
-      // failure mode is identifiable too.
-      console.warn("Public portfolio data load failed, falling back to mock:", err);
-      const fallback = getMockPortfolioData();
-      fallback.metadata.source = "mock-fallback-error";
-      fallback.metadata.loadError = err.message || String(err);
-      return fallback;
+      // Signed-out AND the public RPC path failed (0015's functions not
+      // deployed yet, a real error, etc.) - never fall back to the real
+      // mock data here (see getPortfolioDataPublicUnavailable()).
+      console.warn("Public portfolio data load failed:", err);
+      return getPortfolioDataPublicUnavailable(err);
     }
   }
   return getMockPortfolioData();
