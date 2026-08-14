@@ -7,16 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=85">
-<link rel="stylesheet" href="css/layout.css?v=85">
-<link rel="stylesheet" href="css/components.css?v=85">
+<link rel="stylesheet" href="css/theme.css?v=91">
+<link rel="stylesheet" href="css/layout.css?v=91">
+<link rel="stylesheet" href="css/components.css?v=91">
 <!-- valuations.css: only for its generic .val-form-*/modal-skeleton
      primitives (label+input, cancel/submit, error line) - reused as-is
      for Manual Update / Trading 212's own modals below, not
      redeclared. Its page-specific .valuations-* rules never match
      anything on this page. -->
-<link rel="stylesheet" href="css/valuations.css?v=85">
-<link rel="stylesheet" href="css/data-hub.css?v=85">
+<link rel="stylesheet" href="css/valuations.css?v=91">
+<link rel="stylesheet" href="css/data-hub.css?v=91">
 </head>
 <body>
 <div id="app">
@@ -155,28 +155,100 @@
   </div>
 </div>
 
+<!-- ============ BPI Screenshot import modal ============
+     OCR runs entirely client-side (Tesseract.js, loaded below) - the
+     screenshot itself is never uploaded anywhere, matching this app's
+     own "money never leaves the device/Supabase" principle already
+     applied everywhere else (see the public-data RPC functions'
+     comments). Same Upload -> Review -> Confirm shape as Trading 212's
+     own modal, reusing its review-table CSS as-is. -->
+<div id="bpi-modal-root">
+  <div id="bpi-modal-backdrop"></div>
+  <div id="bpi-modal" class="glass" role="dialog" aria-modal="true" aria-label="Import BPI Screenshot">
+
+    <div id="bpi-step-input">
+      <h2 class="owner-modal-title">Import BPI Screenshot</h2>
+      <p class="bpi-modal-hint">BPI App or BPINet — "Património" screen</p>
+      <div class="drop-zone glass-quiet" id="bpi-drop-zone" tabindex="0" role="button" aria-label="Upload BPI screenshot">
+        <span class="drop-zone-icon" id="bpi-drop-zone-icon"></span>
+        <p class="drop-zone-title" id="bpi-file-label">Tap to choose a screenshot</p>
+        <p class="drop-zone-sub">Processed on your device - never uploaded anywhere</p>
+        <input type="file" id="bpi-file-input" accept="image/*" hidden>
+      </div>
+      <p class="val-form-error" id="bpi-input-error"></p>
+      <div class="val-form-actions">
+        <button class="val-form-cancel" type="button" id="bpi-input-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div id="bpi-step-reading" hidden>
+      <h2 class="owner-modal-title">Reading screenshot…</h2>
+      <div class="bpi-progress-track"><div class="bpi-progress-bar" id="bpi-progress-bar"></div></div>
+      <p class="bpi-progress-status" id="bpi-progress-status">Starting…</p>
+    </div>
+
+    <div id="bpi-step-review" hidden>
+      <h2 class="owner-modal-title">Review Updates</h2>
+      <div class="val-form-field">
+        <label for="bpi-date">Valuation Date</label>
+        <input id="bpi-date" type="date">
+      </div>
+      <div class="t212-review-table-scroll">
+        <table class="t212-review-table" id="bpi-review-table"></table>
+      </div>
+      <p class="t212-review-summary" id="bpi-review-summary"></p>
+      <!-- Diagnostic, not a normal part of the flow - what OCR actually
+           read, before any name-matching. Exists specifically so "found
+           values, none matched" is debuggable (was the text misread,
+           or genuinely not a held security?) instead of a dead end. -->
+      <button type="button" class="bpi-debug-toggle" id="bpi-debug-toggle" hidden>Show detected text</button>
+      <div class="bpi-debug-panel" id="bpi-debug-panel" hidden></div>
+      <p class="val-form-error" id="bpi-review-error"></p>
+      <div class="val-form-actions">
+        <button class="val-form-cancel" type="button" id="bpi-back-btn">Back</button>
+        <button class="val-form-submit" type="button" id="bpi-confirm-btn">Confirm Updates</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=85"></script>
-<script src="js/supabaseClient.js?v=85"></script>
+<script src="js/supabaseConfig.js?v=91"></script>
+<script src="js/supabaseClient.js?v=91"></script>
 
-<script src="js/utils.js?v=85"></script>
-<script src="js/calculations.js?v=85"></script>
-<script src="js/repository.js?v=85"></script>
-<script src="js/shell.js?v=85"></script>
-<script src="js/auth.js?v=85"></script>
-<script src="js/db.js?v=85"></script>
+<script src="js/utils.js?v=91"></script>
+<script src="js/calculations.js?v=91"></script>
+<script src="js/repository.js?v=91"></script>
+<script src="js/shell.js?v=91"></script>
+<script src="js/auth.js?v=91"></script>
+<script src="js/db.js?v=91"></script>
+<!-- Only for getPortfolioDataAuto() - the ONE canonical "what does the
+     user currently hold" definition every other page already uses
+     (Overview, Portfolio Detail, Performance). Update Portfolio's own
+     held-security check reuses it rather than re-deriving holdings
+     from transactions/valuations a second, possibly-diverging way. -->
+<script src="js/analytics.js?v=91"></script>
 
-<script src="js/importer/vendor/pdf.min.js?v=85"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc = "js/importer/vendor/pdf.worker.min.js?v=85";</script>
-<script src="js/importer/field.js?v=85"></script>
-<script src="js/importer/numbers.js?v=85"></script>
-<script src="js/importer/pdfReader.js?v=85"></script>
-<script src="js/importer/classifier.js?v=85"></script>
-<script src="js/importer/monthlyFactsheetParser.js?v=85"></script>
-<script src="js/importer/holdingsReportParser.js?v=85"></script>
-<script src="js/importer/consolidate.js?v=85"></script>
-<script src="js/importer/geoClassifier.js?v=85"></script>
+<script src="js/importer/vendor/pdf.min.js?v=91"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = "js/importer/vendor/pdf.worker.min.js?v=91";</script>
+<script src="js/importer/field.js?v=91"></script>
+<script src="js/importer/numbers.js?v=91"></script>
+<script src="js/importer/pdfReader.js?v=91"></script>
+<script src="js/importer/classifier.js?v=91"></script>
+<script src="js/importer/monthlyFactsheetParser.js?v=91"></script>
+<script src="js/importer/holdingsReportParser.js?v=91"></script>
+<script src="js/importer/consolidate.js?v=91"></script>
+<script src="js/importer/geoClassifier.js?v=91"></script>
 
-<script src="js/data-hub.js?v=85"></script>
+<!-- Tesseract.js - OCR runs fully client-side (WASM + Web Worker), same
+     "loaded from a CDN, but the actual USER DATA never leaves the
+     browser" pattern this project already uses for the Supabase client
+     above - the library code comes from jsdelivr, the screenshot itself
+     is never sent anywhere. See js/data-hub.js's runBpiScreenshotOcr()
+     for the one place this global is actually called. -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<script src="js/data-hub.js?v=91"></script>
 </body>
 </html>

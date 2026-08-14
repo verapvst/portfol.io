@@ -43,11 +43,28 @@ const PROCESSING_STEPS = [
 const state = {
   groups: new Map(), groupGeo: new Map(), pendingDictionaryAdditions: [],
   portfolioId: null, securities: [], accounts: [],
+  // Currently-held securities only (loadDbContext, via
+  // getPortfolioDataAuto()) - the set Update Portfolio's every method
+  // (Manual, Trading 212, future BPI Screenshot) is restricted to. Kept
+  // separate from `securities` (the full Security Master, used by
+  // Research Data's own findOrCreateSecurity() path) on purpose - the
+  // two lists answer different questions and must never be conflated.
+  heldSecurityIds: new Set(), heldSecurities: [],
   // Update Portfolio (Trading 212 CSV) - the currently parsed+matched
   // rows between "Preview & Match" and "Confirm", and the raw text of
   // a file chosen (not yet parsed) so Upload/Paste can share one Parse
   // step. Cleared on every modal open/close (resetT212Modal below).
   t212Rows: [], t212PendingText: null,
+  // Update Portfolio (BPI Screenshot) - the OCR-matched candidates
+  // between "reading" and "review". Already filtered to rows that
+  // matched a real security (see extractBpiCandidates() below) -
+  // unlike t212Rows, this never holds a genuinely-unmatched row.
+  bpiRows: [],
+  // Raw OCR output BEFORE filtering - kept even when nothing matched,
+  // specifically so a "found values, none matched" result is
+  // diagnosable (what did OCR actually read?) instead of a dead end.
+  // See the "Show detected text" toggle in the review step.
+  bpiDebug: { lines: [], candidates: [] },
 };
 
 function slugify(name) {
@@ -271,11 +288,31 @@ async function loadDbContext() {
     state.portfolioId = null;
     state.securities = [];
     state.accounts = [];
+    state.heldSecurityIds = new Set();
+    state.heldSecurities = [];
     return;
   }
   state.portfolioId = await ensurePortfolio();
   state.securities = await loadSecurities();
   state.accounts = await loadAccountsForPortfolio(state.portfolioId);
+
+  // Update Portfolio only ever operates on INVESTMENT SECURITIES the
+  // user CURRENTLY holds (per Vera's own explicit ruling: an update
+  // means "I already own this, what's it worth today", never a way to
+  // add a new holding - that's Transactions -> Buy; and never Cash EUR,
+  // which isn't an investment product at all). getPortfolioDataAuto()
+  // is the one canonical "what do I currently hold" definition already
+  // used by Overview/Portfolio Detail/Performance - reused here rather
+  // than re-deriving "held" from transactions/valuations a second way
+  // that could quietly drift from what those pages show. type ===
+  // "Cash" is the same check analytics.js itself uses to find the cash
+  // pseudo-security, not a new definition invented here.
+  const portfolioData = await getPortfolioDataAuto();
+  state.heldSecurities = portfolioData.portfolio.holdings
+    .filter((h) => h.type !== "Cash")
+    .map((h) => ({ id: h.id, name: h.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  state.heldSecurityIds = new Set(state.heldSecurities.map((h) => h.id));
 }
 
 /** Case- AND diacritic-insensitive (normalizeName(), utils.js) - fixed
@@ -673,12 +710,7 @@ function renderSourceChips() {
 const UPDATE_METHODS = [
   { key: "manual", icon: "edit3", title: "Manual Update", sub: "Update one holding by hand", enabled: true },
   { key: "t212", icon: "upload", title: "Trading 212 CSV", sub: "Upload or paste your Trading 212 export", enabled: true },
-  // Deliberately left here, disabled, rather than omitted - the point
-  // (per the Data Hub research pass this followed) is that the
-  // architecture is ready for this to slot in as a fourth method
-  // later (OCR on a BPI app screenshot) without restructuring anything
-  // above it, not that it doesn't exist yet.
-  { key: "bpi-screenshot", icon: "fileText", title: "BPI Screenshot", sub: "Update from a screenshot of the BPI app", enabled: false },
+  { key: "bpi-screenshot", icon: "fileText", title: "BPI Screenshot", sub: "Update from a screenshot of the BPI app or BPINet", enabled: false },
 ];
 
 function updateMethodsHTML() {
@@ -699,22 +731,33 @@ function initUpdatePortfolioMethods() {
       const key = btn.dataset.updateMethod;
       if (key === "manual") openManualUpdateModal();
       if (key === "t212") openT212Modal();
+      if (key === "bpi-screenshot") openBpiScreenshotModal();
     });
   });
 }
 
 /* ---------- Manual Update modal ----------
-   The security is picked from a <select> of EXISTING securities, never
-   free text - so unlike the old Add Valuation pattern, there is no
-   findOrCreateSecurity() call here and no way for this modal to ever
-   create a new security row. Deliberately no Source field (unlike
-   Portfolio Detail's own Update modal) - this entry point is meant to
-   be fast on a phone, so the source is fixed to "Manual (Data Hub)"
-   rather than one more field to fill in. */
-function securityOptionsHTML() {
-  return state.securities
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
+   The security is picked from a <select> of CURRENTLY HELD securities
+   only (state.heldSecurities, not the full Security Master) - an
+   update means "I already own this, what's it worth today", never a
+   way to start holding something new (that's Transactions -> Buy, per
+   Vera's own explicit ruling). Free text was never involved anyway (no
+   findOrCreateSecurity() call here), so this was already safe against
+   creating a duplicate security - the held-only restriction is a
+   separate rule, about what Update Portfolio MEANS, not just about
+   duplicate-safety. Deliberately no Source field (unlike Portfolio
+   Detail's own Update modal) - this entry point is meant to be fast on
+   a phone, so the source is fixed to "Manual (Data Hub)" rather than
+   one more field to fill in.
+
+   Named distinctly from the OTHER securityOptionsHTML() above (Research
+   Data's Load-to-Database picker, full Security Master + "Create new")
+   - same function name in the same scope would have silently shadowed
+   one of them; they answer genuinely different questions and must stay
+   two separate functions. */
+function heldSecurityOptionsHTML() {
+  if (!state.heldSecurities.length) return `<option value="">No holdings on record</option>`;
+  return state.heldSecurities
     .map((s) => `<option value="${s.id}">${s.name}</option>`)
     .join("");
 }
@@ -768,7 +811,7 @@ function initManualUpdateModal() {
 }
 
 function openManualUpdateModal() {
-  $("mu-security").innerHTML = securityOptionsHTML();
+  $("mu-security").innerHTML = heldSecurityOptionsHTML();
   $("mu-date").value = new Date().toISOString().slice(0, 10);
   $("mu-value").value = "";
   $("mu-units").value = "";
@@ -873,47 +916,61 @@ function parseTrading212Csv(text) {
     creates a security here. This is the whole point of this function:
     a free-text/auto-create path is exactly what produced the "BPI
     Smart Ações PPR" vs "BPI SMART Ações PPR" duplicate; this one only
-    ever resolves to an EXISTING row's id, or null. */
+    ever resolves to an EXISTING row's id, or null.
+
+    Recognising the security is NOT enough to update it, though -
+    Vera's own explicit safeguard: "security must exist AND security
+    must currently be held" before it's eligible for a valuation
+    update. A real security that isn't currently held gets its own
+    third state below (t212StatusHTML/renderT212ReviewTable) - "you
+    don't hold this yet, add it through Transactions first" - never
+    silently folded into either "Matched" or "Needs review". */
 function matchTrading212Row(row, securities) {
   const bySlice = securities.filter((s) => s.ticker && s.ticker.toUpperCase() === row.slice.toUpperCase());
-  if (bySlice.length === 1) return { security: bySlice[0], matchedBy: "ticker" };
+  if (bySlice.length === 1) return finalizeTrading212Match(bySlice[0], "ticker");
 
   if (row.isin) {
     const byIsin = securities.filter((s) => s.isin && s.isin === row.isin);
-    if (byIsin.length === 1) return { security: byIsin[0], matchedBy: "isin" };
+    if (byIsin.length === 1) return finalizeTrading212Match(byIsin[0], "isin");
   }
 
   const norm = normalizeName(row.name);
   const byName = securities.filter((s) => normalizeName(s.name) === norm);
-  if (byName.length === 1) return { security: byName[0], matchedBy: "name" };
+  if (byName.length === 1) return finalizeTrading212Match(byName[0], "name");
 
-  return { security: null, matchedBy: null };
+  return { security: null, matchedBy: null, held: false, eligible: false };
 }
 
-function t212StatusHTML(matched) {
-  return matched
-    ? `<span class="t212-status-matched">${icon("checkCircle")} Matched</span>`
-    : `<span class="t212-status-review">${icon("activity")} Needs review</span>`;
+function finalizeTrading212Match(security, matchedBy) {
+  const held = state.heldSecurityIds.has(security.id);
+  return { security, matchedBy, held, eligible: held };
+}
+
+function t212StatusHTML(row) {
+  if (row.eligible) return `<span class="t212-status-matched">${icon("checkCircle")} Matched</span>`;
+  if (row.security) return `<span class="t212-status-notheld">${icon("lock")} Not held</span>`;
+  return `<span class="t212-status-review">${icon("activity")} Needs review</span>`;
 }
 
 /** Invested/Result shown as small context under Value, per Vera's own
     distinction - Value is the actual valuation being recorded,
     Invested/Result are shown for context only and are never written
-    anywhere (see the confirm handler below - only .value ever reaches
-    recordValuations()). */
+    anywhere (see the confirm handler below - only ELIGIBLE rows'
+    .value ever reaches recordValuations()). */
 function renderT212ReviewTable(rows) {
   const head = "<thead><tr><th>Trading 212</th><th>Matched Security</th><th>Value</th><th>Quantity</th><th>Status</th></tr></thead>";
   const body = rows.map((r) => {
     const context = [];
     if (r.invested != null) context.push(`invested ${fmtEUR(r.invested)}`);
     if (r.result != null) context.push(fmtEUR(r.result, { signed: true }));
+    if (r.security && !r.held) context.push("add it through Transactions first");
     return `
       <tr>
         <td>${r.slice}</td>
         <td><span class="t212-review-security${r.security ? "" : " is-unmatched"}">${r.security ? r.security.name : r.name}</span></td>
         <td class="amount-cell">${fmtEUR(r.value)}${context.length ? `<div class="t212-review-context">${context.join(" · ")}</div>` : ""}</td>
         <td class="amount-cell">${r.units != null ? r.units.toFixed(4) : "—"}</td>
-        <td>${t212StatusHTML(!!r.security)}</td>
+        <td>${t212StatusHTML(r)}</td>
       </tr>`;
   }).join("");
   $("t212-review-table").innerHTML = head + `<tbody>${body}</tbody>`;
@@ -994,11 +1051,15 @@ function initT212Modal() {
     $("t212-date").value = new Date().toISOString().slice(0, 10);
     renderT212ReviewTable(state.t212Rows);
 
-    const matchedCount = state.t212Rows.filter((r) => r.security).length;
-    const reviewCount = state.t212Rows.length - matchedCount;
-    $("t212-review-summary").textContent = reviewCount
-      ? `${matchedCount} matched, ${reviewCount} need${reviewCount === 1 ? "s" : ""} review - unmatched rows won't be updated. Use Manual Update for those instead.`
-      : `${matchedCount} matched.`;
+    const eligibleCount = state.t212Rows.filter((r) => r.eligible).length;
+    const notHeldCount = state.t212Rows.filter((r) => r.security && !r.held).length;
+    const reviewCount = state.t212Rows.length - eligibleCount - notHeldCount;
+    const parts = [`${eligibleCount} matched`];
+    if (notHeldCount) parts.push(`${notHeldCount} recognised but not held`);
+    if (reviewCount) parts.push(`${reviewCount} need${reviewCount === 1 ? "s" : ""} review`);
+    $("t212-review-summary").textContent = notHeldCount || reviewCount
+      ? `${parts.join(", ")} - only matched rows will be updated. Not-held products need Transactions -> Buy first.`
+      : `${eligibleCount} matched.`;
   });
 
   $("t212-back-btn").addEventListener("click", () => {
@@ -1016,8 +1077,8 @@ function initT212Modal() {
     const date = $("t212-date").value;
     if (!date) { errorEl.textContent = "Choose a valuation date."; return; }
 
-    const matchedRows = state.t212Rows.filter((r) => r.security);
-    if (!matchedRows.length) { errorEl.textContent = "No matched rows to update."; return; }
+    const matchedRows = state.t212Rows.filter((r) => r.eligible);
+    if (!matchedRows.length) { errorEl.textContent = "No eligible rows to update - each must be an existing, currently-held security."; return; }
 
     submitBtn.disabled = true;
     try {
@@ -1043,6 +1104,315 @@ function openT212Modal() {
   document.addEventListener("keydown", t212KeyHandler);
 }
 
+/* ---------- BPI Screenshot import (OCR) ----------
+   Tesseract.js (loaded in data-hub.html) runs entirely client-side -
+   WASM + a Web Worker, no server, no third party ever sees the
+   screenshot. Matching reuses the same "existing security only, exact
+   before fuzzy, ambiguous = no match" discipline as Trading 212's own
+   matchTrading212Row() - deliberately a SEPARATE function rather than
+   a shared one, since OCR text has no ticker/ISIN to key off at all
+   (only a name, extracted from pixels, with real error potential) -
+   merging the two would mean Trading 212's already-verified matcher
+   inherits OCR-specific fuzziness it doesn't need and shouldn't have. */
+
+const BPI_AMOUNT_RE = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:EUR|€)?/i;
+
+/** A line that's ENTIRELY digits/%/>/whitespace/separators - a bare
+    percentage, a lone chevron, nothing with an actual product name in
+    it. Used below to skip past exactly this kind of line when walking
+    backwards for a name, never mistaken for a real (if short) name. */
+function isBpiJunkLine(text) {
+  return !text || text.length < 3 || /^[\d%>\s.,]*$/.test(text);
+}
+
+/** BPINet's own table renders a product's name and value on the SAME
+    line - "BPI DINAMICO ... 341,39 EUR" - so the straightforward same-
+    line read works there. The BPI APP's card layout does NOT: a real
+    screenshot (tested directly) OCR'd as "16% 341,39 EUR" (the
+    category's own weight+value summary, no product name at all), then
+    "BPI DINAMICO" on its own line, then ">" (a misread chevron), then
+    "341,39 EUR" AGAIN on its own line for the individual product. The
+    name and its value can be separated by junk lines in between, not
+    guaranteed adjacent either.
+
+    So: for a line whose amount has no usable name text before it (or
+    only a bare "16%"-style prefix, itself stripped first), walk
+    backwards up to 3 lines looking for the nearest real name line -
+    skipping bare/junk lines (isBpiJunkLine above), stopping early if
+    another amount line is hit first (that would mean pairing across
+    two different products' values, never done). Relies on Tesseract's
+    own line segmentation throughout, same "lean on the underlying
+    engine's own layout analysis" approach js/importer/pdfReader.js
+    already takes with pdf.js's word positions - just now walking a
+    short window of lines instead of assuming same-line always holds. */
+function extractBpiCandidates(lines) {
+  const texts = lines.map((l) => (l.text || "").trim());
+  const candidates = [];
+
+  for (let i = 0; i < texts.length; i++) {
+    const text = texts[i];
+    const m = text.match(BPI_AMOUNT_RE);
+    if (!m) continue;
+
+    let name = text.slice(0, m.index).replace(/^\d{1,3}%\s*/, "").replace(/\s+/g, " ").trim();
+
+    if (name.length < 3) {
+      for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+        if (BPI_AMOUNT_RE.test(texts[j])) break;
+        if (!isBpiJunkLine(texts[j])) { name = texts[j]; break; }
+      }
+    }
+    if (name.length < 3) continue;
+
+    const value = parseEuNumber(m[1]);
+    if (value == null) continue;
+    candidates.push({ name, value });
+  }
+  return candidates;
+}
+
+/** Exact normalizeName() first (utils.js - the same fuzzy-name
+    function every other import path in this app uses), then a
+    CONTAINS fallback in either direction - OCR-specific tolerance a
+    clean CSV export never needed, since a screenshot crops tighter
+    and can pick up a stray leading/trailing character (an icon glyph
+    misread, a chevron) a strict exact match would reject outright.
+    Still requires exactly ONE candidate at each tier - an ambiguous
+    contains-match (e.g. a short fragment matching several securities)
+    is treated as no match, the same safety rule as everywhere else -
+    never a guess, never an auto-created security. */
+function matchBpiScreenshotCandidate(name, securities) {
+  const norm = normalizeName(name);
+  if (!norm) return { security: null, matchedBy: null, held: false, eligible: false };
+
+  const byExactName = securities.filter((s) => normalizeName(s.name) === norm);
+  if (byExactName.length === 1) return finalizeBpiMatch(byExactName[0], "name");
+
+  const byContains = securities.filter((s) => {
+    const sNorm = normalizeName(s.name);
+    return sNorm.length >= 4 && (norm.includes(sNorm) || sNorm.includes(norm));
+  });
+  if (byContains.length === 1) return finalizeBpiMatch(byContains[0], "name-fuzzy");
+
+  return { security: null, matchedBy: null, held: false, eligible: false };
+}
+
+function finalizeBpiMatch(security, matchedBy) {
+  const held = state.heldSecurityIds.has(security.id);
+  return { security, matchedBy, held, eligible: held };
+}
+
+const BPI_OCR_STATUS_LABELS = {
+  "loading tesseract core": "Loading OCR engine…",
+  "initializing tesseract": "Starting…",
+  "loading language traineddata": "Loading Portuguese language data…",
+  "initializing api": "Preparing…",
+  "recognizing text": "Reading screenshot…",
+};
+
+/** The one place Tesseract's global is actually called. `lang: "por"`
+    matches the real screenshots this was built against (Portuguese
+    BPI app/BPINet UI). Returns line objects only (.text) - callers
+    never touch word-level boxes/confidence, extractBpiCandidates()
+    above works purely off Tesseract's own line text. */
+async function runBpiScreenshotOcr(file) {
+  const result = await Tesseract.recognize(file, "por", {
+    logger: (m) => {
+      if (typeof m.progress === "number") {
+        $("bpi-progress-bar").style.width = `${Math.round(m.progress * 100)}%`;
+      }
+      $("bpi-progress-status").textContent = BPI_OCR_STATUS_LABELS[m.status] || m.status || "Working…";
+    },
+  });
+  return result.data.lines || [];
+}
+
+/** Same review-table shape/status states as Trading 212
+    (t212StatusHTML, .t212-review-* CSS) reused as-is - Value is the
+    only figure this method has (no Quantity/Invested/Result, unlike a
+    CSV export), so the table is a column narrower, nothing else
+    differs. */
+function renderBpiReviewTable(rows) {
+  const head = "<thead><tr><th>Detected</th><th>Matched Security</th><th>Value</th><th>Status</th></tr></thead>";
+  const body = rows.map((r) => `
+      <tr>
+        <td>${r.name}</td>
+        <td><span class="t212-review-security">${r.security.name}</span></td>
+        <td class="amount-cell">${fmtEUR(r.value)}${!r.held ? `<div class="t212-review-context">add it through Transactions first</div>` : ""}</td>
+        <td>${t212StatusHTML(r)}</td>
+      </tr>`).join("");
+  $("bpi-review-table").innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+/** Shows exactly what OCR read before any name-matching - every line
+    Tesseract produced, and which of those lines extractBpiCandidates()
+    thought contained a euro amount. The toggle only appears when
+    there's something worth showing (skipped entirely on a totally
+    clean run where everything matched, so it doesn't clutter the
+    common case). */
+function renderBpiDebugPanel(debug) {
+  const toggle = $("bpi-debug-toggle");
+  const panel = $("bpi-debug-panel");
+  if (!debug.lines.length) { toggle.hidden = true; panel.hidden = true; return; }
+
+  toggle.hidden = false;
+  panel.hidden = true;
+  toggle.textContent = "Show detected text";
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const candidateNames = new Set(debug.candidates.map((c) => c.name));
+  panel.innerHTML = debug.lines.map((line) => {
+    const trimmed = line.trim();
+    const matchesCandidate = [...candidateNames].some((n) => trimmed.includes(n));
+    return matchesCandidate ? `<div><b>${esc(trimmed)}</b></div>` : `<div>${esc(trimmed)}</div>`;
+  }).join("") || "<div>(no text detected)</div>";
+}
+
+function bpiKeyHandler(e) { if (e.key === "Escape") window.closeBpiScreenshotModal(); }
+
+function resetBpiScreenshotModal() {
+  $("bpi-step-reading").hidden = true;
+  $("bpi-step-review").hidden = true;
+  $("bpi-step-input").hidden = false;
+  $("bpi-file-input").value = "";
+  $("bpi-input-error").textContent = "";
+  $("bpi-review-error").textContent = "";
+  $("bpi-progress-bar").style.width = "0%";
+  $("bpi-progress-status").textContent = "Starting…";
+  $("bpi-debug-toggle").hidden = true;
+  $("bpi-debug-panel").hidden = true;
+  state.bpiRows = [];
+  state.bpiDebug = { lines: [], candidates: [] };
+}
+
+function initBpiScreenshotModal() {
+  const root = $("bpi-modal-root");
+  const closeAll = () => {
+    root.classList.remove("open");
+    document.removeEventListener("keydown", bpiKeyHandler);
+    resetBpiScreenshotModal();
+  };
+  $("bpi-modal-backdrop").addEventListener("click", closeAll);
+  $("bpi-input-cancel").addEventListener("click", closeAll);
+  window.closeBpiScreenshotModal = closeAll;
+
+  $("bpi-drop-zone").addEventListener("click", () => $("bpi-file-input").click());
+  $("bpi-drop-zone").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("bpi-file-input").click(); }
+  });
+
+  const takeImage = async (file) => {
+    if (!file) return;
+    const errorEl = $("bpi-input-error");
+    errorEl.textContent = "";
+    if (!file.type.startsWith("image/")) {
+      errorEl.textContent = "Choose an image file (screenshot), not a document.";
+      return;
+    }
+
+    $("bpi-step-input").hidden = true;
+    $("bpi-step-reading").hidden = false;
+    $("bpi-progress-bar").style.width = "0%";
+    $("bpi-progress-status").textContent = "Starting…";
+
+    try {
+      const lines = await runBpiScreenshotOcr(file);
+      const candidates = extractBpiCandidates(lines);
+      // Kept regardless of match outcome - a "found values, none
+      // matched" result needs to be diagnosable (see the "Show
+      // detected text" toggle below), not a dead end with no way to
+      // tell whether OCR misread the name or the screenshot was the
+      // wrong page entirely.
+      state.bpiDebug = { lines: lines.map((l) => l.text), candidates };
+      console.log("[BPI Screenshot OCR] raw lines:", state.bpiDebug.lines);
+      console.log("[BPI Screenshot OCR] candidates:", candidates);
+
+      // Silently drop anything that doesn't match a real security -
+      // per Vera's own explicit rule for this method specifically
+      // (Total Património, the deposit/current-account balance, and
+      // any other non-investment line are never shown as "needs
+      // review" clutter here, unlike Trading 212's CSV, which has no
+      // such noise to filter in the first place).
+      state.bpiRows = candidates
+        .map((c) => ({ ...c, ...matchBpiScreenshotCandidate(c.name, state.securities) }))
+        .filter((r) => r.security);
+
+      $("bpi-step-reading").hidden = true;
+      $("bpi-step-review").hidden = false;
+      $("bpi-date").value = new Date().toISOString().slice(0, 10);
+      renderBpiReviewTable(state.bpiRows);
+      renderBpiDebugPanel(state.bpiDebug);
+
+      const eligibleCount = state.bpiRows.filter((r) => r.eligible).length;
+      const notHeldCount = state.bpiRows.length - eligibleCount;
+      if (!candidates.length) {
+        $("bpi-review-summary").textContent = "Couldn't find any euro amounts in this screenshot - make sure it's the Património screen.";
+      } else if (!state.bpiRows.length) {
+        $("bpi-review-summary").textContent = "Found values, but none matched a security in your portfolio.";
+      } else if (notHeldCount) {
+        $("bpi-review-summary").textContent = `${eligibleCount} matched, ${notHeldCount} recognised but not held - only matched rows will be updated. Not-held products need Transactions -> Buy first.`;
+      } else {
+        $("bpi-review-summary").textContent = `${eligibleCount} matched.`;
+      }
+    } catch (err) {
+      $("bpi-step-reading").hidden = true;
+      $("bpi-step-input").hidden = false;
+      errorEl.textContent = `Couldn't read this screenshot: ${err.message || "unknown error"}.`;
+    }
+  };
+  $("bpi-file-input").addEventListener("change", (e) => takeImage(e.target.files[0]));
+  ["dragenter", "dragover"].forEach((evt) => $("bpi-drop-zone").addEventListener(evt, (e) => { e.preventDefault(); $("bpi-drop-zone").classList.add("drag-active"); }));
+  ["dragleave", "drop"].forEach((evt) => $("bpi-drop-zone").addEventListener(evt, (e) => { e.preventDefault(); $("bpi-drop-zone").classList.remove("drag-active"); }));
+  $("bpi-drop-zone").addEventListener("drop", (e) => takeImage(e.dataTransfer.files[0]));
+
+  $("bpi-back-btn").addEventListener("click", () => {
+    $("bpi-step-review").hidden = true;
+    $("bpi-step-input").hidden = false;
+  });
+
+  $("bpi-debug-toggle").addEventListener("click", () => {
+    const panel = $("bpi-debug-panel");
+    const nowHidden = !panel.hidden;
+    panel.hidden = nowHidden;
+    $("bpi-debug-toggle").textContent = nowHidden ? "Show detected text" : "Hide detected text";
+  });
+
+  $("bpi-confirm-btn").addEventListener("click", async () => {
+    const errorEl = $("bpi-review-error");
+    const submitBtn = $("bpi-confirm-btn");
+    errorEl.textContent = "";
+
+    if (!currentUser()) { errorEl.textContent = "Sign in to save updates."; window.openAuthModal(); return; }
+
+    const date = $("bpi-date").value;
+    if (!date) { errorEl.textContent = "Choose a valuation date."; return; }
+
+    const eligibleRows = state.bpiRows.filter((r) => r.eligible);
+    if (!eligibleRows.length) { errorEl.textContent = "No eligible rows to update."; return; }
+
+    submitBtn.disabled = true;
+    try {
+      await recordValuations(eligibleRows.map((r) => ({
+        portfolio_id: state.portfolioId,
+        security_id: r.security.id,
+        date,
+        value_eur: r.value,
+        units: null,
+        source: "BPI Screenshot",
+      })));
+      closeAll();
+    } catch (err) {
+      errorEl.textContent = err.message || "Something went wrong.";
+    }
+    submitBtn.disabled = false;
+  });
+}
+
+function openBpiScreenshotModal() {
+  resetBpiScreenshotModal();
+  $("bpi-modal-root").classList.add("open");
+  document.addEventListener("keydown", bpiKeyHandler);
+}
+
 function init() {
   const user = { initial: "V", name: "Vera Sousa", role: "Long-term investor", greetingName: "Vera" };
 
@@ -1062,6 +1432,7 @@ function init() {
   initUpdatePortfolioMethods();
   initManualUpdateModal();
   initT212Modal();
+  initBpiScreenshotModal();
 
   onAuthChange(() => loadDbContext().then(renderGroups));
   initAuth().then(loadDbContext);

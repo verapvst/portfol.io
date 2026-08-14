@@ -464,10 +464,89 @@
 
 .t212-status-matched { display: inline-flex; align-items: center; gap: 4px; color: var(--positive); font-size: 12px; white-space: nowrap; }
 .t212-status-review { display: inline-flex; align-items: center; gap: 4px; color: var(--orange-2); font-size: 12px; font-weight: 500; white-space: nowrap; }
-.t212-status-matched svg, .t212-status-review svg { width: 13px; height: 13px; flex-shrink: 0; }
+/* A THIRD state, deliberately distinct from both - the security is
+   real and recognised (not "needs review"), it just isn't something
+   the portfolio currently holds, so it's not eligible for a valuation
+   update (see matchTrading212Row()'s own comment on this safeguard). */
+.t212-status-notheld { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.t212-status-matched svg, .t212-status-review svg, .t212-status-notheld svg { width: 13px; height: 13px; flex-shrink: 0; }
 
 .t212-review-summary { margin-top: var(--sp-4); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 
+/* ---------- BPI Screenshot modal - same backdrop/positioning recipe
+   as Trading 212's own modal (#t212-modal-root above), plus a reading
+   progress state Trading 212 never needed (OCR takes real seconds,
+   parsing a CSV doesn't). Review step reuses .t212-review-table/.t212-
+   review-summary as-is - same table shape, no need for a second set of
+   rules. ---------- */
+#bpi-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+#bpi-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#bpi-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#bpi-modal-root.open { pointer-events: auto; }
+#bpi-modal-root.open #bpi-modal-backdrop { opacity: 1; }
+#bpi-modal-root.open #bpi-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.bpi-modal-hint { margin-top: var(--sp-2); font-size: 12.5px; color: var(--muted); }
+#bpi-upload-panel .drop-zone, #bpi-step-input .drop-zone { margin-top: var(--sp-5); }
+
+.bpi-progress-track {
+  margin-top: var(--sp-8);
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--grey-1);
+  overflow: hidden;
+}
+.bpi-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--coral-1), var(--coral-2));
+  transition: width 0.3s ease;
+}
+.bpi-progress-status { margin-top: var(--sp-3); font-size: 13px; color: var(--muted); text-align: center; }
+
+.bpi-debug-toggle {
+  margin-top: var(--sp-3);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: underline;
+}
+.bpi-debug-toggle:hover { color: var(--coral-2); }
+.bpi-debug-panel {
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--r-lg);
+  background: var(--grey-1);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-height: 160px;
+  overflow-y: auto;
+}
+.bpi-debug-panel b { color: var(--ink); }
+
 @media (max-width: 480px) {
-  #manual-update-modal, #t212-modal { padding: var(--sp-6); }
+  #manual-update-modal, #t212-modal, #bpi-modal { padding: var(--sp-6); }
 }
