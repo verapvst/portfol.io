@@ -176,12 +176,15 @@ const NAV_CATEGORIES = [
       { label: "Accounts", href: "accounts.html" },
       // discoverable: this category itself stays visible signed out (so
       // a visitor can open it and find Transactions) even though the
-      // category as a whole is private - Accounts/Valuations/Costs
-      // still don't appear in its panel until signed in. See
+      // category as a whole is private - Accounts/Costs still don't
+      // appear in its panel until signed in. See
       // transactions.js:renderSignedOutState() for the gated-preview
-      // page this leads to.
+      // page this leads to. No standalone Valuations entry - portfolio
+      // value updates live at Data Hub -> Update Portfolio (Manual
+      // Update / Trading 212 CSV / BPI Screenshot) and at each holding's
+      // own Update button on Portfolio Detail, both writing through the
+      // same recordValuations() (db.js) into the same table.
       { label: "Transactions", href: "transactions.html", discoverable: true },
-      { label: "Valuations", href: "valuations.html" },
       { label: "Costs", href: "costs.html" },
     ],
   },

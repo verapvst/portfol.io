@@ -1,9 +1,10 @@
 /* ============================================================
-   costs.js - the Costs page. Insert-only, same discipline as
-   valuations.js: a cost row is valid from its date until superseded by a
-   later row for the same security/cost name (workbook Costs sheet
-   philosophy - a TER change next year is a new row, not an edit to this
-   one). No edit/delete UI, just Add + list, same as Valuations.
+   costs.js - the Costs page. Insert-only, same discipline as every
+   other observation table (valuations, chief among them): a cost row is
+   valid from its date until superseded by a later row for the same
+   security/cost name (workbook Costs sheet philosophy - a TER change
+   next year is a new row, not an edit to this one). No edit/delete UI,
+   just Add + list.
 
    $()/ensurePortfolio()/loadAccountsForPortfolio()/loadSecurities()/
    findOrCreateSecurity() live in db.js.

@@ -547,6 +547,46 @@
 }
 .bpi-debug-panel b { color: var(--ink); }
 
+/* ---------- Shared form primitives (label+input, cancel/submit, error
+   line) for Manual Update / Trading 212 / BPI Screenshot's modals above.
+   Relocated here from the now-removed valuations.css, which is where
+   this pattern originated (the old standalone Valuations page's own
+   Add Valuation modal) - this is the only piece of that file anything
+   still needed; its page-specific .valuations-* rules died with the
+   page. portfolio-detail.css keeps its own separate copy under
+   different IDs (#holding-update-modal) rather than sharing this one,
+   since the two pages never load each other's CSS. ---------- */
+.val-form-field { margin-top: var(--sp-4); }
+.val-form-field label { display: block; font-size: 13px; color: var(--muted); }
+.val-form-field input,
+.val-form-field select {
+  margin-top: var(--sp-2);
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-family: inherit;
+}
+.val-form-field input:focus-visible,
+.val-form-field select:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+
+.val-form-actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
+.val-form-cancel,
+.val-form-submit {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  font-weight: 500;
+  font-size: 14px;
+}
+.val-form-cancel { background: var(--glass-quiet-bg); border: 1px solid var(--glass-quiet-border); color: var(--ink); }
+.val-form-submit { background: var(--ink); color: #fff; }
+.val-form-submit:disabled { opacity: 0.5; }
+
+.val-form-error { margin-top: var(--sp-3); font-size: 12.5px; color: var(--negative); min-height: 16px; }
+
 @media (max-width: 480px) {
   #manual-update-modal, #t212-modal, #bpi-modal { padding: var(--sp-6); }
 }

@@ -7,16 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=91">
-<link rel="stylesheet" href="css/layout.css?v=91">
-<link rel="stylesheet" href="css/components.css?v=91">
-<!-- valuations.css: only for its generic .val-form-*/modal-skeleton
-     primitives (label+input, cancel/submit, error line) - reused as-is
-     for Manual Update / Trading 212's own modals below, not
-     redeclared. Its page-specific .valuations-* rules never match
-     anything on this page. -->
-<link rel="stylesheet" href="css/valuations.css?v=91">
-<link rel="stylesheet" href="css/data-hub.css?v=91">
+<link rel="stylesheet" href="css/theme.css?v=93">
+<link rel="stylesheet" href="css/layout.css?v=93">
+<link rel="stylesheet" href="css/components.css?v=93">
+<link rel="stylesheet" href="css/data-hub.css?v=93">
 </head>
 <body>
 <div id="app">
@@ -214,32 +208,32 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=91"></script>
-<script src="js/supabaseClient.js?v=91"></script>
+<script src="js/supabaseConfig.js?v=93"></script>
+<script src="js/supabaseClient.js?v=93"></script>
 
-<script src="js/utils.js?v=91"></script>
-<script src="js/calculations.js?v=91"></script>
-<script src="js/repository.js?v=91"></script>
-<script src="js/shell.js?v=91"></script>
-<script src="js/auth.js?v=91"></script>
-<script src="js/db.js?v=91"></script>
+<script src="js/utils.js?v=93"></script>
+<script src="js/calculations.js?v=93"></script>
+<script src="js/repository.js?v=93"></script>
+<script src="js/shell.js?v=93"></script>
+<script src="js/auth.js?v=93"></script>
+<script src="js/db.js?v=93"></script>
 <!-- Only for getPortfolioDataAuto() - the ONE canonical "what does the
      user currently hold" definition every other page already uses
      (Overview, Portfolio Detail, Performance). Update Portfolio's own
      held-security check reuses it rather than re-deriving holdings
      from transactions/valuations a second, possibly-diverging way. -->
-<script src="js/analytics.js?v=91"></script>
+<script src="js/analytics.js?v=93"></script>
 
-<script src="js/importer/vendor/pdf.min.js?v=91"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc = "js/importer/vendor/pdf.worker.min.js?v=91";</script>
-<script src="js/importer/field.js?v=91"></script>
-<script src="js/importer/numbers.js?v=91"></script>
-<script src="js/importer/pdfReader.js?v=91"></script>
-<script src="js/importer/classifier.js?v=91"></script>
-<script src="js/importer/monthlyFactsheetParser.js?v=91"></script>
-<script src="js/importer/holdingsReportParser.js?v=91"></script>
-<script src="js/importer/consolidate.js?v=91"></script>
-<script src="js/importer/geoClassifier.js?v=91"></script>
+<script src="js/importer/vendor/pdf.min.js?v=93"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = "js/importer/vendor/pdf.worker.min.js?v=93";</script>
+<script src="js/importer/field.js?v=93"></script>
+<script src="js/importer/numbers.js?v=93"></script>
+<script src="js/importer/pdfReader.js?v=93"></script>
+<script src="js/importer/classifier.js?v=93"></script>
+<script src="js/importer/monthlyFactsheetParser.js?v=93"></script>
+<script src="js/importer/holdingsReportParser.js?v=93"></script>
+<script src="js/importer/consolidate.js?v=93"></script>
+<script src="js/importer/geoClassifier.js?v=93"></script>
 
 <!-- Tesseract.js - OCR runs fully client-side (WASM + Web Worker), same
      "loaded from a CDN, but the actual USER DATA never leaves the
@@ -249,6 +243,6 @@
      for the one place this global is actually called. -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-<script src="js/data-hub.js?v=91"></script>
+<script src="js/data-hub.js?v=93"></script>
 </body>
 </html>

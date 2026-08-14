@@ -98,8 +98,10 @@ function renderAll(data) {
 
 /* ---------- Holdings Update workflow ----------
    Replaces the "pick any security from a free-text list, fill
-   everything in" pattern (js/valuations.js's Add Valuation modal) for
-   the common case: updating a security you already hold. Security is
+   everything in" pattern (the old standalone Valuations page's Add
+   Valuation modal, since removed - Data Hub's Manual Update is its
+   direct successor) for the common case: updating a security you
+   already hold. Security is
    fixed to the row you clicked - no picker, no findOrCreateSecurity(),
    no chance of attaching a new observation to the wrong similarly-named
    security (the exact risk that made "BPI Dinâmico" vs "BPI Smart

@@ -1,6 +1,6 @@
 /* ============================================================
-   costs.css - the Costs page. Same insert-only pattern as
-   valuations.css: a cost row is a dated observation, valid from that
+   costs.css - the Costs page. Same insert-only pattern as every other
+   observation table: a cost row is a dated observation, valid from that
    date until superseded by a later row for the same security/cost name
    (workbook Costs sheet philosophy) - not something you edit in place.
    ============================================================ */
