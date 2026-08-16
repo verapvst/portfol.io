@@ -98,20 +98,6 @@ async function getPortfolioDataLive() {
     transactionsRaw.filter((t) => t.type === "withdrawal").reduce((s, t) => s + Number(t.amount || 0), 0) * 100
   ) / 100;
 
-  // ---------- Cash-flow boundaries (for TWR) ----------
-  // Every buy/sell/deposit/withdrawal transaction date is treated as an
-  // EXTERNAL portfolio cash flow. KNOWN, DOCUMENTED LIMITATION (see
-  // calculations.js:chainLinkedPortfolioReturn()'s own comment): the
-  // schema has no flag distinguishing "funded by new money" from
-  // "funded by selling something else first" - every buy/sell counts as
-  // external. Correct for the real data today (zero sells on record),
-  // not correct in general the day a rebalance happens - not silently
-  // pretending otherwise.
-  const cashFlowDates = [...new Set(
-    transactionsRaw.filter((t) => ["buy", "sell", "deposit", "withdrawal"].includes(t.type)).map((t) => t.date)
-  )].sort();
-  const inceptionDate = cashFlowDates[0] || null;
-
   // ---------- Combined value series (every date any holding has a real
   // observation) ----------
   // real:true throughout - each point is a genuine point-in-time total
@@ -142,25 +128,52 @@ async function getPortfolioDataLive() {
     real: true,
   }));
 
-  // ---------- TWR ----------
-  // Portfolio-level chain-linked TWR (calculations.js:
-  // chainLinkedPortfolioReturn()) - replaces the old "longest-history
-  // holding drives the whole portfolio" simplification, confirmed
-  // invalid the moment UETW/AVWS/XDEQ/SPYM each accumulated a second
-  // real valuation. Never each holding's own TWR blended afterward -
-  // total portfolio value at each cash-flow boundary already embeds
-  // every holding's historical weight.
+  // ---------- TWR (cash-flow-neutral, calculations.js: scopedPerformance())
+  // ----------
+  // Performance & Benchmark Engine plan, section C: replaces the old
+  // chainLinkedPortfolioReturn() call (still kept, untouched, for
+  // whatever else references it - see that function's own updated
+  // header comment for why it wasn't rewritten in place). Boundaries
+  // here are real valuation-observation dates, never a cash-flow-only
+  // date with nothing observed there - the bug the old function had,
+  // confirmed against a live worked example (plan doc section B): a
+  // deposit landing between two valuations used to get counted almost
+  // entirely as return. Any deposit/withdrawal/buy/sell inside an
+  // interval is isolated via Modified Dietz weighting instead.
+  //
+  // externalTypes deliberately still matches the OLD function's exact
+  // type set (buy/sell/deposit/withdrawal) - narrowing portfolio scope
+  // to deposit/withdrawal-only (buy/sell would be internal moves within
+  // the same portfolio) is a real behaviour change the plan flags as
+  // needing validation against real historical BPI data first, not done
+  // yet. This ships the validated bugfix only.
   const latestDate = allObservationDates[allObservationDates.length - 1] || "0000-00-00";
-  const twrResult = cashFlowDates.length
-    ? chainLinkedPortfolioReturn(securityHistories, cashFlowDates, latestDate)
-    : { subPeriods: [], totalReturnPct: null };
-  const totalReturnAvailable = twrResult.totalReturnPct != null;
-  const totalReturnPct = totalReturnAvailable ? twrResult.totalReturnPct : 0;
+  const portfolioPerformance = scopedPerformance({
+    level: "portfolio", securityHistories, transactions: transactionsRaw, asOfDate: latestDate,
+  });
+  const totalReturnAvailable = portfolioPerformance.totalReturnAvailable;
+  const totalReturnPct = totalReturnAvailable ? portfolioPerformance.totalReturnPct : 0;
+
+  // inceptionDate now means "the earliest date the displayed TWR figure
+  // is actually measured from" (the first real valuation observation),
+  // not "the first cash flow" as before - the two coincided under the
+  // old cash-flow-only-boundary engine by construction, but the new
+  // engine's return series can only ever start at a real observation
+  // (see chainLinkedReturn()'s own comment: a cash flow dated before any
+  // observation is silently outside every sub-period, per this app's
+  // no-fabrication discipline). Keeping "since {inceptionDate}"
+  // (shell.js/app.js/performance.js/ui.js) honestly matched to where
+  // the number actually starts, not to an earlier date the calculation
+  // never actually used.
+  const inceptionDate = portfolioPerformance.firstDate;
 
   // Calendar-year breakdown - same chain-linking primitive, sliced at
-  // Dec-31/Jan-1 boundaries (calculations.js:annualReturns()), not a
-  // second calculation method.
-  const yearlyReturns = inceptionDate ? annualReturns(securityHistories, cashFlowDates, latestDate, inceptionDate) : {};
+  // Dec-31/Jan-1 boundaries (calculations.js:scopedAnnualReturns()), not
+  // a second calculation method - and Node-verified to chain back to
+  // portfolioPerformance.totalReturnPct exactly (scratchpad/validate_engine.js).
+  const yearlyReturns = inceptionDate
+    ? scopedAnnualReturns({ securityHistories, transactions: transactionsRaw, asOfDate: latestDate, inceptionDate })
+    : {};
 
   // ---------- XIRR ----------
   // Same generic solver as repository.js (window.xirr, still loaded) -
@@ -200,20 +213,29 @@ async function getPortfolioDataLive() {
     txnsBySecurity.set(t.security_id, list);
   }
 
-  // Each holding's OWN naive return (its latest observation vs. its
-  // first) - a genuinely different question from the portfolio-level
-  // TWR above. Naive, not chain-linked, because every position today is
-  // a single lot (bought once, never added to) - a simple first-vs-last
-  // comparison is mathematically exact for that case. This is POSITION
-  // return, not the security's own market-price return (they currently
-  // coincide only because there's no second purchase/partial sale yet
-  // to make them diverge - see docs/implementation-roadmap.md's
-  // Performance & Analytics Architecture section for why these aren't
-  // the same concept in general).
+  // Each holding's OWN cash-flow-neutral return (calculations.js:
+  // scopedPerformance(), level:'security') - a genuinely different
+  // question from the portfolio-level TWR above. Replaces the old naive
+  // first-vs-last comparison: that was only mathematically exact while
+  // every position was a single lot bought once - the moment a security
+  // gets a second purchase, a first-vs-last comparison would count that
+  // new money as return (plan doc section 8's own example: buying €250
+  // more of a holding must not read as "+250%"). scopedPerformance()
+  // uses that security's own buy/sell transactions as its cash-flow
+  // boundaries (Vera's own stated principle: "buy IS a cash flow into
+  // that security"), so this is correct in general, not just today.
+  // Still a genuinely different question from the security's own
+  // market-price return (securityMarketAnalytics(), calculations.js) -
+  // see docs/implementation-roadmap.md's Performance & Analytics
+  // Architecture section for why those aren't the same concept.
   const holdings = holdingsRaw.map((h) => {
-    const ownReturnPct = h.history.length >= 2
-      ? Math.round(((h.history[h.history.length - 1].value_eur / h.history[0].value_eur) - 1) * 10000) / 100
-      : 0;
+    const securityTransactions = txnsBySecurity.get(h.security.id) || [];
+    const securityPerformance = scopedPerformance({
+      level: "security",
+      securityHistories: { [h.security.id]: h.history },
+      transactions: securityTransactions,
+      asOfDate: latestDate,
+    });
     return {
       id: h.security.id,
       name: h.security.name,
@@ -222,8 +244,14 @@ async function getPortfolioDataLive() {
       accountId: h.accountId,
       value: h.value,
       weight: totalValue ? Math.round((h.value / totalValue) * 10000) / 100 : 0,
-      returnPct: ownReturnPct,
-      ...unrealisedPnL(h.value, costBasisFromTransactions(txnsBySecurity.get(h.security.id) || [])),
+      // returnPct keeps the existing 0-when-unavailable fallback so
+      // today's holdings table/UI (which just formats a number) doesn't
+      // need to change in this phase; returnAvailable is exposed
+      // alongside it for the "Insufficient history" UI this plan's data-
+      // quality requirement calls for, once that UI work happens.
+      returnPct: securityPerformance.totalReturnAvailable ? securityPerformance.totalReturnPct : 0,
+      returnAvailable: securityPerformance.totalReturnAvailable,
+      ...unrealisedPnL(h.value, costBasisFromTransactions(securityTransactions)),
       tone: tokenColor("asset", h.security.name.replace(/[^a-zA-Z0-9]/g, "_")),
     };
   });
@@ -241,6 +269,30 @@ async function getPortfolioDataLive() {
     id: a.id, name: a.name, currency: a.currency, tone: tokenColor("account", a.name),
     institution: a.institutions?.name || null, accountType: a.account_type || null, jurisdiction: a.jurisdiction || null,
   }));
+
+  // ---------- Account-level performance (BPI vs Trading 212, etc.) ----------
+  // Performance & Benchmark Engine plan, section C/H: "account" is the
+  // confirmed sub-portfolio grouping level (no separate portfolios
+  // table - one portfolio per user stays true). Same scopedPerformance()
+  // engine as the portfolio total above, just re-scoped: securityHistories
+  // filtered to this account's own holdings, transactions filtered to
+  // this account_id. Unlike the portfolio-level scope, externalTypes
+  // here was never in question - a buy IS a cash flow crossing INTO
+  // this account even when the money came from elsewhere in the same
+  // portfolio, so the default (deposit/withdrawal/buy/sell) applies
+  // as-is, no override needed.
+  const accountPerformance = accounts.map((a) => {
+    const accountSecurityIds = holdings.filter((h) => h.accountId === a.id).map((h) => h.id);
+    const accountSecurityHistories = Object.fromEntries(
+      accountSecurityIds.map((id) => [id, securityHistories[id] || []])
+    );
+    const accountTransactions = transactionsRaw.filter((t) => t.account_id === a.id);
+    const perf = scopedPerformance({
+      level: "account", securityHistories: accountSecurityHistories, transactions: accountTransactions, asOfDate: latestDate,
+    });
+    return { id: a.id, name: a.name, ...perf };
+  });
+
   const accountAllocation = accounts.map((a) => {
     const value = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.value, 0);
     return { name: a.name, value, weight: totalValue ? Math.round((value / totalValue) * 10000) / 100 : 0, tone: a.tone };
@@ -301,11 +353,18 @@ async function getPortfolioDataLive() {
         totalValue, investedCapital, unrealisedGain, unrealisedGainPct,
         totalReturnPct, totalReturnAvailable,
         investorReturnPct, investorReturnAvailable,
-        // Calendar-year breakdown (calculations.js:annualReturns()) -
+        // Calendar-year breakdown (calculations.js:scopedAnnualReturns()) -
         // {2017: {returnPct}, 2018: {...}, ...}. Rendered on the
         // Performance page (renderAnnualReturns) and in the Overview's
         // Investment Performance drawer (shell.js:performanceDrill()).
         yearlyReturns,
+        // Per-account cash-flow-neutral TWR (calculations.js:
+        // scopedPerformance(), level:'account') - BPI vs Trading 212 as
+        // the sub-portfolio drill-down level, per the plan's confirmed
+        // hierarchy. Additive field - nothing existing reads this yet
+        // (UI wiring is a later phase); each entry also carries its own
+        // firstDate/observationCount/hadCashFlows data-quality facts.
+        accountPerformance,
         contributionsTotal, withdrawalsTotal,
         todayChange: 0, todayChangePct: 0, cash,
       },

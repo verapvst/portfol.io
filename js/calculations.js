@@ -181,6 +181,22 @@ function valueOfSecurityAsOf(history, date, { exclusive = false } = {}) {
 }
 
 /**
+ * Rebases a value series to the first point = 100, preserving the
+ * curve's shape while discarding the absolute scale. Originally a
+ * shell.js chart-scale helper for Showcase mode; promoted here because
+ * the Performance & Benchmark Engine needs the exact same rebase-to-100
+ * logic for BOTH the portfolio's own series and a benchmark's series -
+ * one normalization function, not two that could quietly drift apart.
+ * Carries `real` through the rebase so the observed-vs-derived
+ * distinction survives normalization, not just a rescaled line with the
+ * honesty flag silently dropped.
+ */
+function indexValueSeries(series) {
+  const base = series[0]?.value || 1;
+  return series.map((p) => ({ date: p.date, value: (p.value / base) * 100, real: p.real }));
+}
+
+/**
  * Portfolio-level chain-linked Time-Weighted Return - replaces the old
  * "longest-history holding drives the whole portfolio" simplification.
  * Never computes each security's own TWR and blends them; total
@@ -269,6 +285,261 @@ function annualReturns(securityHistories, cashFlowDates, asOfDate, inceptionDate
       h.some((v) => v.date > rangeStart && v.date <= rangeEnd)
     );
     years[y] = { rangeStart, rangeEnd, returnPct: yearResult.totalReturnPct, hasObservationInYear };
+  }
+  return years;
+}
+
+/* ============================================================
+   Cash-flow-neutral performance engine (Performance & Benchmark Engine
+   plan, section C) - EXTENDS the chain-linking above, doesn't replace
+   it. chainLinkedPortfolioReturn() is left untouched deliberately: it
+   was traced against a real edge case (a cash flow landing on a date
+   with NO valuation observation at all) and found to misattribute the
+   cash flow as return in that case - not a hypothetical, the plan
+   doc's own worked example reproduces it (+52.9% instead of the true
+   +5.28%). Rather than silently rewrite a working, tested function
+   (mock/live/public paths all depend on its exact behaviour today),
+   the fix lives in a new set of functions; callers migrate to them
+   explicitly (Phase 3 of the plan) rather than inheriting a behaviour
+   change through a same-named wrapper.
+   ============================================================ */
+
+/**
+ * Modified Dietz return for one interval that may contain external cash
+ * flows - the standard method for isolating investment return from cash
+ * flows when you don't have a valuation observation exactly at the flow
+ * date (the normal case: Vera records valuations on her own schedule,
+ * not the day money moves). Each cash flow is weighted by how much of
+ * the interval it was actually present for - a flow on the interval's
+ * last day gets weight ~0 (no time to earn anything), a flow on day one
+ * gets weight ~1 (present the whole time). Reduces to the plain
+ * (endValue/startValue - 1) ratio whenever cashFlows is empty, so this
+ * is a strict superset of a simple return, not a competing formula.
+ *
+ * cashFlows: [{date, amount}], positive = money added to this scope,
+ * negative = money removed. startDate/endDate: 'YYYY-MM-DD'.
+ *
+ * Returns null (not 0 or a wild number) when the denominator collapses
+ * to <= 0 - e.g. a withdrawal at least as large as the starting value -
+ * the standard Modified Dietz failure mode, never disguised as a real
+ * return percentage.
+ */
+function modifiedDietzReturn(startValue, endValue, cashFlows, startDate, endDate) {
+  const totalDays = daysBetweenDates(startDate, endDate);
+  if (totalDays <= 0) return null;
+  const netCashFlow = cashFlows.reduce((s, cf) => s + cf.amount, 0);
+  const weightedCashFlow = cashFlows.reduce((s, cf) => {
+    const daysRemaining = daysBetweenDates(cf.date, endDate);
+    const weight = Math.max(0, Math.min(1, daysRemaining / totalDays));
+    return s + cf.amount * weight;
+  }, 0);
+  const denominator = startValue + weightedCashFlow;
+  if (denominator <= 0) return null;
+  return ((endValue - startValue - netCashFlow) / denominator) * 100;
+}
+
+/**
+ * Generalized chain-linked return. Boundaries are REAL VALUATION
+ * OBSERVATION DATES ONLY (plus asOfDate as a final read-point) - never
+ * a cash-flow date with nothing observed there. This is the key
+ * difference from chainLinkedPortfolioReturn() above, and the reason
+ * this version handles irregular observations correctly: a cash flow
+ * that lands between two observations doesn't fracture the timeline
+ * into a boundary with no real value to anchor it - it's simply an
+ * input to modifiedDietzReturn() for whichever observation-to-
+ * observation interval it happens to fall inside. Every boundary here
+ * is a genuine observed value, so there's no exclusive/inclusive
+ * before/after trick to get right (unlike the original function) - a
+ * cash flow landing exactly on an observation date is still handled
+ * correctly because its Modified Dietz weight naturally goes to ~0 or
+ * ~1 depending on which end of the interval it lands on.
+ *
+ * securityHistories: {securityId: [{date, value_eur}]} for every
+ *   security in scope (caller filters - see scopedPerformance()).
+ * cashFlows: [{date, amount}], signed as in modifiedDietzReturn().
+ * observationDates: every date treated as a valuation checkpoint for
+ *   this scope (caller builds this from the same securities it passed
+ *   in securityHistories).
+ * asOfDate: latest read-point: 'today' / latest known data.
+ *
+ * A cash flow dated before the first observation in scope is silently
+ * outside every sub-period (there's no valuation to attribute it
+ * against) - consistent with this app's "no fabrication before real
+ * data exists" discipline elsewhere.
+ */
+function chainLinkedReturn(securityHistories, cashFlows, observationDates, asOfDate) {
+  const allDates = [...new Set(observationDates)].sort();
+  if (allDates.length && allDates[allDates.length - 1] !== asOfDate) allDates.push(asOfDate);
+  if (!allDates.length) return { subPeriods: [], totalReturnPct: null };
+
+  const observationSet = new Set(observationDates);
+  const totalAt = (date) =>
+    Object.values(securityHistories).reduce((sum, h) => sum + valueOfSecurityAsOf(h, date), 0);
+
+  const subPeriods = [];
+  for (let i = 0; i < allDates.length - 1; i++) {
+    const startDate = allDates[i];
+    const endDate = allDates[i + 1];
+    const startValue = totalAt(startDate);
+    const endValue = totalAt(endDate);
+    const flowsInPeriod = cashFlows.filter((cf) => cf.date > startDate && cf.date <= endDate);
+    const returnPct = startValue > 0
+      ? modifiedDietzReturn(startValue, endValue, flowsInPeriod, startDate, endDate)
+      : null;
+    subPeriods.push({
+      startDate, endDate, startValue, endValue, cashFlows: flowsInPeriod, returnPct,
+      endIsObservation: observationSet.has(endDate),
+    });
+  }
+
+  const totalReturnPct = subPeriods.length
+    ? (subPeriods.reduce((prod, p) => prod * (p.returnPct == null ? 1 : 1 + p.returnPct / 100), 1) - 1) * 100
+    : null;
+
+  return { subPeriods, totalReturnPct: subPeriods.length ? Math.round(totalReturnPct * 100) / 100 : null };
+}
+
+/**
+ * Smoothed DAILY index series for charting only - never a stored fact,
+ * never a claim about what a valuation "really" was on an unobserved
+ * day. Spreads each sub-period's already-real compounded return evenly
+ * across its elapsed calendar days (geometric daily-equivalent rate) so
+ * a chart can draw a smooth line between real observations instead of a
+ * step function. Every day is flagged `real` - true only on genuine
+ * observation dates (charts.js already renders real:false stretches as
+ * a dashed segment, same convention the mock data uses today). This is
+ * the plan doc's "Derived normalized performance observation" - always
+ * kept distinguishable from an actual "Observed valuation".
+ */
+function deriveNormalizedDailySeries(subPeriods, { base = 100 } = {}) {
+  if (!subPeriods.length) return [];
+  const series = [{ date: subPeriods[0].startDate, value: base, real: true }];
+  let level = base;
+  for (const period of subPeriods) {
+    const days = daysBetweenDates(period.startDate, period.endDate);
+    if (days <= 0) continue;
+    const periodReturn = period.returnPct == null ? 0 : period.returnPct / 100;
+    const dailyRate = Math.pow(1 + periodReturn, 1 / days) - 1;
+    for (let d = 1; d <= days; d++) {
+      level = level * (1 + dailyRate);
+      const isLastDay = d === days;
+      series.push({
+        date: shiftDateBy(period.startDate, d),
+        value: Math.round(level * 10000) / 10000,
+        real: isLastDay ? !!period.endIsObservation : false,
+      });
+    }
+  }
+  return series;
+}
+
+// Default external-cash-flow types, used at every hierarchy level for
+// now: deposit/withdrawal/buy/sell all count as money crossing the
+// scope's boundary. This intentionally matches TODAY's existing
+// portfolio-level behaviour (analytics.js's own cashFlowDates
+// construction) rather than the plan doc's proposed refinement
+// (portfolio scope = deposit/withdrawal only, since buy/sell are
+// internal moves within the same portfolio). That refinement is a real
+// behaviour CHANGE to the headline number, not just a bugfix, and the
+// plan doc is explicit it needs validating against real historical BPI
+// data first (section C's "open implementation-time question") - not
+// done yet. Ships the validated bugfix (Modified Dietz + observation-
+// date boundaries) now; callers can override externalTypes once that
+// validation happens, without any other change to this function.
+const DEFAULT_EXTERNAL_CASH_FLOW_TYPES = ["deposit", "withdrawal", "buy", "sell"];
+
+/**
+ * Single entry point for cash-flow-neutral performance at any of the
+ * three hierarchy levels this app's Performance & Benchmark Engine plan
+ * defines - portfolio / account / security. What changes per level is
+ * entirely the caller's job: which securities are in scope
+ * (securityHistories) and which transactions are relevant
+ * (transactions, pre-filtered by account_id/security_id as needed) -
+ * this function itself has no level-specific branching, so there's
+ * nothing here to keep in sync as new scopes get added later.
+ *
+ * securityHistories: {securityId: [{date, value_eur}]} - already
+ *   filtered to the securities in scope by the caller.
+ * transactions: transaction rows relevant to this scope.
+ * asOfDate: latest date to compute through.
+ * externalTypes: which transaction TYPES count as external cash flow
+ *   for this scope - see DEFAULT_EXTERNAL_CASH_FLOW_TYPES above for why
+ *   the default is what it is today.
+ *
+ * Returns totalReturnPct/totalReturnAvailable (never a fabricated 0%
+ * when there's insufficient data - see this app's *Available flag
+ * convention), the raw subPeriods, a dailySeries for charting, and the
+ * data-quality facts (firstDate/lastDate/observationCount/hadCashFlows)
+ * every performance figure in this plan is required to expose.
+ */
+function scopedPerformance({ level, securityHistories, transactions, asOfDate, externalTypes = DEFAULT_EXTERNAL_CASH_FLOW_TYPES }) {
+  const cashFlows = transactions
+    .filter((t) => externalTypes.includes(t.type))
+    .map((t) => ({
+      date: t.date,
+      amount: (t.type === "deposit" || t.type === "buy") ? Number(t.amount || 0) : -Number(t.amount || 0),
+    }));
+
+  const observationDates = [...new Set(
+    Object.values(securityHistories).flatMap((h) => h.map((v) => v.date))
+  )].sort();
+
+  if (!observationDates.length) {
+    return {
+      totalReturnPct: null, totalReturnAvailable: false, subPeriods: [], dailySeries: [],
+      firstDate: cashFlows[0]?.date || null, lastDate: asOfDate,
+      observationCount: 0, hadCashFlows: cashFlows.length > 0,
+    };
+  }
+
+  const result = chainLinkedReturn(securityHistories, cashFlows, observationDates, asOfDate);
+
+  return {
+    totalReturnPct: result.totalReturnPct,
+    totalReturnAvailable: result.totalReturnPct != null,
+    subPeriods: result.subPeriods,
+    dailySeries: deriveNormalizedDailySeries(result.subPeriods),
+    firstDate: observationDates[0],
+    lastDate: asOfDate,
+    observationCount: observationDates.length,
+    hadCashFlows: cashFlows.length > 0,
+  };
+}
+
+/**
+ * Calendar-year breakdown for scopedPerformance() - mirrors
+ * annualReturns()'s relationship to chainLinkedPortfolioReturn() above
+ * (same rangeStart-as-synthetic-anchor technique, reused rather than a
+ * second calculation method), but built on the new chainLinkedReturn()
+ * engine so the yearly figures stay consistent with the new headline
+ * total: chaining every year's returnPct together reproduces
+ * scopedPerformance()'s own totalReturnPct exactly, because a calendar-
+ * year edge is a plain read-point (never a cash flow, never a second
+ * observation invented at that date) - same reasoning annualReturns()'s
+ * own comment gives, now verified for this engine too (see
+ * scratchpad/validate_engine.js).
+ */
+function scopedAnnualReturns({ securityHistories, transactions, asOfDate, inceptionDate, externalTypes = DEFAULT_EXTERNAL_CASH_FLOW_TYPES }) {
+  const cashFlows = transactions
+    .filter((t) => externalTypes.includes(t.type))
+    .map((t) => ({
+      date: t.date,
+      amount: (t.type === "deposit" || t.type === "buy") ? Number(t.amount || 0) : -Number(t.amount || 0),
+    }));
+  const allObservationDates = [...new Set(
+    Object.values(securityHistories).flatMap((h) => h.map((v) => v.date))
+  )].sort();
+
+  const startYear = Number(inceptionDate.slice(0, 4));
+  const endYear = Number(asOfDate.slice(0, 4));
+  const years = {};
+  for (let y = startYear; y <= endYear; y++) {
+    const rangeStart = y === startYear ? inceptionDate : `${y}-01-01`;
+    const rangeEnd = y === endYear ? asOfDate : `${y}-12-31`;
+    const obsInRange = allObservationDates.filter((d) => d > rangeStart && d <= rangeEnd);
+    const flowsInRange = cashFlows.filter((cf) => cf.date > rangeStart && cf.date <= rangeEnd);
+    const yearResult = chainLinkedReturn(securityHistories, flowsInRange, [rangeStart, ...obsInRange], rangeEnd);
+    years[y] = { rangeStart, rangeEnd, returnPct: yearResult.totalReturnPct, hasObservationInYear: obsInRange.length > 0 };
   }
   return years;
 }
@@ -574,8 +845,14 @@ window.unrealisedPnL = unrealisedPnL;
 window.costDrag = costDrag;
 window.productScore = productScore;
 window.valueOfSecurityAsOf = valueOfSecurityAsOf;
+window.indexValueSeries = indexValueSeries;
 window.chainLinkedPortfolioReturn = chainLinkedPortfolioReturn;
 window.annualReturns = annualReturns;
+window.modifiedDietzReturn = modifiedDietzReturn;
+window.chainLinkedReturn = chainLinkedReturn;
+window.deriveNormalizedDailySeries = deriveNormalizedDailySeries;
+window.scopedPerformance = scopedPerformance;
+window.scopedAnnualReturns = scopedAnnualReturns;
 window.SECURITY_ANALYTICS_THRESHOLDS = SECURITY_ANALYTICS_THRESHOLDS;
 window.dailyReturns = dailyReturns;
 window.securityMarketAnalytics = securityMarketAnalytics;

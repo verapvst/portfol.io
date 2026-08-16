@@ -101,19 +101,12 @@ function initValuesToggle(container) {
   container.appendChild(btn);
 }
 
-/** Rebases a value series to the first point = 100, preserving the
-    curve's shape while discarding the absolute scale - used for charts
-    in Showcase mode, where the number that matters is "how has it
-    evolved", not "how much". Never used to decide whether to render
-    the chart, only what scale to render it at (see charts.js /
-    initPerformanceCard - the chart itself never disappears). */
-function indexValueSeries(series) {
-  const base = series[0]?.value || 1;
-  // Carries `real` through the rebase - Showcase mode needs the same
-  // interpolated-vs-observed distinction on the chart as Private mode,
-  // not just a rescaled line with the honesty flag silently dropped.
-  return series.map((p) => ({ date: p.date, value: (p.value / base) * 100, real: p.real }));
-}
+// indexValueSeries() moved to calculations.js - it's now the shared
+// normalization primitive for both portfolio and benchmark series (the
+// Performance & Benchmark Engine needs the exact same rebase-to-100
+// logic for both), not just a Showcase-mode chart-scale helper. Still a
+// plain global (calculations.js loads before this file), so every call
+// site below is unchanged.
 
 /* ---------- Navigation: overlay drawer, every breakpoint ----------
    One DOM structure, one behaviour, at every width: #nav-drawer is
