@@ -338,7 +338,21 @@ async function getPortfolioDataLive() {
       // MIN_DAYS_FOR_ACCOUNT_RETURN's own comment (calculations.js).
       minDays: MIN_DAYS_FOR_ACCOUNT_RETURN,
     });
-    return { id: a.id, name: a.name, ...perf };
+    // Calendar-year breakdown for THIS account - same
+    // scopedAnnualReturns() primitive the portfolio-level yearlyReturns
+    // above already uses, just re-scoped (mirrors accountPerformance's
+    // own relationship to the portfolio-level TWR). Only computed once
+    // this account has at least one real observation (perf.firstDate) -
+    // an account with zero valuations yet has no inception date to
+    // anchor a year breakdown to, same guard the portfolio-level call
+    // already applies.
+    const yearlyReturns = perf.firstDate
+      ? scopedAnnualReturns({
+          securityHistories: accountSecurityHistories, transactions: accountTransactions,
+          asOfDate: latestDate, inceptionDate: perf.firstDate,
+        })
+      : {};
+    return { id: a.id, name: a.name, ...perf, yearlyReturns };
   });
 
   const accountAllocation = accounts.map((a) => {
@@ -386,9 +400,18 @@ async function getPortfolioDataLive() {
   // the rest of Performance, it just degrades Sharpe/Sortino/Alpha to
   // "unavailable" (scopedQuantMetrics() already handles an empty array
   // gracefully - see that function's own comment).
+  // Bounded to a couple of years before the portfolio's own first real
+  // observation - Sharpe/Sortino only ever look up a rate nearest
+  // perf.lastDate, and Beta/Alpha/Correlation only align within the
+  // portfolio's own real dailySeries window, so nothing before
+  // inceptionDate is ever actually used. Real efficiency win on top of
+  // getRiskFreeRates()'s own pagination fix (js/db.js) - without this,
+  // every page load still correctly paginates through 40+ years of
+  // real Treasury history just to use the last handful of years of it.
   let riskFreeRates = [];
   try {
-    riskFreeRates = await getRiskFreeRates();
+    const riskFreeFrom = inceptionDate ? shiftDateBy(inceptionDate, -730) : undefined;
+    riskFreeRates = await getRiskFreeRates("3month", { from: riskFreeFrom });
   } catch (err) {
     console.warn("Risk-free rate data unavailable:", err);
   }

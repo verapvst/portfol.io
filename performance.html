@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=100">
-<link rel="stylesheet" href="css/layout.css?v=100">
-<link rel="stylesheet" href="css/components.css?v=100">
-<link rel="stylesheet" href="css/performance.css?v=100">
+<link rel="stylesheet" href="css/theme.css?v=102">
+<link rel="stylesheet" href="css/layout.css?v=102">
+<link rel="stylesheet" href="css/components.css?v=102">
+<link rel="stylesheet" href="css/performance.css?v=102">
 </head>
 <body>
 <div id="app">
@@ -25,12 +25,31 @@
          instead of looking identical to a real, current, flat chart. -->
     <div id="perf-data-warning"></div>
 
+    <!-- Scope selector (All Portfolio / BPI / Trading 212 / ...) - same
+         .filter-pill primitive and single-select behaviour as Portfolio
+         page's own scope row (js/portfolio.js:renderScopeSelector()).
+         Controls the stat tiles, Annual Returns, Benchmark Comparison
+         and Risk & Quant Metrics below - deliberately NOT the Portfolio
+         Value Over Time chart just below it, which stays whole-portfolio
+         always (no per-account raw € series exists in the data model;
+         see js/performance.js:renderScopeSelector()'s own comment). -->
+    <section class="card glass interactive" id="perf-scope-card">
+      <div class="filter-pills glass-quiet" id="perf-scope-row"></div>
+      <p class="section-hint" id="perf-scope-hint"></p>
+    </section>
+
     <!-- "How has my portfolio performed?" - per
          docs/information-architecture.md §2. Deliberately answers this
          with Transactions/Valuations-derived numbers only, never a
          security's own market price return (a different question,
          belongs on that security's own page once Securities and
-         daily_prices are live) - see the info popover on each metric. -->
+         daily_prices are live) - see the info popover on each metric.
+         Scope-aware: Total Return (TWR) reflects the selected scope;
+         Investor Return (XIRR) and Unrealised Gain are portfolio-only
+         concepts (no per-account cash-flow/cost-basis aggregation exists
+         yet) and are replaced with Volatility/Max Drawdown when an
+         account is selected, rather than shown as a fabricated or
+         silently-stale portfolio-wide number. -->
     <div class="perf-stats-grid" id="perf-stats-grid"></div>
 
     <section class="card glass interactive" id="performance-chart-card">
@@ -51,7 +70,7 @@
     <section class="card glass interactive" id="annual-returns-card">
       <div class="card-header">
         <div class="card-header-title" data-info="annual-returns" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title">Annual Returns</h2>
+          <h2 class="section-title" id="annual-returns-title">Annual Returns</h2>
         </div>
       </div>
       <div id="annual-returns-body"></div>
@@ -64,7 +83,7 @@
     <section class="card glass" id="benchmark-card">
       <div class="card-header">
         <div class="card-header-title" data-info="benchmark-comparison" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title">Benchmark Comparison</h2>
+          <h2 class="section-title" id="benchmark-comparison-title">Benchmark Comparison</h2>
         </div>
       </div>
       <div id="benchmark-body"></div>
@@ -80,7 +99,7 @@
     <section class="card glass interactive" id="quant-metrics-card">
       <div class="card-header">
         <div class="card-header-title" data-info="quant-risk-metrics" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title">Risk &amp; Quant Metrics</h2>
+          <h2 class="section-title" id="quant-metrics-title">Risk &amp; Quant Metrics</h2>
         </div>
       </div>
       <div class="quant-metrics-grid" id="quant-metrics-grid"></div>
@@ -91,18 +110,18 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=100"></script>
-<script src="js/supabaseClient.js?v=100"></script>
+<script src="js/supabaseConfig.js?v=102"></script>
+<script src="js/supabaseClient.js?v=102"></script>
 
-<script src="js/utils.js?v=100"></script>
-<script src="js/calculations.js?v=100"></script>
-<script src="js/repository.js?v=100"></script>
+<script src="js/utils.js?v=102"></script>
+<script src="js/calculations.js?v=102"></script>
+<script src="js/repository.js?v=102"></script>
 
-<script src="js/charts.js?v=100"></script>
-<script src="js/shell.js?v=100"></script>
-<script src="js/auth.js?v=100"></script>
-<script src="js/db.js?v=100"></script>
-<script src="js/analytics.js?v=100"></script>
-<script src="js/performance.js?v=100"></script>
+<script src="js/charts.js?v=102"></script>
+<script src="js/shell.js?v=102"></script>
+<script src="js/auth.js?v=102"></script>
+<script src="js/db.js?v=102"></script>
+<script src="js/analytics.js?v=102"></script>
+<script src="js/performance.js?v=102"></script>
 </body>
 </html>

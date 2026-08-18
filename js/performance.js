@@ -36,6 +36,45 @@ function formatDateTick(dateStr) {
 
 let perfFilterClickHandler = null;
 let perfResizeHandler = null;
+let currentPerfScope = "all"; // "all" | an accounts.id
+
+/** Normalizes "All Portfolio" vs. "one account" into one shape every
+    scope-aware section below reads from - same "one seam, not one
+    branch per section" discipline scopedPerformance() itself uses for
+    portfolio/account/security. Never a second calculation: every field
+    here is read straight from analytics.js's own output
+    (data.analytics.performance for "all", the matching
+    accountPerformance[] entry - itself just scopedPerformance()'s
+    return value plus .quant/.yearlyReturns - otherwise). Returns null
+    for an unknown/stale scope id (e.g. data reloaded without that
+    account) so callers can fall back honestly rather than throw. */
+function scopeBundle(data, scopeId) {
+  if (scopeId === "all") {
+    const perf = data.analytics.performance;
+    return {
+      label: "Portfolio",
+      totalReturnPct: perf.totalReturnPct,
+      totalReturnAvailable: perf.totalReturnAvailable,
+      insufficientReason: null,
+      firstDate: data.history.inceptionDate,
+      dailySeries: data.history.performanceSeries,
+      yearlyReturns: perf.yearlyReturns,
+      quant: perf.quant,
+    };
+  }
+  const account = (data.analytics.performance.accountPerformance || []).find((a) => a.id === scopeId);
+  if (!account) return null;
+  return {
+    label: account.name,
+    totalReturnPct: account.totalReturnPct,
+    totalReturnAvailable: account.totalReturnAvailable,
+    insufficientReason: account.insufficientReason,
+    firstDate: account.firstDate,
+    dailySeries: account.dailySeries,
+    yearlyReturns: account.yearlyReturns,
+    quant: account.quant,
+  };
+}
 
 function renderValueChart(data) {
   const container = $("perf-linechart-container");
@@ -109,34 +148,70 @@ function statTileHTML({ iconName, label, docKey, value, note, drillId }) {
     </div>`;
 }
 
-function renderStats(data) {
-  const perf = data.analytics.performance;
+function renderStats(data, scopeId) {
   const owner = isOwnerMode();
 
-  // *Available flags come straight from analytics.js/repository.js (the
-  // calculation layer), never re-derived here - "insufficient history"
-  // shows instead of a technically-computed-but-meaningless 0%, per the
-  // same rule the chart's own insufficient-data state already follows.
-  const totalReturnValue = perf.totalReturnAvailable ? fmtPct(perf.totalReturnPct) : "Insufficient history";
-  const investorReturnValue = perf.investorReturnAvailable ? fmtPct(perf.investorReturnPct) : "Insufficient history";
+  if (scopeId === "all") {
+    const perf = data.analytics.performance;
+    // *Available flags come straight from analytics.js/repository.js
+    // (the calculation layer), never re-derived here - "insufficient
+    // history" shows instead of a technically-computed-but-meaningless
+    // 0%, per the same rule the chart's own insufficient-data state
+    // already follows.
+    const totalReturnValue = perf.totalReturnAvailable ? fmtPct(perf.totalReturnPct) : "Insufficient history";
+    const investorReturnValue = perf.investorReturnAvailable ? fmtPct(perf.investorReturnPct) : "Insufficient history";
+
+    const tiles = [
+      statTileHTML({
+        iconName: "trendingUp", label: "Total Return (TWR)", docKey: "investment-performance",
+        value: totalReturnValue,
+        note: perf.totalReturnAvailable ? `since ${data.history.inceptionDate}` : "not enough dated valuations yet",
+        drillId: "return",
+      }),
+      statTileHTML({
+        iconName: "barChart3", label: "Investor Return (XIRR)", docKey: "investor-return",
+        value: investorReturnValue,
+        note: perf.investorReturnAvailable ? "annualised, money-weighted" : "not enough cash flows yet",
+        drillId: "investorReturn",
+      }),
+      statTileHTML({
+        iconName: "wallet", label: "Unrealised Gain", docKey: "investment-return",
+        value: owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : fmtPct(perf.unrealisedGainPct),
+        note: "vs. invested capital",
+      }),
+    ];
+    $("perf-stats-grid").innerHTML = tiles.join("");
+    return;
+  }
+
+  // Account scope - Investor Return (XIRR) and Unrealised Gain are
+  // portfolio-only concepts today (no per-account cash-flow/cost-basis
+  // aggregation exists in the data model yet). Replaced with
+  // Volatility/Max Drawdown - genuine account-level risk facts already
+  // computed by scopedQuantMetrics(), never a fabricated stand-in for
+  // the two tiles they take the place of.
+  const bundle = scopeBundle(data, scopeId);
+  const totalReturnValue = bundle?.totalReturnAvailable ? fmtPct(bundle.totalReturnPct) : "Insufficient history";
+  const vol = bundle?.quant?.volatility;
+  const dd = bundle?.quant?.maxDrawdown;
 
   const tiles = [
     statTileHTML({
-      iconName: "trendingUp", label: "Total Return (TWR)", docKey: "investment-performance",
+      iconName: "trendingUp", label: "Total Return (TWR)", docKey: "account-performance",
       value: totalReturnValue,
-      note: perf.totalReturnAvailable ? `since ${data.history.inceptionDate}` : "not enough dated valuations yet",
-      drillId: "return",
+      note: bundle?.totalReturnAvailable
+        ? `since ${bundle.firstDate}`
+        : (bundle?.insufficientReason === "too-recent" ? "not enough real days yet" : "not enough dated valuations yet"),
     }),
     statTileHTML({
-      iconName: "barChart3", label: "Investor Return (XIRR)", docKey: "investor-return",
-      value: investorReturnValue,
-      note: perf.investorReturnAvailable ? "annualised, money-weighted" : "not enough cash flows yet",
-      drillId: "investorReturn",
+      iconName: "activity", label: "Volatility (ann.)", docKey: "quant-risk-metrics",
+      value: vol ? fmtPct(vol.annualisedVolatilityPct, { signed: false }) : "Insufficient history",
+      note: vol ? `${vol.periodCount} real periods` : "not enough real periods yet",
     }),
     statTileHTML({
-      iconName: "wallet", label: "Unrealised Gain", docKey: "investment-return",
-      value: owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : fmtPct(perf.unrealisedGainPct),
-      note: "vs. invested capital",
+      iconName: "barChart3", label: "Max Drawdown", docKey: "quant-risk-metrics",
+      value: dd ? fmtPct(dd.maxDrawdownPct, { signed: true }) : "Insufficient history",
+      note: dd ? "peak-to-trough, full history" : "not enough real periods yet",
     }),
   ];
   $("perf-stats-grid").innerHTML = tiles.join("");
@@ -148,9 +223,11 @@ function renderStats(data) {
    different calculation. Percentages only, shown identically whether
    signed in or not (same precedent as the headline TWR/XIRR tiles
    above - a %-return reveals nothing about portfolio size). */
-function renderAnnualReturns(data) {
+function renderAnnualReturns(data, scopeId) {
   const container = $("annual-returns-body");
-  const years = data.analytics.performance.yearlyReturns || {};
+  const bundle = scopeBundle(data, scopeId);
+  $("annual-returns-title").textContent = scopeId === "all" ? "Annual Returns" : `Annual Returns — ${bundle?.label || ""}`;
+  const years = bundle?.yearlyReturns || {};
   const entries = Object.entries(years).sort(([a], [b]) => Number(a) - Number(b));
 
   if (!entries.length) {
@@ -193,9 +270,11 @@ function renderAnnualReturns(data) {
    itself isn't built. */
 let perfBenchmarkResizeHandler = null;
 
-function renderBenchmarkSection(data) {
+function renderBenchmarkSection(data, scopeId) {
   const body = $("benchmark-body");
-  const hasPerformanceSeries = data.history.performanceSeries && data.history.performanceSeries.length >= 2;
+  const bundle = scopeBundle(data, scopeId);
+  $("benchmark-comparison-title").textContent = scopeId === "all" ? "Benchmark Comparison" : `Benchmark Comparison — ${bundle?.label || ""}`;
+  const hasPerformanceSeries = bundle?.dailySeries && bundle.dailySeries.length >= 2;
   const availableBenchmarks = (data.history.benchmarks || []).filter((b) => b.series && b.series.length >= 2);
 
   if (!hasPerformanceSeries || !availableBenchmarks.length) {
@@ -207,7 +286,7 @@ function renderBenchmarkSection(data) {
   }
 
   const seriesDefs = [
-    { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: data.history.performanceSeries },
+    { key: "scope", label: bundle.label, color: PALETTE_TEXT.coral, points: bundle.dailySeries },
     ...availableBenchmarks.map((b) => ({
       key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${b.dataType === "price_return" ? " · Price Return" : ""}`,
       color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: b.series,
@@ -297,9 +376,11 @@ function quantTileHTML({ iconName, label, docKey, value, note }) {
     </div>`;
 }
 
-function renderQuantMetrics(data) {
+function renderQuantMetrics(data, scopeId) {
   const container = $("quant-metrics-grid");
-  const quant = data.analytics.performance.quant;
+  const bundle = scopeBundle(data, scopeId);
+  $("quant-metrics-title").textContent = scopeId === "all" ? "Risk & Quant Metrics" : `Risk & Quant Metrics — ${bundle?.label || ""}`;
+  const quant = bundle?.quant;
 
   if (!quant || !quant.available) {
     renderInsufficientData(container, "Insufficient history to compute risk metrics yet - Volatility, Max Drawdown and the rest all need a handful of real dated Valuations spread out over time before a statistic like this means anything.");
@@ -350,6 +431,50 @@ function renderQuantMetrics(data) {
   container.innerHTML = tiles.join("");
 }
 
+/* ---------- Scope selector ----------
+   All Portfolio / one pill per account - controls the stat tiles,
+   Annual Returns, Benchmark Comparison and Risk & Quant Metrics
+   sections below (all already read through scopeBundle()). Same
+   single-select .filter-pill pattern as Portfolio page's own scope row
+   (js/portfolio.js:renderScopeSelector()). Deliberately does NOT touch
+   renderValueChart() above - no per-account raw € value series exists
+   in the data model (only each account's own cash-flow-neutral INDEX,
+   already read via scopeBundle().dailySeries for the scoped Benchmark
+   Comparison chart) - mixing that into a €-labelled chart would blur
+   Value and Performance into one figure, exactly what this app's
+   design deliberately keeps separate everywhere else (see
+   account-performance's own METRIC_DOCS entry). */
+function renderScopedSections(data) {
+  renderStats(data, currentPerfScope);
+  renderAnnualReturns(data, currentPerfScope);
+  renderBenchmarkSection(data, currentPerfScope);
+  renderQuantMetrics(data, currentPerfScope);
+  $("perf-scope-hint").textContent = currentPerfScope === "all"
+    ? "Whole-portfolio figures, cash-flow-neutral across every account."
+    : "Portfolio Value Over Time above stays whole-portfolio - Investor Return (XIRR) and Unrealised Gain aren't tracked per account yet.";
+}
+
+function renderScopeSelector(data) {
+  const row = $("perf-scope-row");
+  // A previously-selected account that no longer exists in a fresh
+  // load (different auth state, different data) falls back to "all"
+  // rather than leaving no pill active.
+  if (currentPerfScope !== "all" && !data.portfolio.accounts.some((a) => a.id === currentPerfScope)) {
+    currentPerfScope = "all";
+  }
+  const scopes = [{ id: "all", name: "All Portfolio" }, ...data.portfolio.accounts];
+  row.innerHTML = scopes.map((s) =>
+    `<button class="filter-pill${s.id === currentPerfScope ? " active" : ""}" data-scope="${s.id}" type="button">${s.name}</button>`
+  ).join("");
+  row.querySelectorAll(".filter-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      currentPerfScope = btn.dataset.scope;
+      row.querySelectorAll(".filter-pill").forEach((b) => b.classList.toggle("active", b === btn));
+      renderScopedSections(data);
+    });
+  });
+}
+
 /** Signed in but the live fetch failed (see analytics.js's
     getPortfolioDataAuto()) - without this, this state is indistinguishable
     from "genuinely on live data, genuinely flat" or from "genuinely signed
@@ -383,11 +508,9 @@ async function init() {
   const loadAndRender = async (data) => {
     setCurrentPortfolioData(data);
     renderDataWarning(data);
-    renderStats(data);
     renderValueChart(data);
-    renderAnnualReturns(data);
-    renderBenchmarkSection(data);
-    renderQuantMetrics(data);
+    renderScopeSelector(data);
+    renderScopedSections(data);
   };
 
   onAuthChange(async () => { loadAndRender(await getPortfolioDataAuto()); });

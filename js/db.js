@@ -291,17 +291,44 @@ async function getBenchmarkHistory(benchmarkId, { from, to } = {}) {
     risk-free rate anywhere in the data model"). Same shape/discipline
     as getBenchmarkHistory() - oldest first, no gap-filling, a maturity
     with sparse coverage returns exactly that many rows. Data layer only
-    - nothing here computes Sharpe or Alpha; that's calculations.js's
-    job once Phase 3 (quant analytics) actually starts. */
+    - nothing here computes Sharpe or Alpha; calculations.js does, once
+    it has the real data.
+
+    PAGINATED, unlike every other reader in this file - deliberately.
+    Alpha Vantage's TREASURY_YIELD backfill pulled DECADES of daily
+    history in one call (11,000+ rows, back to 1981 - see
+    fetch-risk-free-rate/index.ts's own comment on why there's no
+    compact/full split for this endpoint), which is real, wanted data,
+    not a bug to trim at the source. But PostgREST silently caps any
+    single response at its project-level max-rows (1000 here) - an
+    unpaginated query against a table this size doesn't error, it just
+    quietly returns the OLDEST 1000 rows (sorted ascending) and drops
+    everything after ~1985, which is exactly what happened here: a
+    caller asking "the rate nearest today" got matched against a
+    mid-1980s row because nothing more recent was ever in the array -
+    confirmed live (2026-08-14's real rate is 3.86%; the bug surfaced
+    7.50%, a real 1985 value). Every OTHER *_rates/*_history table in
+    this app (benchmark_history, fx_rates) stays comfortably under 1000
+    rows, which is why they never hit this - not because they're
+    special-cased, just smaller. Loops in fixed pages until a page comes
+    back short, so this is correct regardless of how large the table
+    grows or what the project's max-rows setting happens to be. */
 async function getRiskFreeRates(maturity = "3month", { from, to } = {}) {
-  let query = window.db
-    .from("risk_free_rates")
-    .select("date, rate_pct, source, fetched_at")
-    .eq("maturity", maturity)
-    .order("date", { ascending: true });
-  if (from) query = query.gte("date", from);
-  if (to) query = query.lte("date", to);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const PAGE_SIZE = 1000;
+  const rows = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    let query = window.db
+      .from("risk_free_rates")
+      .select("date, rate_pct, source, fetched_at")
+      .eq("maturity", maturity)
+      .order("date", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (from) query = query.gte("date", from);
+    if (to) query = query.lte("date", to);
+    const { data, error } = await query;
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
 }

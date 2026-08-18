@@ -17,6 +17,13 @@
 }
 .data-warning-banner b { color: var(--coral-2); }
 
+/* Scope selector (All Portfolio / per-account) - same .filter-pills
+   primitive #perf-filters already uses for the date-range picker, just
+   in its own card at the top of the page since it controls several
+   sections below, not one chart. */
+#perf-scope-card { padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-6); }
+#perf-scope-card .section-hint { margin: var(--sp-2) 0 0; }
+
 .perf-stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
