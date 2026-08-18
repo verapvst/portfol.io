@@ -1,8 +1,10 @@
 /* ============================================================
    product-detail.js - the Security Detail page ("tell me everything
    about this one product"). Reads a single security_details row (via
-   db.js's loadProductDetail()) plus a real held-by-you check
-   (isSecurityHeld()) - never inferred from the product catalogue
+   db.js's loadProductDetail()) plus, when signed in, the real
+   portfolio.holdings entry for this security (getPortfolioDataAuto(),
+   analytics.js) - "held" and "Your Position"/"Your Return" both come
+   from that real holding, never inferred from the product catalogue
    itself. Cost Drag is computed live from this product's own TER/
    assumed gross return via calculations.js:costDrag(), never a stored
    or hardcoded figure - see that function's own comment for why.
@@ -138,6 +140,41 @@ function scorecardHTML(p) {
           <p class="pd-score-ring-caption">Overall${incomplete ? ` (${sc.dimensionsAvailable}/${sc.dimensionsTotal})` : ""}</p>
         </div>
         <div class="pd-radar-wrap">${radarChartSVG(sc)}</div>
+      </div>
+    </section>`;
+}
+
+/** "Your Position" - the one place on this page that answers "how has
+    MY money in this security done", clearly separate from both the
+    static "Performance & Risk" card (researched/legacy figures) and the
+    "Market-Price Performance" card (the security's own market price -
+    see that card's own header comment for the full Position Return vs
+    Market-Price Return rationale). holding is data.portfolio.holdings'
+    own entry for this security (analytics.js - already carries the
+    cash-flow-neutral returnPct/returnAvailable from
+    calculations.js:scopedPerformance(), level:'security' - never
+    recomputed here, this page only renders it). Renders nothing at all
+    when the security isn't held - a "Your Position" card with nothing
+    in it would be noise, not honesty, for a pure research visit. */
+function yourPositionHTML(holding) {
+  if (!holding) return "";
+  const owner = isOwnerMode();
+  const tone = holding.returnAvailable ? (holding.returnPct > 0 ? "up" : holding.returnPct < 0 ? "down" : "text-muted") : "text-muted";
+  return `
+    <section class="card glass interactive" id="pd-your-position-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="your-return" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Your Position</h2>
+        </div>
+      </div>
+      <div class="pd-stat-row">
+        ${owner ? `<div class="pd-stat"><span class="pd-stat-label">Value</span><span class="pd-stat-value">${formatMoney(holding.value)}</span></div>` : ""}
+        <div class="pd-stat"><span class="pd-stat-label">Weight</span><span class="pd-stat-value">${holding.weight.toFixed(2)}%</span></div>
+        <div class="pd-stat">
+          <span class="pd-stat-label">Your Return</span>
+          <span class="pd-stat-value ${tone}">${holding.returnAvailable ? fmtPct(holding.returnPct) : "Insufficient history"}</span>
+          <span class="pd-stat-caption">Cash-flow-neutral, from your own buys/sells and valuation history - not the security's market price (see Market-Price Performance below)</span>
+        </div>
       </div>
     </section>`;
 }
@@ -482,9 +519,10 @@ function initHorizonPills(p) {
 
 /* ---------- Page init ---------- */
 
-function renderProduct(p, held, marketAnalytics) {
+function renderProduct(p, holding, marketAnalytics) {
   $("product-detail-body").innerHTML = `
-    ${headerHTML(p, held)}
+    ${headerHTML(p, !!holding)}
+    ${yourPositionHTML(holding)}
     ${scorecardHTML(p)}
     <div class="pd-two-col">
       <div class="pd-col">
@@ -520,15 +558,23 @@ async function loadProductDetailPage() {
   $("product-detail-body").innerHTML = `<p class="costs-empty">Loading…</p>`;
   try {
     const user = currentUser();
-    const [product, portfolioId, priceHistory] = await Promise.all([
+    // Full portfolio fetch (not just isSecurityHeld()'s lightweight
+    // existence check) - "Your Position" needs the real, already-
+    // computed cash-flow-neutral return (analytics.js's
+    // portfolio.holdings[].returnPct), and this is the one place that
+    // number is calculated - see calculations.js:scopedPerformance()'s
+    // own "one source of truth" requirement. getPortfolioDataAuto() is
+    // the same single call every other page makes, not a second one
+    // invented for this page.
+    const [product, portfolioData, priceHistory] = await Promise.all([
       loadProductDetail(id),
-      user ? ensurePortfolio() : Promise.resolve(null),
+      user ? getPortfolioDataAuto() : Promise.resolve(null),
       getHistoricalPrices(id),
     ]);
     if (!product) { renderNotFound("This product doesn't have research data on file."); return; }
-    const held = user ? await isSecurityHeld(portfolioId, id) : false;
+    const holding = portfolioData ? portfolioData.portfolio.holdings.find((h) => h.id === id) || null : null;
     const marketAnalytics = securityMarketAnalytics(product.securities, priceHistory);
-    renderProduct(product, held, marketAnalytics);
+    renderProduct(product, holding, marketAnalytics);
   } catch (err) {
     renderNotFound(err.message || "Failed to load this product.");
   }

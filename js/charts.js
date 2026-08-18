@@ -142,6 +142,147 @@ function renderInsufficientData(container, message) {
     </div>`;
 }
 
+/**
+ * Multi-series overlay chart - Portfolio vs. S&P 500 vs. Nasdaq-100,
+ * each normalized to a common start (calculations.js:indexValueSeries()/
+ * clipToCommonWindow() - never done here, this function only draws
+ * whatever series it's handed). Deliberately stateless: which series
+ * are visible is decided by the CALLER (checkbox state in app.js/
+ * performance.js), which just re-invokes this with a filtered `series`
+ * array - this function has no internal toggle/selection state to keep
+ * in sync with a checkbox elsewhere.
+ *
+ * series: [{ key, label, color, points: [{date, value, real?}] }] - each
+ * series' own points, any date range/density (a benchmark's real daily
+ * closes next to a portfolio's derived daily series is expected and
+ * fine - x-position is by shared date INDEX across the union of every
+ * date seen, same "evenly spaced by index" convention renderLineChart()
+ * uses, not true calendar-proportional spacing).
+ *
+ * Reuses the real:false dashed-segment convention per series (a
+ * derived/interpolated stretch never reads as an observed one, same
+ * discipline as renderLineChart()). Falls back to renderInsufficientData()
+ * if every series ends up empty (e.g. every checkbox unticked, or no
+ * series had enough overlapping history).
+ */
+function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixed(2), formatDateLabel = (d) => d } = {}) {
+  const visibleSeries = (series || []).filter((s) => s.points && s.points.length >= 2);
+  if (!visibleSeries.length) {
+    renderInsufficientData(container, "Insufficient history to compare yet - select at least one series with enough dated observations.");
+    return;
+  }
+
+  const width = container.clientWidth || 640;
+  const height = 260;
+  const padL = 48, padR = 8, padT = 10, padB = 22;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+
+  const sortedSeries = visibleSeries.map((s) => ({
+    ...s, points: [...s.points].sort((a, b) => a.date.localeCompare(b.date)),
+  }));
+
+  const allDates = [...new Set(sortedSeries.flatMap((s) => s.points.map((p) => p.date)))].sort();
+  const dateIndex = Object.fromEntries(allDates.map((d, i) => [d, i]));
+  const totalSpan = Math.max(1, allDates.length - 1);
+  const xFor = (date) => padL + (dateIndex[date] / totalSpan) * innerW;
+
+  const allValues = sortedSeries.flatMap((s) => s.points.map((p) => p.value));
+  const rawMin = Math.min(...allValues);
+  const rawMax = Math.max(...allValues);
+  const headroom = (rawMax - rawMin) * 0.06 || Math.abs(rawMax) * 0.06 || 1;
+  const min = rawMin - headroom;
+  const max = rawMax + headroom;
+  const range = (max - min) || 1;
+  const yFor = (value) => padT + innerH - ((value - min) / range) * innerH;
+
+  // Nearest-prior lookup, same discipline as valueOfSecurityAsOf() -
+  // never a future point, never fabricated, for whichever series
+  // doesn't happen to have an observation exactly on the hovered date.
+  const valueAsOf = (points, date) => {
+    let best = null;
+    for (const p of points) {
+      if (p.date > date) break;
+      best = p;
+    }
+    return best;
+  };
+
+  const seriesSegments = sortedSeries.map((s) => {
+    const pts = s.points.map((p) => [xFor(p.date), yFor(p.value)]);
+    return pts.slice(1).map((p, i) => {
+      const prev = pts[i];
+      const interpolated = s.points[i].real === false || s.points[i + 1].real === false;
+      const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+      return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
+    }).join("");
+  }).join("");
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const y = padT + innerH * t;
+    const val = max - range * t;
+    return `<line x1="${padL}" x2="${width - padR}" y1="${y}" y2="${y}"/>
+            <text x="${padL - 8}" y="${y + 4}" text-anchor="end">${formatValue(val)}</text>`;
+  }).join("");
+
+  const targetLabels = Math.max(1, Math.floor(innerW / 70));
+  const tickStep = Math.max(1, Math.round(allDates.length / targetLabels));
+  const xLabels = allDates.map((d, i) => {
+    const isLast = i === allDates.length - 1;
+    if (!isLast && (i % tickStep !== 0 || allDates.length - 1 - i < tickStep / 2)) return "";
+    return `<text x="${xFor(d)}" y="${height - 6}" text-anchor="middle">${formatDateLabel(d)}</text>`;
+  }).join("");
+
+  const hitTargets = allDates.map((d) =>
+    `<rect x="${(xFor(d) - 5).toFixed(1)}" y="${padT}" width="10" height="${innerH}" fill="transparent" class="chart-hit-multi" data-date="${d}"/>`
+  ).join("");
+
+  const legend = sortedSeries.map((s) =>
+    `<span class="multichart-legend-item"><span class="multichart-legend-dot" style="background:${s.color}"></span>${s.label}</span>`
+  ).join("");
+
+  const hoverDots = sortedSeries.map((s) =>
+    `<circle class="multichart-hover-dot" data-key="${s.key}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5" opacity="0"/>`
+  ).join("");
+
+  container.style.position = "relative";
+  container.innerHTML = `
+    <div class="multichart-legend">${legend}</div>
+    <svg viewBox="0 0 ${width} ${height}" style="width:100%;height:${height}px;display:block;overflow:visible;">
+      <g class="linechart-grid">${gridLines}</g>
+      ${seriesSegments}
+      <g class="linechart-axis">${xLabels}</g>
+      <g class="chart-hits">${hitTargets}</g>
+      ${hoverDots}
+    </svg>
+    <div class="chart-tooltip"></div>`;
+
+  const tooltip = container.querySelector(".chart-tooltip");
+  const dotByKey = Object.fromEntries(sortedSeries.map((s) => [s.key, container.querySelector(`.multichart-hover-dot[data-key="${s.key}"]`)]));
+
+  container.querySelectorAll(".chart-hit-multi").forEach((el) => {
+    const date = el.dataset.date;
+    el.addEventListener("mousemove", () => {
+      const lines = sortedSeries.map((s) => {
+        const v = valueAsOf(s.points, date);
+        if (!v) { dotByKey[s.key].setAttribute("opacity", "0"); return ""; }
+        dotByKey[s.key].setAttribute("cx", xFor(v.date));
+        dotByKey[s.key].setAttribute("cy", yFor(v.value));
+        dotByKey[s.key].setAttribute("opacity", "1");
+        return `${s.label}: ${formatValue(v.value)}${v.real === false ? " (derived)" : ""}`;
+      }).filter(Boolean);
+      tooltip.innerHTML = `<strong>${date}</strong><br>${lines.join("<br>")}`;
+      tooltip.style.left = xFor(date) + "px";
+      tooltip.style.top = padT + "px";
+      tooltip.classList.add("visible");
+    });
+    el.addEventListener("mouseleave", () => {
+      tooltip.classList.remove("visible");
+      Object.values(dotByKey).forEach((dot) => dot.setAttribute("opacity", "0"));
+    });
+  });
+}
+
 /* ---------- Donut (Allocation + Geographic Exposure) ---------- */
 
 /**
@@ -352,6 +493,7 @@ async function renderWorldMap(container, exposureData) {
 }
 
 window.renderLineChart = renderLineChart;
+window.renderMultiLineChart = renderMultiLineChart;
 window.renderInsufficientData = renderInsufficientData;
 window.renderDonut = renderDonut;
 window.renderWorldMap = renderWorldMap;

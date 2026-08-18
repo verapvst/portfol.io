@@ -180,18 +180,174 @@ function renderAnnualReturns(data) {
 }
 
 /* ---------- Benchmark comparison ----------
-   Honest "not built yet" state, not a placeholder chart - see the
-   benchmark-comparison info popover (shell.js) for exactly what's
-   missing (a chosen benchmark + benchmark_history, both genuinely
-   nonexistent in Supabase today; daily_prices exists but its fetch is
-   still paused). Reuses renderInsufficientData (charts.js), the same
-   component the value chart falls back to - one "we don't have this
-   yet" component, not a bespoke empty state per section. */
-function renderBenchmarkSection() {
-  renderInsufficientData(
-    $("benchmark-body"),
-    "No benchmark is configured, and comparing to one needs daily indexed prices that haven't been resumed yet. Once a benchmark is chosen and its history exists, this compares your Time-Weighted Return against it - not just its raw price."
-  );
+   Real now (supabase/migrations/0016_benchmark_and_fx_history.sql,
+   Performance & Benchmark Engine plan) - reads history.performanceSeries
+   (scopedPerformance()'s own cash-flow-neutral normalized daily index,
+   NEVER history.valueSeries - see app.js's initPerformanceCard for why)
+   and history.benchmarks (real benchmark_history rows, analytics.js's
+   loadBenchmarkSeries()). Same buildComparisonSeries()/
+   renderMultiLineChart() primitives Overview's Performance card uses -
+   one comparison engine, not a second one built for this page. Only
+   falls back to renderInsufficientData() when there's genuinely not
+   enough real, overlapping history yet - never because the feature
+   itself isn't built. */
+let perfBenchmarkResizeHandler = null;
+
+function renderBenchmarkSection(data) {
+  const body = $("benchmark-body");
+  const hasPerformanceSeries = data.history.performanceSeries && data.history.performanceSeries.length >= 2;
+  const availableBenchmarks = (data.history.benchmarks || []).filter((b) => b.series && b.series.length >= 2);
+
+  if (!hasPerformanceSeries || !availableBenchmarks.length) {
+    const reason = !hasPerformanceSeries
+      ? "Not enough dated Valuations yet to compute a cash-flow-neutral performance series."
+      : "Benchmark history isn't available yet.";
+    renderInsufficientData(body, `Insufficient history to compare against a benchmark yet. ${reason}`);
+    return;
+  }
+
+  const seriesDefs = [
+    { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: data.history.performanceSeries },
+    ...availableBenchmarks.map((b) => ({
+      key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${b.dataType === "price_return" ? " · Price Return" : ""}`,
+      color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: b.series,
+    })),
+  ];
+
+  body.innerHTML = `
+    <div class="benchmark-toggle-row" id="perf-benchmark-toggle-row"></div>
+    <div id="perf-benchmark-chart-container"></div>
+    <div class="benchmark-stats-row" id="perf-benchmark-stats-row"></div>
+    <p class="chart-legend-note">Price Return - splits-adjusted, not dividend-adjusted. Not directly comparable to a total-return figure.</p>`;
+
+  const toggleRow = $("perf-benchmark-toggle-row");
+  const chartContainer = $("perf-benchmark-chart-container");
+  const statsRow = $("perf-benchmark-stats-row");
+
+  toggleRow.innerHTML = seriesDefs.map((s) =>
+    `<button class="benchmark-toggle-pill active" type="button" data-key="${s.key}"><span class="toggle-dot" style="background:${s.color}"></span>${s.label}</button>`
+  ).join("");
+
+  const draw = () => {
+    const activeKeys = new Set(
+      [...toggleRow.querySelectorAll(".benchmark-toggle-pill.active")].map((el) => el.dataset.key)
+    );
+    const selected = seriesDefs.filter((s) => activeKeys.has(s.key));
+    const comparison = buildComparisonSeries(selected);
+    if (!comparison.length) {
+      renderInsufficientData(chartContainer, "Insufficient overlapping history to compare the selected series yet.");
+      statsRow.innerHTML = "";
+      return;
+    }
+    renderMultiLineChart(chartContainer, comparison, {
+      formatValue: (v) => v.toFixed(1),
+      formatDateLabel: formatDateTick,
+    });
+    // Cumulative return over the SHARED compared window (not each
+    // series' own full history) - "if everything started at 100" only
+    // means something once every line is being read from the same
+    // starting date (plan doc section 6/12).
+    statsRow.innerHTML = comparison.map((s) => {
+      const last = s.points[s.points.length - 1].value;
+      const returnPct = last - 100;
+      const tone = returnPct > 0 ? "up" : returnPct < 0 ? "down" : "text-muted";
+      return `
+        <div class="benchmark-stat">
+          <span class="benchmark-stat-label"><span class="toggle-dot" style="background:${s.color}"></span>${s.label}</span>
+          <span class="benchmark-stat-value ${tone}">${fmtPct(returnPct)}</span>
+        </div>`;
+    }).join("");
+  };
+  draw();
+
+  toggleRow.querySelectorAll(".benchmark-toggle-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const activeCount = toggleRow.querySelectorAll(".benchmark-toggle-pill.active").length;
+      if (btn.classList.contains("active") && activeCount === 1) return;
+      btn.classList.toggle("active");
+      draw();
+    });
+  });
+
+  if (perfBenchmarkResizeHandler) window.removeEventListener("resize", perfBenchmarkResizeHandler);
+  perfBenchmarkResizeHandler = draw;
+  window.addEventListener("resize", perfBenchmarkResizeHandler);
+}
+
+/* ---------- Risk & Quant Metrics ----------
+   Phase 3 (Product & Architecture Re-Think plan §12) - Volatility/Max
+   Drawdown/Sharpe/Sortino/Beta/Alpha/Correlation, all computed by
+   calculations.js:scopedQuantMetrics() from the exact same subPeriods/
+   dailySeries the headline TWR and Benchmark Comparison above already
+   produced - never a second performance calculation. Each tile checks
+   its OWN availability, not just the card-level one: a real portfolio
+   can have enough real periods for Volatility/Max Drawdown while still
+   not having enough aligned benchmark months for Beta, or a risk-free
+   feed outage that only blocks Sharpe/Sortino/Alpha - one blanket
+   "insufficient" would hide metrics that are genuinely computable. */
+function quantTileHTML({ iconName, label, docKey, value, note }) {
+  return `
+    <div class="card glass interactive kpi-card rise">
+      <div class="kpi-top">
+        <span class="kpi-icon">${icon(iconName)}</span>
+        <p class="kpi-label" data-info="${docKey}" tabindex="0" role="button" aria-label="About this metric">${label}</p>
+      </div>
+      <p class="kpi-value">${value}</p>
+      <p class="kpi-sub">${note}</p>
+    </div>`;
+}
+
+function renderQuantMetrics(data) {
+  const container = $("quant-metrics-grid");
+  const quant = data.analytics.performance.quant;
+
+  if (!quant || !quant.available) {
+    renderInsufficientData(container, "Insufficient history to compute risk metrics yet - Volatility, Max Drawdown and the rest all need a handful of real dated Valuations spread out over time before a statistic like this means anything.");
+    return;
+  }
+
+  const INSUFFICIENT = "Insufficient history";
+  const benchmarkName = (data.history.benchmarks || [])
+    .find((b) => b.id === data.analytics.performance.regressionBenchmarkId)?.name || "benchmark";
+
+  const tiles = [
+    quantTileHTML({
+      iconName: "activity", label: "Volatility (ann.)", docKey: "quant-risk-metrics",
+      value: quant.volatility ? fmtPct(quant.volatility.annualisedVolatilityPct, { signed: false }) : INSUFFICIENT,
+      note: quant.volatility ? `${quant.volatility.periodCount} real periods` : "not enough real periods yet",
+    }),
+    quantTileHTML({
+      iconName: "barChart3", label: "Max Drawdown", docKey: "quant-risk-metrics",
+      value: quant.maxDrawdown ? fmtPct(quant.maxDrawdown.maxDrawdownPct, { signed: true }) : INSUFFICIENT,
+      note: quant.maxDrawdown ? "peak-to-trough, full history" : "not enough real periods yet",
+    }),
+    quantTileHTML({
+      iconName: "target", label: "Sharpe Ratio", docKey: "quant-risk-metrics",
+      value: quant.sharpe != null ? quant.sharpe.toFixed(2) : INSUFFICIENT,
+      note: quant.riskFreeRatePct != null ? `vs. ${fmtPct(quant.riskFreeRatePct, { signed: false })} risk-free` : "risk-free rate unavailable",
+    }),
+    quantTileHTML({
+      iconName: "target", label: "Sortino Ratio", docKey: "quant-risk-metrics",
+      value: quant.sortino != null ? quant.sortino.toFixed(2) : INSUFFICIENT,
+      note: "downside deviation only",
+    }),
+    quantTileHTML({
+      iconName: "trendingUp", label: "Beta", docKey: "quant-risk-metrics",
+      value: quant.beta != null ? quant.beta.toFixed(2) : INSUFFICIENT,
+      note: quant.beta != null ? `vs. ${benchmarkName}` : "not enough aligned months yet",
+    }),
+    quantTileHTML({
+      iconName: "sparkles", label: "Alpha (ann.)", docKey: "quant-risk-metrics",
+      value: quant.alphaPct != null ? fmtPct(quant.alphaPct, { signed: true }) : INSUFFICIENT,
+      note: "excess return vs. CAPM expectation",
+    }),
+    quantTileHTML({
+      iconName: "globe", label: "Correlation", docKey: "quant-risk-metrics",
+      value: quant.correlation != null ? quant.correlation.toFixed(2) : INSUFFICIENT,
+      note: quant.regressionObservationCount ? `${quant.regressionObservationCount} aligned months` : "not enough aligned months yet",
+    }),
+  ];
+  container.innerHTML = tiles.join("");
 }
 
 /** Signed in but the live fetch failed (see analytics.js's
@@ -230,9 +386,9 @@ async function init() {
     renderStats(data);
     renderValueChart(data);
     renderAnnualReturns(data);
+    renderBenchmarkSection(data);
+    renderQuantMetrics(data);
   };
-
-  renderBenchmarkSection();
 
   onAuthChange(async () => { loadAndRender(await getPortfolioDataAuto()); });
   await initAuth();

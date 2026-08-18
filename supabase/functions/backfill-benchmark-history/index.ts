@@ -1,5 +1,23 @@
 // Portfolio.io — backfill-benchmark-history
 //
+// *** RETIRED, 2026-08-16 *** (0018_benchmark_index_level_restructure.sql)
+// benchmark_history now stores real S&P 500/Nasdaq-100 INDEX levels
+// (symbol SPX/NDX), sourced from a historical CSV import (0019), not
+// SPY/QQQ ETF prices - and the table's own `close` column was renamed
+// to `index_level` to make that explicit. This function still writes
+// `close` and fetches SPY/QQQ - running it now would both error (no
+// such column) and, if that were fixed, silently corrupt the series by
+// mixing ETF-price and index-level scales (see 0018's own header
+// comment for why that's a real correctness bug, not cosmetic). Kept
+// in the repo for its history/pattern, not because it's expected to
+// run again - a genuine future index-level provider would need a new
+// function, not a patched version of this one.
+//
+// Everything below this line describes the ORIGINAL (now inapplicable)
+// design and is left unchanged as a record of what was tried and why -
+// the Alpha-Vantage-specific dormancy notes are equally moot now,
+// since the whole SPY/QQQ approach was intentionally replaced.
+//
 // One-time (or occasionally re-run) historical pull for every row in
 // `benchmarks` (currently S&P 500 via SPY, Nasdaq-100 via QQQ) — see
 // this feature's plan doc, section F. Deliberately a SEPARATE function

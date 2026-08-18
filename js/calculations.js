@@ -197,6 +197,75 @@ function indexValueSeries(series) {
 }
 
 /**
+ * Clips two {date, value, ...}[] series (e.g. portfolio value series and
+ * a benchmark's close series) to their overlapping real date range - the
+ * plan doc's edge case (section I / #17 of the original spec): never
+ * fabricate portfolio history before the portfolio existed, never
+ * fabricate benchmark history before the benchmark's own real data
+ * starts. If either series is empty, or the two don't actually overlap
+ * at all (e.g. a security bought after the current benchmark coverage
+ * window), returns { seriesA: [], seriesB: [], overlapStart: null,
+ * overlapEnd: null } rather than guessing - callers show "Insufficient
+ * history" for that, never a fabricated 0%.
+ *
+ * Shared by every "compare two series" UI (Overview, Performance page) -
+ * one clipping rule, not one per page that could quietly disagree about
+ * where a comparison is allowed to start.
+ */
+function clipToCommonWindow(seriesA, seriesB) {
+  const empty = { seriesA: [], seriesB: [], overlapStart: null, overlapEnd: null };
+  if (!seriesA.length || !seriesB.length) return empty;
+
+  const startA = seriesA[0].date, endA = seriesA[seriesA.length - 1].date;
+  const startB = seriesB[0].date, endB = seriesB[seriesB.length - 1].date;
+  const overlapStart = startA > startB ? startA : startB;
+  const overlapEnd = endA < endB ? endA : endB;
+  if (overlapStart > overlapEnd) return empty;
+
+  const clippedA = seriesA.filter((p) => p.date >= overlapStart && p.date <= overlapEnd);
+  const clippedB = seriesB.filter((p) => p.date >= overlapStart && p.date <= overlapEnd);
+  if (clippedA.length < 2 || clippedB.length < 2) return empty;
+
+  return { seriesA: clippedA, seriesB: clippedB, overlapStart, overlapEnd };
+}
+
+/**
+ * N-series generalization of clipToCommonWindow() + indexValueSeries(),
+ * for the Portfolio vs. S&P 500 vs. Nasdaq-100 comparison chart (any
+ * subset may be selected/deselected - Overview and Performance page's
+ * checkbox toggles both call this with whichever series are currently
+ * ticked). Finds the ONE overlapping window across every series passed
+ * in, clips all of them to it, then rebases each independently to 100
+ * at that shared start - "if everything started at 100" is only a fair
+ * question once every line actually starts on the same real date.
+ *
+ * items: [{key, label, color, points: [{date, value, real?}]}]
+ * Returns [] if fewer than 2 real observations end up in the shared
+ * window (including the single-series case, which still needs >=2
+ * points to normalize meaningfully) - callers show "Insufficient
+ * history" for that, never a fabricated flat line.
+ */
+function buildComparisonSeries(items) {
+  const withData = items.filter((s) => s.points && s.points.length);
+  if (!withData.length) return [];
+
+  let overlapStart = null, overlapEnd = null;
+  for (const s of withData) {
+    const start = s.points[0].date, end = s.points[s.points.length - 1].date;
+    overlapStart = overlapStart === null || start > overlapStart ? start : overlapStart;
+    overlapEnd = overlapEnd === null || end < overlapEnd ? end : overlapEnd;
+  }
+  if (overlapStart > overlapEnd) return [];
+
+  const clipped = withData.map((s) => ({
+    ...s, points: s.points.filter((p) => p.date >= overlapStart && p.date <= overlapEnd),
+  }));
+  if (clipped.some((s) => s.points.length < 2)) return [];
+
+  return clipped.map((s) => ({ ...s, points: indexValueSeries(s.points) }));
+}
+
+/**
  * Portfolio-level chain-linked Time-Weighted Return - replaces the old
  * "longest-history holding drives the whole portfolio" simplification.
  * Never computes each security's own TWR and blends them; total
@@ -448,6 +517,21 @@ function deriveNormalizedDailySeries(subPeriods, { base = 100 } = {}) {
 // validation happens, without any other change to this function.
 const DEFAULT_EXTERNAL_CASH_FLOW_TYPES = ["deposit", "withdrawal", "buy", "sell"];
 
+/** Minimum real elapsed days before an ACCOUNT-level return is shown as
+ * a number rather than "Insufficient history" - added after Trading
+ * 212's real data surfaced the case: 5 observations over 11 days
+ * produced a technically-real but low-confidence "+1.56%" (verified
+ * correct, not a calculation bug - just too little time elapsed to mean
+ * much). Not applied to portfolio or security scope by default (nobody
+ * asked for that yet, and a security's very first return - however
+ * short-window - is still meaningful the way an 11-day-old account's
+ * blended return isn't) - callers opt in via scopedPerformance()'s
+ * minDays parameter. 30 days, not a security-analytics-style 180/350
+ * (SECURITY_ANALYTICS_THRESHOLDS below) - this gates a plain cumulative
+ * return from looking overconfident, not an annualised figure from
+ * amplifying noise, so the bar is deliberately lower. */
+const MIN_DAYS_FOR_ACCOUNT_RETURN = 30;
+
 /**
  * Single entry point for cash-flow-neutral performance at any of the
  * three hierarchy levels this app's Performance & Benchmark Engine plan
@@ -465,6 +549,10 @@ const DEFAULT_EXTERNAL_CASH_FLOW_TYPES = ["deposit", "withdrawal", "buy", "sell"
  * externalTypes: which transaction TYPES count as external cash flow
  *   for this scope - see DEFAULT_EXTERNAL_CASH_FLOW_TYPES above for why
  *   the default is what it is today.
+ * minDays: optional - if the real elapsed history (asOfDate minus the
+ *   first real observation) is shorter than this, returns unavailable
+ *   with insufficientReason set, instead of a low-confidence percentage.
+ *   Opt-in, no default gate - see MIN_DAYS_FOR_ACCOUNT_RETURN above.
  *
  * Returns totalReturnPct/totalReturnAvailable (never a fabricated 0%
  * when there's insufficient data - see this app's *Available flag
@@ -472,7 +560,7 @@ const DEFAULT_EXTERNAL_CASH_FLOW_TYPES = ["deposit", "withdrawal", "buy", "sell"
  * data-quality facts (firstDate/lastDate/observationCount/hadCashFlows)
  * every performance figure in this plan is required to expose.
  */
-function scopedPerformance({ level, securityHistories, transactions, asOfDate, externalTypes = DEFAULT_EXTERNAL_CASH_FLOW_TYPES }) {
+function scopedPerformance({ level, securityHistories, transactions, asOfDate, externalTypes = DEFAULT_EXTERNAL_CASH_FLOW_TYPES, minDays = null }) {
   const cashFlows = transactions
     .filter((t) => externalTypes.includes(t.type))
     .map((t) => ({
@@ -486,9 +574,17 @@ function scopedPerformance({ level, securityHistories, transactions, asOfDate, e
 
   if (!observationDates.length) {
     return {
-      totalReturnPct: null, totalReturnAvailable: false, subPeriods: [], dailySeries: [],
+      totalReturnPct: null, totalReturnAvailable: false, insufficientReason: "no-observations", subPeriods: [], dailySeries: [],
       firstDate: cashFlows[0]?.date || null, lastDate: asOfDate,
       observationCount: 0, hadCashFlows: cashFlows.length > 0,
+    };
+  }
+
+  if (minDays != null && daysBetweenDates(observationDates[0], asOfDate) < minDays) {
+    return {
+      totalReturnPct: null, totalReturnAvailable: false, insufficientReason: "too-recent", subPeriods: [], dailySeries: [],
+      firstDate: observationDates[0], lastDate: asOfDate,
+      observationCount: observationDates.length, hadCashFlows: cashFlows.length > 0,
     };
   }
 
@@ -497,6 +593,7 @@ function scopedPerformance({ level, securityHistories, transactions, asOfDate, e
   return {
     totalReturnPct: result.totalReturnPct,
     totalReturnAvailable: result.totalReturnPct != null,
+    insufficientReason: result.totalReturnPct != null ? null : "no-subperiods",
     subPeriods: result.subPeriods,
     dailySeries: deriveNormalizedDailySeries(result.subPeriods),
     firstDate: observationDates[0],
@@ -840,19 +937,359 @@ function securityMarketAnalytics(security, priceHistory, thresholds = SECURITY_A
   };
 }
 
+/* ============================================================
+   Portfolio/account-level quant risk metrics (Product & Architecture
+   Re-Think plan, §12 - Volatility/Max Drawdown/Sharpe/Sortino/Beta/
+   Alpha/Correlation). Phase 3's own blocker ("no risk-free rate in the
+   data model") is resolved (supabase/migrations/0021, js/db.js:
+   getRiskFreeRates()) - this is the calculation layer that consumes it.
+
+   Deliberately built on scopedPerformance()'s REAL subPeriods (the
+   actual observation-to-observation Modified Dietz returns), never on
+   its dailySeries - that series is a disclosed geometric SMOOTHING of
+   each subperiod's real return evenly across calendar days (see
+   deriveNormalizedDailySeries()'s own comment), so within any subperiod
+   every "daily return" is identical by construction. Measuring
+   volatility off day-over-day changes in that smoothed series would
+   silently understate real volatility (near-zero variance inside every
+   period, all of it concentrated at period boundaries) - a fabricated
+   precision this app's own "never disguise sparse data as a denser
+   signal" discipline exists to prevent (see valueOfSecurityAsOf()'s and
+   securityVolatility()'s own comments for the same principle applied
+   elsewhere). §12's own formula - "stdev(periodic returns) x
+   sqrt(periods/year)" - is written generically enough to mean exactly
+   this: whatever cadence the REAL observations actually came in at,
+   never an assumed daily one.
+
+   The one place a smoothed series IS used below is alignedReturnPairs()
+   (Beta/Alpha/Correlation), and only because aligning the portfolio to
+   a SPARSER external series (the monthly benchmark) has no honest
+   alternative - the smoothing there is the same disclosed technique
+   already used for the Overview/Performance comparison chart, not a
+   new fabrication invented for this feature.
+   ============================================================ */
+
+/** Minimum-history gates as configuration, same "one place, not magic
+    numbers per function" discipline as SECURITY_ANALYTICS_THRESHOLDS.
+    Deliberately much lower bars than that table's own 60-observation
+    minimum - portfolio/account valuations are recorded at Vera's own
+    irregular cadence (nowhere near daily), so a 60-observation bar would
+    simply never light up for any account that exists today. Each is a
+    judgment call (mirrors the reasoning MIN_DAYS_FOR_ACCOUNT_RETURN's
+    own comment gives), not a mathematical requirement. */
+const QUANT_ANALYTICS_THRESHOLDS = {
+  minSubPeriodsForVolatility: 6,
+  minSubPeriodsForDrawdown: 3,
+  minDaysForAnnualisedReturn: 180,
+  minAlignedPeriodsForRegression: 12,
+};
+
+/** Builds the REAL cumulative index (base 100) from subPeriods' own
+    chain of returns - one point per real boundary date, nothing
+    interpolated. Because each subperiod's real return is a single
+    compounding step (never a synthetic within-period path), its
+    peak/trough can only ever occur AT a boundary date - so max drawdown
+    computed from this exact-boundary series is mathematically identical
+    to computing it from deriveNormalizedDailySeries()'s smoothed daily
+    version, without needing that series (or its smoothing) at all. */
+function scopedCumulativeIndex(subPeriods, base = 100) {
+  if (!subPeriods.length) return [];
+  const series = [{ date: subPeriods[0].startDate, value: base }];
+  let level = base;
+  for (const p of subPeriods) {
+    level = level * (1 + (p.returnPct == null ? 0 : p.returnPct / 100));
+    series.push({ date: p.endDate, value: level });
+  }
+  return series;
+}
+
+/** Annualised volatility from REAL periodic returns - §12's own formula,
+    stdev(periodic returns) x sqrt(periods/year), periods/year derived
+    from the ACTUAL average length of the real subperiods rather than an
+    assumed daily/monthly cadence (BPI's own observation spacing is
+    irregular, not clean months). Sample stdev (n-1) - estimating from a
+    sample, not observing a full population, same choice
+    securityVolatility() already makes. */
+function scopedVolatility(subPeriods, thresholds = QUANT_ANALYTICS_THRESHOLDS) {
+  const usable = subPeriods.filter((p) => p.returnPct != null);
+  if (usable.length < thresholds.minSubPeriodsForVolatility) return null;
+
+  const returns = usable.map((p) => p.returnPct / 100);
+  const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
+  const variance = returns.reduce((s, v) => s + (v - mean) ** 2, 0) / (returns.length - 1);
+  const stdev = Math.sqrt(variance);
+
+  const meanDays = usable.reduce((s, p) => s + daysBetweenDates(p.startDate, p.endDate), 0) / usable.length;
+  if (meanDays <= 0) return null;
+  const periodsPerYear = 365 / meanDays;
+
+  return {
+    annualisedVolatilityPct: Math.round(stdev * Math.sqrt(periodsPerYear) * 10000) / 100,
+    averagePeriodicReturnPct: Math.round(mean * 10000) / 100,
+    periodCount: usable.length,
+    periodsPerYear: Math.round(periodsPerYear * 100) / 100,
+  };
+}
+
+/** Max drawdown over the real boundary-date chain - see
+    scopedCumulativeIndex()'s own comment for why this needs no smoothed
+    series to be exact. Gated on a lower bar than volatility (a
+    peak-and-a-trough is meaningful with fewer points than a stdev is). */
+function scopedMaxDrawdown(subPeriods, thresholds = QUANT_ANALYTICS_THRESHOLDS) {
+  if (subPeriods.length < thresholds.minSubPeriodsForDrawdown) return null;
+  const series = scopedCumulativeIndex(subPeriods);
+  let peak = series[0].value;
+  let maxDrawdownPct = 0;
+  for (const p of series) {
+    if (p.value > peak) peak = p.value;
+    const drawdownPct = (p.value / peak - 1) * 100;
+    if (drawdownPct < maxDrawdownPct) maxDrawdownPct = drawdownPct;
+  }
+  return {
+    maxDrawdownPct: Math.round(maxDrawdownPct * 100) / 100,
+    periodStart: series[0].date,
+    periodEnd: series[series.length - 1].date,
+    observationCount: series.length,
+  };
+}
+
+/** CAGR-style annualisation of a scope's own totalReturnPct - same
+    technique securityCAGR() already uses (geometric, not a naive x365/
+    days scaling), gated on the same "don't annualise a handful of
+    weeks" principle (a 5% move over 30 real days would otherwise
+    annualise past +900%, exactly the noise securityCAGR()'s own comment
+    warns about). */
+function annualizeReturnPct(totalReturnPct, days, thresholds = QUANT_ANALYTICS_THRESHOLDS) {
+  if (totalReturnPct == null || days == null || days < thresholds.minDaysForAnnualisedReturn) return null;
+  const years = days / 365;
+  return Math.round((Math.pow(1 + totalReturnPct / 100, 1 / years) - 1) * 10000) / 100;
+}
+
+/** Nearest-prior real risk-free observation on or before `date` - same
+    "never a future value, never interpolated" lookup convention as
+    getDailyPrice()/valueOfSecurityAsOf(). rate_pct is already an
+    ANNUALISED yield by convention (a quoted 3-month Treasury yield), so
+    callers subtract it directly from an annualised return with no
+    further conversion. */
+function riskFreeRateAsOf(riskFreeRates, date) {
+  let best = null;
+  for (const r of riskFreeRates) {
+    if (r.date > date) continue;
+    if (best === null || r.date > best.date) best = r;
+  }
+  return best ? best.rate_pct : null;
+}
+
+/** Sharpe = (annualised return - risk-free) / annualised volatility -
+    null (never a divide-by-zero or a fabricated ratio) when any input
+    is missing or volatility is exactly 0. */
+function sharpeRatio(annualizedReturnPct, annualisedVolatilityPct, riskFreeRatePct) {
+  if (annualizedReturnPct == null || annualisedVolatilityPct == null || riskFreeRatePct == null) return null;
+  if (annualisedVolatilityPct === 0) return null;
+  return Math.round(((annualizedReturnPct - riskFreeRatePct) / annualisedVolatilityPct) * 100) / 100;
+}
+
+/** Sortino - Sharpe's downside-only variant: same numerator, but the
+    denominator is annualised DOWNSIDE deviation (semi-deviation against
+    0, i.e. only periods that actually lost money contribute) instead of
+    total volatility - a portfolio with large UPSIDE swings and small
+    downside ones scores better here than on Sharpe, which is exactly
+    the distinction Sortino exists to draw. Reuses the same real
+    subPeriods/periods-per-year derivation as scopedVolatility(), not a
+    second data path. */
+function scopedSortino(subPeriods, annualizedReturnPct, riskFreeRatePct, thresholds = QUANT_ANALYTICS_THRESHOLDS) {
+  const usable = subPeriods.filter((p) => p.returnPct != null);
+  if (usable.length < thresholds.minSubPeriodsForVolatility || annualizedReturnPct == null || riskFreeRatePct == null) return null;
+
+  const returns = usable.map((p) => p.returnPct / 100);
+  const downside = returns.map((r) => Math.min(0, r));
+  const semiVariance = downside.reduce((s, v) => s + v * v, 0) / downside.length;
+  const downsideDev = Math.sqrt(semiVariance);
+  if (downsideDev === 0) return null;
+
+  const meanDays = usable.reduce((s, p) => s + daysBetweenDates(p.startDate, p.endDate), 0) / usable.length;
+  if (meanDays <= 0) return null;
+  const periodsPerYear = 365 / meanDays;
+  const annualisedDownsideDevPct = downsideDev * Math.sqrt(periodsPerYear) * 100;
+
+  return Math.round(((annualizedReturnPct - riskFreeRatePct) / annualisedDownsideDevPct) * 100) / 100;
+}
+
+/** Portfolio-vs-benchmark period-over-period return pairs, aligned on
+    the BENCHMARK's own real observation dates - the sparser series
+    (monthly today, 0018/0019) - never on the portfolio's own dates,
+    which don't share any fixed schedule with the benchmark. The
+    portfolio's value at each benchmark date is read from `dailySeries`
+    (scopedPerformance()'s already-real, disclosed geometric smoothing
+    of real subperiod returns - see deriveNormalizedDailySeries()'s own
+    comment) - not a new fabrication, just the one honest way to answer
+    "what was the portfolio worth on a date a sparser external series
+    requires" without inventing new information beyond what the real
+    subperiod return already established.
+
+    Pairs are only produced where the benchmark date falls within
+    dailySeries's own real-covered range - a benchmark date before the
+    portfolio's first observation or after its last never gets one,
+    consistent with clipToCommonWindow()'s own "never fabricate outside
+    real coverage" rule.
+
+    benchmarkSeries: the {date, value, real, frequency}[] shape
+    analytics.js:loadBenchmarkSeries() already produces (one benchmark's
+    own `.series`) - deliberately the SAME shape the comparison chart
+    already consumes, not db.js's raw {date, index_level} rows, so this
+    reuses that one existing fetch instead of a second query for the
+    same data. */
+function alignedReturnPairs(dailySeries, benchmarkSeries) {
+  if (!dailySeries.length || !benchmarkSeries.length) return [];
+  const dailyByDate = new Map(dailySeries.map((p) => [p.date, p.value]));
+  const portfolioStart = dailySeries[0].date;
+  const portfolioEnd = dailySeries[dailySeries.length - 1].date;
+
+  const valueAt = (date) => {
+    if (dailyByDate.has(date)) return dailyByDate.get(date);
+    let best = null;
+    for (const p of dailySeries) {
+      if (p.date <= date && (!best || p.date > best.date)) best = p;
+    }
+    return best ? best.value : null;
+  };
+
+  const inRange = benchmarkSeries
+    .filter((b) => b.date >= portfolioStart && b.date <= portfolioEnd)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const pairs = [];
+  for (let i = 1; i < inRange.length; i++) {
+    const prevB = inRange[i - 1], currB = inRange[i];
+    const prevP = valueAt(prevB.date), currP = valueAt(currB.date);
+    if (prevP == null || currP == null || prevP <= 0) continue;
+    if (!prevB.value || !currB.value || prevB.value <= 0) continue;
+    pairs.push({
+      date: currB.date,
+      portfolioReturnPct: (currP / prevP - 1) * 100,
+      benchmarkReturnPct: (currB.value / prevB.value - 1) * 100,
+      daysElapsed: daysBetweenDates(prevB.date, currB.date),
+    });
+  }
+  return pairs;
+}
+
+/** Beta (cov/var regression against the benchmark), Correlation (Pearson
+    r), and Alpha (CAPM residual, using the SAME risk-free rate Sharpe/
+    Sortino use) - the three statistics that all fall out of one aligned
+    pair set, computed together rather than three separate passes over
+    the same data. null (never a fabricated 0) when the benchmark's own
+    variance is 0 (Beta/Alpha undefined) or either series has 0 variance
+    (Correlation undefined). */
+function betaAlphaCorrelation(pairs, riskFreeRatePct, thresholds = QUANT_ANALYTICS_THRESHOLDS) {
+  if (pairs.length < thresholds.minAlignedPeriodsForRegression) return null;
+
+  const p = pairs.map((x) => x.portfolioReturnPct / 100);
+  const b = pairs.map((x) => x.benchmarkReturnPct / 100);
+  const meanP = p.reduce((s, v) => s + v, 0) / p.length;
+  const meanB = b.reduce((s, v) => s + v, 0) / b.length;
+  const cov = p.reduce((s, v, i) => s + (v - meanP) * (b[i] - meanB), 0) / (p.length - 1);
+  const varB = b.reduce((s, v) => s + (v - meanB) ** 2, 0) / (b.length - 1);
+  if (varB === 0) return null;
+  const beta = cov / varB;
+
+  const varP = p.reduce((s, v) => s + (v - meanP) ** 2, 0) / (p.length - 1);
+  const correlation = (varP > 0 && varB > 0) ? cov / Math.sqrt(varP * varB) : null;
+
+  let alphaPct = null;
+  if (riskFreeRatePct != null) {
+    const meanDays = pairs.reduce((s, x) => s + x.daysElapsed, 0) / pairs.length;
+    if (meanDays > 0) {
+      const periodsPerYear = 365 / meanDays;
+      const annualizedPortfolioPct = (Math.pow(1 + meanP, periodsPerYear) - 1) * 100;
+      const annualizedBenchmarkPct = (Math.pow(1 + meanB, periodsPerYear) - 1) * 100;
+      alphaPct = annualizedPortfolioPct - (riskFreeRatePct + beta * (annualizedBenchmarkPct - riskFreeRatePct));
+    }
+  }
+
+  return {
+    beta: Math.round(beta * 100) / 100,
+    correlation: correlation != null ? Math.round(correlation * 100) / 100 : null,
+    alphaPct: alphaPct != null ? Math.round(alphaPct * 100) / 100 : null,
+    observationCount: pairs.length,
+    periodStart: pairs[0].date,
+    periodEnd: pairs[pairs.length - 1].date,
+  };
+}
+
+/** Single entry point for portfolio/account-level quant risk metrics -
+    same "one function, many consumers" discipline as
+    securityMarketAnalytics()/scopedPerformance() themselves. Nothing
+    here recomputes performance; `perf` is exactly the object
+    scopedPerformance() already returned for this scope.
+
+    perf: scopedPerformance()'s own return value for this scope.
+    benchmarkHistory: getBenchmarkHistory() rows for ONE benchmark (the
+      caller picks which), or [] to skip Beta/Alpha/Correlation only -
+      Volatility/Drawdown/Sharpe/Sortino need no benchmark at all.
+    riskFreeRates: getRiskFreeRates() rows, or [] to skip Sharpe/
+      Sortino/Alpha only - Volatility/Drawdown/Beta/Correlation need no
+      risk-free rate at all, so a missing feed degrades this gracefully
+      rather than hiding every metric. */
+function scopedQuantMetrics({ perf, benchmarkHistory = [], riskFreeRates = [], thresholds = QUANT_ANALYTICS_THRESHOLDS }) {
+  if (!perf || !perf.totalReturnAvailable) {
+    return { available: false, reason: perf?.insufficientReason || "no-performance" };
+  }
+
+  const volatility = scopedVolatility(perf.subPeriods, thresholds);
+  const maxDrawdown = scopedMaxDrawdown(perf.subPeriods, thresholds);
+  const totalDays = daysBetweenDates(perf.firstDate, perf.lastDate);
+  const annualizedReturnPct = annualizeReturnPct(perf.totalReturnPct, totalDays, thresholds);
+  const riskFreeRatePct = riskFreeRates.length ? riskFreeRateAsOf(riskFreeRates, perf.lastDate) : null;
+
+  const sharpe = sharpeRatio(annualizedReturnPct, volatility?.annualisedVolatilityPct ?? null, riskFreeRatePct);
+  const sortino = scopedSortino(perf.subPeriods, annualizedReturnPct, riskFreeRatePct, thresholds);
+
+  const pairs = benchmarkHistory.length ? alignedReturnPairs(perf.dailySeries, benchmarkHistory) : [];
+  const regression = pairs.length ? betaAlphaCorrelation(pairs, riskFreeRatePct, thresholds) : null;
+
+  return {
+    available: true,
+    annualizedReturnPct,
+    riskFreeRatePct,
+    volatility,
+    maxDrawdown,
+    sharpe,
+    sortino,
+    beta: regression?.beta ?? null,
+    alphaPct: regression?.alphaPct ?? null,
+    correlation: regression?.correlation ?? null,
+    regressionObservationCount: regression?.observationCount ?? 0,
+  };
+}
+
 window.costBasisFromTransactions = costBasisFromTransactions;
 window.unrealisedPnL = unrealisedPnL;
 window.costDrag = costDrag;
 window.productScore = productScore;
 window.valueOfSecurityAsOf = valueOfSecurityAsOf;
 window.indexValueSeries = indexValueSeries;
+window.clipToCommonWindow = clipToCommonWindow;
+window.buildComparisonSeries = buildComparisonSeries;
 window.chainLinkedPortfolioReturn = chainLinkedPortfolioReturn;
 window.annualReturns = annualReturns;
 window.modifiedDietzReturn = modifiedDietzReturn;
 window.chainLinkedReturn = chainLinkedReturn;
 window.deriveNormalizedDailySeries = deriveNormalizedDailySeries;
 window.scopedPerformance = scopedPerformance;
+window.MIN_DAYS_FOR_ACCOUNT_RETURN = MIN_DAYS_FOR_ACCOUNT_RETURN;
 window.scopedAnnualReturns = scopedAnnualReturns;
 window.SECURITY_ANALYTICS_THRESHOLDS = SECURITY_ANALYTICS_THRESHOLDS;
 window.dailyReturns = dailyReturns;
 window.securityMarketAnalytics = securityMarketAnalytics;
+window.QUANT_ANALYTICS_THRESHOLDS = QUANT_ANALYTICS_THRESHOLDS;
+window.scopedCumulativeIndex = scopedCumulativeIndex;
+window.scopedVolatility = scopedVolatility;
+window.scopedMaxDrawdown = scopedMaxDrawdown;
+window.annualizeReturnPct = annualizeReturnPct;
+window.riskFreeRateAsOf = riskFreeRateAsOf;
+window.sharpeRatio = sharpeRatio;
+window.scopedSortino = scopedSortino;
+window.alignedReturnPairs = alignedReturnPairs;
+window.betaAlphaCorrelation = betaAlphaCorrelation;
+window.scopedQuantMetrics = scopedQuantMetrics;

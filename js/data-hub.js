@@ -702,7 +702,7 @@ function renderSourceChips() {
    file's own header + data-hub.html's section comments for the
    distinction). Every method below ends by calling recordValuations()
    (db.js) - the exact same insert-only write path Portfolio Detail's
-   own per-holding Update already uses (js/portfolio-detail.js) - so
+   own per-holding Update already uses (js/portfolio.js) - so
    there is only ever one real definition of "what does updating my
    portfolio mean", regardless of which method supplied the data.
    ============================================================ */
@@ -710,7 +710,14 @@ function renderSourceChips() {
 const UPDATE_METHODS = [
   { key: "manual", icon: "edit3", title: "Manual Update", sub: "Update one holding by hand", enabled: true },
   { key: "t212", icon: "upload", title: "Trading 212 CSV", sub: "Upload or paste your Trading 212 export", enabled: true },
-  { key: "bpi-screenshot", icon: "fileText", title: "BPI Screenshot", sub: "Update from a screenshot of the BPI app or BPINet", enabled: false },
+  // Enabled after this session's own architecture review confirmed the
+  // pipeline is genuinely complete: same exact-then-fuzzy matching /
+  // held-only eligibility / review-before-write discipline as Trading
+  // 212's own CSV import above, Tesseract.js runs entirely client-side
+  // (no third party ever sees the screenshot), and the final write goes
+  // through the same recordValuations() path as every other method
+  // here. Was sitting behind this flag, not behind a real gap.
+  { key: "bpi-screenshot", icon: "fileText", title: "BPI Screenshot", sub: "Update from a screenshot of the BPI app or BPINet", enabled: true },
 ];
 
 function updateMethodsHTML() {

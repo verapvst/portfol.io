@@ -1,5 +1,15 @@
 // Portfolio.io — fetch-benchmark-history
 //
+// *** RETIRED, 2026-08-16 *** (0018_benchmark_index_level_restructure.sql)
+// The nightly cron job that called this (fetch-benchmark-history-nightly)
+// was unscheduled in 0018 - benchmark_history now stores real S&P 500/
+// Nasdaq-100 INDEX levels (SPX/NDX) from a historical CSV import (0019),
+// not SPY/QQQ ETF prices, and its `close` column was renamed to
+// `index_level`. This function still writes `close` and fetches SPY/QQQ
+// - see backfill-benchmark-history's own retirement note for the full
+// reasoning (mixing ETF-price and index-level scales would corrupt the
+// series). Kept in the repo as a record, not expected to run again.
+//
 // Scheduled Edge Function (Supabase Cron, not called from the browser -
 // see 0017_schedule_benchmark_fx_cron.sql). Pulls the last ~100 daily
 // closes (Alpha Vantage TIME_SERIES_DAILY, outputsize=compact) for

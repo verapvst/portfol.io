@@ -26,8 +26,25 @@
 
 #performance-chart-card,
 #annual-returns-card,
-#benchmark-card { margin-bottom: var(--sp-8); }
-#benchmark-card:last-child { margin-bottom: 0; }
+#benchmark-card,
+#quant-metrics-card { margin-bottom: var(--sp-8); }
+#quant-metrics-card:last-child { margin-bottom: 0; }
+
+/* Risk & Quant Metrics (Phase 3) - same .kpi-card tile as the concentration
+   grid on Portfolio (css/portfolio.css:.alloc-concentration-grid), just
+   auto-fitting since this card has 7 tiles instead of 3. */
+.quant-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-6);
+}
+
+@media (max-width: 900px) {
+  .quant-metrics-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .quant-metrics-grid { grid-template-columns: 1fr; }
+}
 
 .annual-returns-list { display: flex; flex-direction: column; }
 .annual-return-row {

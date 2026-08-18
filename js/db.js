@@ -120,13 +120,13 @@ async function findOrCreateSecurity({ name, type, currency }, cache) {
 }
 
 /** The one write path every "update my portfolio" entry point goes
-    through - Portfolio Detail's per-holding Update, Data Hub's Manual
+    through - Portfolio's per-holding Update, Data Hub's Manual
     Update, and the Trading 212 CSV importer all call this instead of
     each hand-rolling their own valuations insert. Always a plain
     INSERT, one row per observation, never an UPDATE/overwrite of an
     existing row - same "Update means a new dated row, not a rewrite"
     discipline as everywhere else valuations gets written (see
-    portfolio-detail.js's own Holdings Update header comment for why).
+    portfolio.js's own Holdings Update header comment for why).
     rows: [{ portfolio_id, security_id, date, value_eur, units, source }, ...] */
 async function recordValuations(rows) {
   if (!rows.length) return;
@@ -138,9 +138,12 @@ async function recordValuations(rows) {
     join on purpose - a security with no security_details row isn't a
     researchable product yet, so it has no place in this list (it might
     just be a plain holding created via Transactions, with no product
-    research attached). Requires signing in, same as every other
-    authenticated-only table today - see 0005_product_database.sql's own
-    comment for why this isn't anon-readable yet. */
+    research attached). Genuinely anon-readable, not just signed-in -
+    0005's own "authenticated read" policy was superseded by 0014's
+    additive "anon read" policy (Postgres RLS policies OR together, so
+    either grants access); confirmed live against the real anon key
+    during this session's own architecture audit. products.js calls
+    this with no auth check at all, correctly. */
 async function loadProductLibrary() {
   const { data, error } = await window.db
     .from("security_details")
@@ -232,4 +235,73 @@ async function getDailyPrice(securityId, date) {
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+/* ============================================================
+   Benchmark layer (supabase/migrations/0016_benchmark_and_fx_history.sql,
+   0018_benchmark_index_level_restructure.sql, Performance & Benchmark
+   Engine plan) - same seam discipline as the market-data layer above:
+   benchmark_history/benchmarks are read-only here, written only by
+   trusted server-side processes (service_role, or a one-off SQL
+   migration for the historical CSV import - 0019). Deliberately
+   provider-agnostic - callers get {date, index_level} rows and never
+   see which provider/import produced them; swapping the source later
+   changes only where the data comes from, never these callers or
+   calculations.js.
+
+   index_level (not "close" or "price") - these are real S&P 500/
+   Nasdaq-100 INDEX levels (symbol SPX/NDX), not an ETF's traded price
+   (see 0018's own header comment for why that distinction is load-
+   bearing: mixing index-level and ETF-price scales in one series would
+   silently corrupt every return calculated across the seam). */
+
+/** The small benchmarks reference table (currently 2 rows: sp500,
+    nasdaq100) - same shape as loadBrokers() above, no filter, no
+    date-range. Includes data_type ('price_return' today, never silently
+    'total_return') and instrument_type ('index') so callers can label
+    honestly rather than assume. */
+async function loadBenchmarks() {
+  const { data, error } = await window.db.from("benchmarks").select("*").order("name");
+  if (error) throw error;
+  return data || [];
+}
+
+/** Full (or date-bounded) real benchmark history, oldest first - same
+    "no synthetic gap-filling" discipline as getHistoricalPrices(): a
+    benchmark with monthly-only coverage (today's reality for sp500/
+    nasdaq100 - see 0019's own header comment) returns exactly those
+    monthly rows, never padded to look daily. Each row's `frequency`
+    ('daily'/'monthly') says which it actually is - never inferred from
+    row spacing. */
+async function getBenchmarkHistory(benchmarkId, { from, to } = {}) {
+  let query = window.db
+    .from("benchmark_history")
+    .select("date, index_level, frequency, source, fetched_at")
+    .eq("benchmark_id", benchmarkId)
+    .order("date", { ascending: true });
+  if (from) query = query.gte("date", from);
+  if (to) query = query.lte("date", to);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+/** Risk-free rate history (supabase/migrations/0021, Performance &
+    Benchmark Engine plan §12 - Sharpe/Alpha's own blocker: "no
+    risk-free rate anywhere in the data model"). Same shape/discipline
+    as getBenchmarkHistory() - oldest first, no gap-filling, a maturity
+    with sparse coverage returns exactly that many rows. Data layer only
+    - nothing here computes Sharpe or Alpha; that's calculations.js's
+    job once Phase 3 (quant analytics) actually starts. */
+async function getRiskFreeRates(maturity = "3month", { from, to } = {}) {
+  let query = window.db
+    .from("risk_free_rates")
+    .select("date, rate_pct, source, fetched_at")
+    .eq("maturity", maturity)
+    .order("date", { ascending: true });
+  if (from) query = query.gte("date", from);
+  if (to) query = query.lte("date", to);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 }

@@ -50,6 +50,14 @@ const PRIMARY_GRADIENT_STOPS = [
   { at: "100%", color: PALETTE.pink.to },
 ];
 
+/** Colors for the Portfolio-vs-benchmark comparison chart (Overview +
+    Performance page both use this - shared here, not duplicated per
+    page, so the two charts can't quietly drift to different colors for
+    the same series). Portfolio keeps the app's own brand coral; each
+    benchmark gets a distinct, legible PALETTE_TEXT color - a third
+    benchmark added later just needs one more entry here. */
+const BENCHMARK_SERIES_COLOR = { sp500: PALETTE_TEXT.blue, nasdaq100: PALETTE_TEXT.purple };
+
 function familyGradientCSS(name, angle = 135) {
   const f = PALETTE[name];
   return `linear-gradient(${angle}deg, ${f.from}, ${f.to})`;
@@ -270,6 +278,7 @@ function icon(name) {
 window.PALETTE = PALETTE;
 window.PALETTE_TEXT = PALETTE_TEXT;
 window.PRIMARY_GRADIENT_STOPS = PRIMARY_GRADIENT_STOPS;
+window.BENCHMARK_SERIES_COLOR = BENCHMARK_SERIES_COLOR;
 window.familyGradientCSS = familyGradientCSS;
 window.primaryGradientCSS = primaryGradientCSS;
 window.interpolatePrimaryGradient = interpolatePrimaryGradient;

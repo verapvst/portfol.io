@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfol.io — Allocation</title>
+<title>Portfol.io — Portfolio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=93">
-<link rel="stylesheet" href="css/layout.css?v=93">
-<link rel="stylesheet" href="css/components.css?v=93">
-<link rel="stylesheet" href="css/allocation.css?v=93">
+<link rel="stylesheet" href="css/theme.css?v=100">
+<link rel="stylesheet" href="css/layout.css?v=100">
+<link rel="stylesheet" href="css/components.css?v=100">
+<link rel="stylesheet" href="css/portfolio.css?v=100">
 </head>
 <body>
 <div id="app">
@@ -18,12 +18,27 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <!-- "Where is my portfolio invested?" - per
-         docs/information-architecture.md §2. Every section here reads
-         from data.analytics.* (repository.js/analytics.js), computed
-         fresh from current positions on every load - never a stored
-         allocation percentage, never an editable one. -->
-    <p class="section-hint" id="alloc-summary"></p>
+    <!-- "What do I own, and how is it distributed?" - per the Product &
+         Architecture Re-Think (this session's audit), this page merges
+         the old Portfolio Detail (holdings table) and Allocation
+         (asset class/geography/account/security breakdowns) - both read
+         the exact same getPortfolioDataAuto() data, so the merge is a
+         UI consolidation, not a data migration. NEVER shows a return %
+         or "Insufficient history" - that's Performance's job, kept
+         strictly separate (see that audit's §7). -->
+    <section class="card glass interactive" id="scope-card">
+      <div class="portfolio-scope-row" id="portfolio-scope-row"></div>
+      <p class="section-hint" id="portfolio-summary"></p>
+    </section>
+
+    <section class="card glass interactive" id="holdings-detail-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="portfolio" tabindex="0" role="button" aria-label="About this page">
+          <h2 class="section-title">Holdings</h2>
+        </div>
+      </div>
+      <div id="holdings-detail-table"></div>
+    </section>
 
     <section class="card glass interactive" id="asset-class-card">
       <div class="card-header">
@@ -51,7 +66,7 @@
           <h2 class="section-title">Security Allocation</h2>
         </div>
       </div>
-      <p class="section-hint">Every holding, ranked by weight</p>
+      <p class="section-hint">Every holding in scope, ranked by weight</p>
       <div id="security-allocation-body"></div>
     </section>
 
@@ -65,11 +80,6 @@
       <div id="account-allocation-body"></div>
     </section>
 
-    <!-- Restored from Overview (removed there per the shell/Overview
-         review - see index.html's own history) - this is exactly the
-         dedicated page docs/information-architecture.md always meant
-         for it, not a rebuild. Same renderExposure/EXPOSURE_GROUPINGS
-         (ui.js) and renderWorldMap (charts.js) as before. -->
     <section class="card glass interactive" id="exposure-card">
       <div class="card-header">
         <div class="card-header-title" data-info="exposure-country" tabindex="0" role="button" aria-label="About this metric">
@@ -86,22 +96,22 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=93"></script>
-<script src="js/supabaseClient.js?v=93"></script>
+<script src="js/supabaseConfig.js?v=100"></script>
+<script src="js/supabaseClient.js?v=100"></script>
 
-<script src="js/utils.js?v=93"></script>
-<script src="js/calculations.js?v=93"></script>
-<script src="js/repository.js?v=93"></script>
+<script src="js/utils.js?v=100"></script>
+<script src="js/calculations.js?v=100"></script>
+<script src="js/repository.js?v=100"></script>
 
-<script src="vendor/d3.min.js?v=93"></script>
-<script src="vendor/topojson-client.min.js?v=93"></script>
+<script src="vendor/d3.min.js?v=100"></script>
+<script src="vendor/topojson-client.min.js?v=100"></script>
 
-<script src="js/charts.js?v=93"></script>
-<script src="js/shell.js?v=93"></script>
-<script src="js/auth.js?v=93"></script>
-<script src="js/db.js?v=93"></script>
-<script src="js/analytics.js?v=93"></script>
-<script src="js/ui.js?v=93"></script>
-<script src="js/allocation.js?v=93"></script>
+<script src="js/charts.js?v=100"></script>
+<script src="js/shell.js?v=100"></script>
+<script src="js/auth.js?v=100"></script>
+<script src="js/db.js?v=100"></script>
+<script src="js/analytics.js?v=100"></script>
+<script src="js/ui.js?v=100"></script>
+<script src="js/portfolio.js?v=100"></script>
 </body>
 </html>

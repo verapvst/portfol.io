@@ -155,9 +155,12 @@ const NAV_CATEGORIES = [
     icon: "pieChart",
     items: [
       { label: "Overview", href: "index.html" },
-      { label: "Portfolio Detail", href: "portfolio-detail.html" },
+      // Portfolio Detail + Allocation merged into one page (Product &
+      // Architecture Re-Think, this session's audit) - both read the
+      // exact same getPortfolioDataAuto() data, so two nav entries for
+      // "what do I own" was surface area without a real distinction.
+      { label: "Portfolio", href: "portfolio.html" },
       { label: "Performance", href: "performance.html" },
-      { label: "Allocation", href: "allocation.html" },
     ],
   },
   {
@@ -563,9 +566,9 @@ const METRIC_DOCS = {
     source: "analytics.assetClassAllocation, from portfolio.holdings + BPI Dinâmico's internal split (source: BPI Ficha Mensal, June 2026 - see docs/migration-plan.md §3.3, not yet migrated to a live Supabase Allocations table, Phase 4/5).",
   },
   "allocation-security": {
-    definition: "Weight of every individual holding (fund, ETF, stock, cash) as a share of total portfolio value - the most granular allocation view, one step up from Portfolio Detail's own data table.",
-    calculation: "Each holding's latest market value ÷ current total portfolio value, ranked descending. Same figures as Portfolio Detail's Weight column - shown here as a ranked allocation view, not a second computation of it.",
-    source: "analytics.productAllocation, derived from portfolio.holdings (Transactions + Valuations via js/calculations.js) - never a stored allocation table.",
+    definition: "Weight of every individual holding (fund, ETF, stock, cash) as a share of the current scope's value (All Portfolio, or just the selected account) - the most granular view, one step up from this same page's own Holdings table.",
+    calculation: "Each holding's latest market value ÷ the current scope's total value, ranked descending - same figures as the Holdings table's own Weight column, recomputed relative to the account subtotal once scoped to one account (js/portfolio.js:scopedHoldings()) - shown here as a ranked view, not a second computation.",
+    source: "portfolio.holdings (Transactions + Valuations via js/calculations.js) - never a stored allocation table.",
   },
   "allocation-account": {
     definition: "How the portfolio splits across the accounts/brokers it's actually held in - a custody view, not a risk one (two accounts can hold the exact same underlying asset class or security).",
@@ -608,14 +611,29 @@ const METRIC_DOCS = {
     source: "analytics.performance.yearlyReturns, computed from the same Valuations/cash-flow data as the headline TWR - see that metric's own info popover for the full methodology and its documented limitations.",
   },
   "benchmark-comparison": {
-    definition: "How the portfolio's return compares to a relevant market index (e.g. MSCI World) over the same period - not shown yet, honestly, rather than estimated.",
-    calculation: "Would compare the portfolio's own Time-Weighted Return against the benchmark's own TWR (chain-linked from the benchmark's dated values, not its raw price - comparing to a raw price series is a common, misleading shortcut this app won't take).",
-    source: "Needs a chosen benchmark (a future Settings field) and benchmark_history (docs/migration-plan.md §2.8) - neither exists in Supabase yet. daily_prices exists but its fetch/schedule is explicitly paused (docs/information-architecture.md §7), so no index price history is live either. Shown as an honest unavailable state rather than a placeholder chart.",
+    definition: "How the portfolio's cash-flow-neutral performance compares to the real S&P 500 (SPX) and Nasdaq-100 (NDX) INDEX levels over the same real, overlapping period - both normalized to 100 at their shared start, so the lines answer \"if everything started equal, how did each grow\", never distorted by how much money you've deposited. These are the actual indices, not an ETF proxy (SPY/QQQ) - see benchmark-index-level for why that distinction matters.",
+    calculation: "Portfolio: calculations.js:scopedPerformance()'s own normalized daily index (Modified Dietz chain-linking, external cash flows removed). Benchmarks: real index levels from benchmark_history, clipped to the overlapping window and rebased the same way (calculations.js:buildComparisonSeries()) - one normalization function for both, not two that could quietly disagree.",
+    source: "benchmark_history (supabase/migrations/0018/0019) - a historical CSV import (Investing.com-style export), 2017-02 through 2026-08, MONTHLY observations (frequency='monthly' on every row - never treated as daily coverage). PRICE return (not dividend-adjusted), never presented as total return. No free automated daily index feed exists today (Alpha Vantage's free tier only covers tradeable tickers like SPY/QQQ, not raw SPX/NDX) - this updates by periodic re-import, not a nightly cron, until a provider is found. Shown honestly as \"insufficient history\" whenever real coverage is too thin, never a fabricated or estimated line.",
   },
-  "portfolio-detail": {
-    definition: "Every position currently held, across every account - what you actually own, not how it's performing (see Performance) or how it's diversified (see Allocation). Showcase shows structure and weight only; Private adds market value, average cost basis and unrealised P&L.",
-    calculation: "Holdings are never edited directly - each row is derived from Transactions (units bought/sold) and Valuations (latest known value) per security, per docs/migration-plan.md §3.1. Avg. Cost Basis and Unrealised P&L use the average-cost method over that security's own buy/sell transactions - a security with no sell on record needs no per-unit tracking at all, its cost basis is simply everything paid in so far.",
-    source: "portfolio.holdings, computed by js/calculations.js:costBasisFromTransactions()/unrealisedPnL() from transactions + valuations - the same shared functions Performance/Allocation/Risk read from as they're built, never a page-local recomputation.",
+  "benchmark-index-level": {
+    definition: "S&P 500 and Nasdaq-100 are tracked here as real INDEX levels (SPX/NDX) - the actual index, not an ETF that merely tracks it (like SPY or QQQ). An index has no expense ratio, no tracking error, and no traded price of its own - it's a calculated number, which is exactly what makes it the textbook-correct benchmark to compare investment performance against.",
+    calculation: "No calculation - index_level is stored exactly as received from the source, never recomputed or adjusted here. Performance is derived at read time, same as everywhere else in this app: Index Level(t) / Index Level(t-1) - 1, chain-linked across every real observation.",
+    source: "benchmarks.instrument_type = 'index', benchmarks.symbol = 'SPX'/'NDX' (supabase/migrations/0018). An earlier version of this table used SPY/QQQ ETF prices as a proxy (Alpha Vantage's free tier has no raw index symbol) - that data was replaced, not extended, once real index-level history became available, since mixing ETF-price and index-level scales in one series would corrupt every return calculated across the seam.",
+  },
+  "account-performance": {
+    definition: "How each account (BPI, Trading 212, ...) has performed on its own - cash-flow-neutral, so an account's return isn't inflated just because you've deposited more into it. Value (how much you have in that account) and Performance (how well it's done) are shown as two separate facts, never combined into one misleading figure.",
+    calculation: "calculations.js:scopedPerformance(), level:'account' - the same Modified Dietz chain-linking engine the portfolio-level headline TWR uses, re-scoped to just that account's own holdings and transactions (deposit/withdrawal/buy/sell all count as external to that account, even a buy funded from elsewhere in the same portfolio).",
+    source: "analytics.performance.accountPerformance, computed in analytics.js from the same valuations/transactions as everything else - one engine, not a page-local recalculation. \"Insufficient history\" shows instead of a fabricated 0% when an account has fewer than 2 dated observations yet, or (calculations.js:MIN_DAYS_FOR_ACCOUNT_RETURN) fewer than 30 real days of history - a brand-new account's first return is real but overconfident to headline this early, added after Trading 212's own first 11 days produced exactly that case.",
+  },
+  "quant-risk-metrics": {
+    definition: "How the portfolio behaved statistically, not just what it returned - Volatility and Max Drawdown describe how bumpy the ride was, Sharpe and Sortino ask whether the return was worth that bumpiness, Beta/Alpha/Correlation ask how the portfolio moved relative to the S&P 500. Each tile shows its own honest \"Insufficient history\" independently - a metric needing more real data than another isn't blocked by that other one.",
+    calculation: "Volatility: sample standard deviation of the portfolio's own REAL period-over-period returns (the same cash-flow-neutral chain-linked sub-periods the headline TWR is built from, never the smoothed daily chart line - see calculations.js:scopedVolatility()'s own comment for why), annualised by √(periods/year) using those periods' actual average length. Max Drawdown: worst peak-to-trough decline over the real chain of period-end values (calculations.js:scopedMaxDrawdown()). Sharpe/Sortino: (annualised return − risk-free rate) ÷ annualised (Sortino: downside-only) volatility - annualised return uses the same geometric CAGR technique as a security's own CAGR figure, gated the same way (≥180 real days). Beta/Correlation: covariance/regression between the portfolio's smoothed daily index and the S&P 500's real monthly index level, aligned on the benchmark's own dates (calculations.js:alignedReturnPairs()/betaAlphaCorrelation()). Alpha: the portfolio's annualised excess return over what CAPM (risk-free + β×(benchmark − risk-free)) would predict.",
+    source: "analytics.performance.quant, computed by js/calculations.js:scopedQuantMetrics() from scopedPerformance()'s own subPeriods/dailySeries, the S&P 500's real index_level history (benchmark_history), and js/db.js:getRiskFreeRates() (supabase/migrations/0021, US 3-month Treasury yield via Alpha Vantage TREASURY_YIELD). Each statistic is independently gated on its own minimum real-observation count (calculations.js:QUANT_ANALYTICS_THRESHOLDS) - never a number computed from too little real data to mean anything.",
+  },
+  "portfolio": {
+    definition: "What you own, and how it's distributed - across every account, or scoped to just one (BPI / Trading 212). Never how it's performing (see Performance, kept strictly separate per the Product & Architecture Re-Think audit - this page used to carry a per-account return; removed on purpose, not an oversight). Showcase shows structure and weight only; Private adds market value, average cost basis and unrealised P&L.",
+    calculation: "Holdings are never edited directly - each row is derived from Transactions (units bought/sold) and Valuations (latest known value) per security, per docs/migration-plan.md §3.1. Avg. Cost Basis and Unrealised P&L use the average-cost method over that security's own buy/sell transactions - a security with no sell on record needs no per-unit tracking at all, its cost basis is simply everything paid in so far. When scoped to one account, every weight (Holdings, Top Concentrations, Security Allocation) is recomputed relative to that account's own subtotal, never the whole portfolio's.",
+    source: "portfolio.holdings, computed by js/calculations.js:costBasisFromTransactions()/unrealisedPnL() from transactions + valuations - the same shared functions Performance reads from, never a page-local recomputation. Asset Class/Account Allocation/Geographic Exposure stay All-Portfolio-only - their source data (assetClassAllocation/regions/countries/currency) isn't split by account yet (still repository.js's not-yet-migrated import, see analytics.js's own header comment).",
   },
   "top-holdings": {
     definition: "The portfolio's five largest positions by weight.",
@@ -651,6 +669,11 @@ const METRIC_DOCS = {
     definition: "The cumulative lifetime impact of this product's annual fee, as a percentage of what the investment would be worth with zero fees - a different question from the TER itself, and easy to conflate with it. A small annual fee compounds into a much larger lifetime number the longer money stays invested.",
     calculation: "((1+gross)^years - (1+gross-TER)^years) / (1+gross)^years × 100, using the product's own assumed gross return and TER over the horizon you choose here - never a flat \"~20%\" constant applied to every product.",
     source: "js/calculations.js:costDrag(), fed by this product's assumed_gross_return_pct/ter_pct (security_details).",
+  },
+  "your-return": {
+    definition: "How YOUR position in this security has actually performed - your own buys/sells and valuation history, cash-flow-neutral (a second purchase of this security doesn't inflate the return, per the Performance & Benchmark Engine plan). A genuinely different question from Market-Price Performance below (how the security itself traded) and from Performance & Risk (this product's own researched/estimated figures) - the three can and do diverge, and that divergence is real information, not a bug.",
+    calculation: "js/calculations.js:scopedPerformance(), level:'security' - the same Modified Dietz chain-linking engine the portfolio and account-level TWR use, scoped to just this security's own valuation history and buy/sell transactions.",
+    source: "data.portfolio.holdings[].returnPct/.returnAvailable, computed once in analytics.js and read here - never recalculated on this page. \"Insufficient history\" shows instead of a fabricated 0% when fewer than 2 dated observations exist yet for this security.",
   },
   "security-market-performance": {
     definition: "How the SECURITY ITSELF performed as a real market-priced instrument - a different question from Performance & Risk above (this product's own researched/estimated figures) and from Portfolio Detail (how YOUR position performed, given your own purchase timing and cash flows). Only shown for exchange-traded securities with a verified market-data provider symbol - BPI Dinâmico and similar manually-valued holdings show an honest \"unavailable\" state instead, never a fabricated or borrowed figure.",
@@ -783,7 +806,7 @@ function comingSoon(items) {
     would click into a drawer built from the mock's €495.44 instead, and
     a real holding wouldn't be found there at all (mock ids like
     "bpi-dinamico" vs. real Supabase UUIDs), opening a silently empty
-    drawer. Set once per render by app.js/portfolio-detail.js's own
+    drawer. Set once per render by app.js/portfolio.js's own
     loadAndRender(), same object reference the cards themselves drew
     from - never a second, independent fetch. */
 let currentPortfolioData = null;
@@ -844,9 +867,9 @@ function kpiDrill(key, data) {
     icon: m.icon, title: m.title, subtitle: m.value,
     // Full history is real and already the chart on this same page
     // (data.history.valueSeries) - no need to promise it again here.
-    // Benchmark comparison is blocked on the same missing
-    // benchmark_history as everywhere else it appears.
-    bodyHTML: `<p class="drawer-hint">Full history is the chart above, since ${data.history.inceptionDate}.</p>${cashFlowRows}${comingSoon(["Benchmark comparison"])}`,
+    // Benchmark comparison is real now too (Performance page's own
+    // Benchmark Comparison card) - no longer listed as not-built here.
+    bodyHTML: `<p class="drawer-hint">Full history is the chart above, since ${data.history.inceptionDate}.</p>${cashFlowRows}`,
   };
 }
 
@@ -881,7 +904,7 @@ function performanceDrill(data) {
     bodyHTML: `
       ${summaryRows}
       ${yearRows.length ? `<div class="drawer-rows">${yearRows.join("")}</div>` : ""}
-      ${comingSoon(["Drawdown", "Rolling returns", "Benchmark comparison"])}`,
+      ${comingSoon(["Drawdown", "Rolling returns"])}`,
   };
 }
 

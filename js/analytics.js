@@ -23,6 +23,48 @@
    no more. It disappears entirely once Phase 4/5 land.
    ============================================================ */
 
+/** Loads real benchmark reference data + history (supabase/migrations/
+    0016_benchmark_and_fx_history.sql, Performance & Benchmark Engine
+    plan). Public, non-portfolio-scoped data - safe to call regardless
+    of auth state (RLS grants anon+authenticated read). Wrapped in its
+    own try/catch so a benchmark-load failure (network hiccup, RLS
+    misconfiguration) never breaks the rest of the page - degrades to
+    null, the same honest "not available" the UI already knows how to
+    render, never a fabricated line.
+
+    Returns null on failure, or an array of
+    { id, name, symbol, instrumentType, dataType, currency, series } -
+    `series` is the benchmark's OWN raw {date, value, real:true,
+    frequency} history (value = index_level, e.g. real SPX/NDX levels,
+    not an ETF price - see db.js's own header comment), unclipped
+    against the portfolio and not yet normalized. Clipping to the
+    overlapping real window (calculations.js:clipToCommonWindow()) and
+    rebasing to 100 (indexValueSeries()) happens at render time, per
+    page, since which series are actually being compared depends on
+    which checkboxes are ticked there - this function's only job is to
+    fetch the real data once. frequency is carried through per-point
+    (today: 'monthly' throughout, from the historical CSV import,
+    0019) so nothing downstream has to infer coverage density from
+    point spacing or silently assume daily. */
+async function loadBenchmarkSeries() {
+  try {
+    const benchmarks = await loadBenchmarks();
+    const histories = await Promise.all(benchmarks.map((b) => getBenchmarkHistory(b.id)));
+    return benchmarks.map((b, i) => ({
+      id: b.id,
+      name: b.name,
+      symbol: b.symbol,
+      instrumentType: b.instrument_type,
+      dataType: b.data_type,
+      currency: b.currency,
+      series: histories[i].map((row) => ({ date: row.date, value: row.index_level, real: true, frequency: row.frequency })),
+    }));
+  } catch (err) {
+    console.warn("Benchmark data unavailable:", err);
+    return null;
+  }
+}
+
 async function getPortfolioDataLive() {
   const portfolioId = await ensurePortfolio();
   if (!portfolioId) throw new Error("No portfolio for the current user.");
@@ -289,6 +331,12 @@ async function getPortfolioDataLive() {
     const accountTransactions = transactionsRaw.filter((t) => t.account_id === a.id);
     const perf = scopedPerformance({
       level: "account", securityHistories: accountSecurityHistories, transactions: accountTransactions, asOfDate: latestDate,
+      // A brand-new account (e.g. Trading 212's first ~11 days) can
+      // technically compute a real return the moment it has 2
+      // observations - correct, but overconfident to headline. Gated
+      // here, not at portfolio/security scope - see
+      // MIN_DAYS_FOR_ACCOUNT_RETURN's own comment (calculations.js).
+      minDays: MIN_DAYS_FOR_ACCOUNT_RETURN,
     });
     return { id: a.id, name: a.name, ...perf };
   });
@@ -325,6 +373,48 @@ async function getPortfolioDataLive() {
   // on purpose, not as a shortcut.
   const staticReal = getMockPortfolioData().analytics;
 
+  const benchmarks = await loadBenchmarkSeries();
+
+  // ---------- Quant risk metrics (Phase 3, Product & Architecture
+  // Re-Think plan §12: Volatility/Max Drawdown/Sharpe/Sortino/Beta/
+  // Alpha/Correlation, calculations.js:scopedQuantMetrics()) ----------
+  // Risk-free rate: fetched once here (js/db.js:getRiskFreeRates()),
+  // shared by every scope below - same "one fetch, many consumers"
+  // discipline loadBenchmarkSeries() itself already follows. Wrapped in
+  // its own try/catch for the same reason benchmark loading is: a
+  // network hiccup or the cron job not having run yet must never break
+  // the rest of Performance, it just degrades Sharpe/Sortino/Alpha to
+  // "unavailable" (scopedQuantMetrics() already handles an empty array
+  // gracefully - see that function's own comment).
+  let riskFreeRates = [];
+  try {
+    riskFreeRates = await getRiskFreeRates();
+  } catch (err) {
+    console.warn("Risk-free rate data unavailable:", err);
+  }
+  // S&P 500 is the reference benchmark for Beta/Alpha/Correlation - the
+  // portfolio's own holdings are overwhelmingly US/global equity funds
+  // (see Asset Class Allocation), so it's the more relevant of the two
+  // available indices; Nasdaq-100 stays available on the comparison
+  // chart itself, just isn't the regression benchmark. Falls back to
+  // whichever benchmark IS available if sp500 itself isn't (a real
+  // outage), rather than silently disabling Beta/Alpha/Correlation over
+  // a benchmark ID mismatch.
+  const regressionBenchmark = (benchmarks || []).find((b) => b.id === "sp500") || (benchmarks || [])[0] || null;
+  const portfolioQuant = scopedQuantMetrics({
+    perf: portfolioPerformance,
+    benchmarkHistory: regressionBenchmark?.series || [],
+    riskFreeRates,
+  });
+  // Same scoping as accountPerformance above - each account's own perf
+  // object already carries its real subPeriods/dailySeries, so this is
+  // just scopedQuantMetrics() re-applied per account, no new fetch.
+  accountPerformance.forEach((a) => {
+    a.quant = scopedQuantMetrics({
+      perf: a, benchmarkHistory: regressionBenchmark?.series || [], riskFreeRates,
+    });
+  });
+
   const largest = holdings.length ? [...holdings].sort((a, b) => b.weight - a.weight)[0] : null;
   const health = {
     holdingsCount: holdings.length,
@@ -339,7 +429,14 @@ async function getPortfolioDataLive() {
 
   return {
     portfolio: { holdings, accounts, cash, transactions },
-    history: { valueSeries, inceptionDate, benchmarks: null, marketData },
+    // performanceSeries: the cash-flow-neutral normalized daily index
+    // (calculations.js:scopedPerformance()'s own dailySeries, base 100
+    // at the portfolio's own inception) - deliberately separate from
+    // valueSeries (raw €, which jumps on every deposit/withdrawal and
+    // is NOT safe to feed into a benchmark comparison chart). This is
+    // what the Overview/Performance page's Portfolio-vs-S&P500-vs-
+    // Nasdaq-100 chart is built from - see plan doc section C/§4.
+    history: { valueSeries, performanceSeries: portfolioPerformance.dailySeries, inceptionDate, benchmarks, marketData },
     analytics: {
       assetClassAllocation: staticReal.assetClassAllocation,
       productAllocation,
@@ -365,6 +462,12 @@ async function getPortfolioDataLive() {
         // (UI wiring is a later phase); each entry also carries its own
         // firstDate/observationCount/hadCashFlows data-quality facts.
         accountPerformance,
+        // Portfolio-level Volatility/Max Drawdown/Sharpe/Sortino/Beta/
+        // Alpha/Correlation (calculations.js:scopedQuantMetrics()) -
+        // additive field, mirrors accountPerformance's own "nothing
+        // existing reads this yet until the UI wiring" precedent.
+        quant: portfolioQuant,
+        regressionBenchmarkId: regressionBenchmark?.id || null,
         contributionsTotal, withdrawalsTotal,
         todayChange: 0, todayChangePct: 0, cash,
       },
@@ -466,6 +569,8 @@ async function getPortfolioDataPublic() {
   const regions = byDimension("geography")
     .map((r) => ({ name: r.category, weight: r.weight_pct, tone: REGION_TONE[r.category] || "grey" }));
 
+  const benchmarks = await loadBenchmarkSeries();
+
   const cashBucket = assetClassAllocation.find((a) => a.name === "Cash");
   const health = {
     // Per-holding/per-account counts aren't computable without the
@@ -485,7 +590,7 @@ async function getPortfolioDataPublic() {
 
   return {
     portfolio: { holdings: [], accounts: [], cash: null, transactions: [] },
-    history: { valueSeries, inceptionDate, benchmarks: null, marketData: {} },
+    history: { valueSeries, inceptionDate, benchmarks, marketData: {} },
     analytics: {
       assetClassAllocation,
       productAllocation: [],

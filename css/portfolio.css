@@ -1,10 +1,38 @@
 /* ============================================================
-   portfolio-detail.css - page-specific overrides only. The table itself
-   reuses .holdings-table (components.css) - same look as Overview's Top
-   Holdings, just more rows and, in Private mode, three extra columns.
+   portfolio.css - page-specific overrides for the merged Portfolio page
+   (formerly portfolio-detail.css + allocation.css - kept as one file
+   since it's now one page). The table itself reuses .holdings-table
+   (components.css) - same look as Overview's Top Holdings, just more
+   rows and, in Private mode, three extra columns. Donut/bar rows/tabs/
+   world map all reuse existing components too.
    ============================================================ */
 
-#holdings-detail-card { max-width: 1100px; }
+#scope-card { padding-bottom: var(--sp-4); }
+
+/* Scope selector (All Portfolio / BPI / Trading 212) - same .filter-pill
+   primitive as Performance page's date-range picker, mutually exclusive
+   like that one (not the multi-select .benchmark-toggle-pill variant -
+   only one scope is ever active at a time). */
+.portfolio-scope-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--r-pill); width: fit-content; }
+
+#holdings-detail-card,
+#asset-class-card,
+#concentration-card,
+#security-allocation-card,
+#account-allocation-card,
+#exposure-card { max-width: 1100px; margin-bottom: var(--sp-8); }
+#exposure-card:last-child { margin-bottom: 0; }
+
+.alloc-concentration-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+
+@media (max-width: 900px) {
+  .alloc-concentration-grid { grid-template-columns: 1fr; }
+}
 
 /* Wider than the 4-column Top Holdings preview - forces horizontal
    scroll instead of illegible squeezed columns once Private mode adds
@@ -22,11 +50,7 @@
 /* ---------- Per-holding Update action + modal ----------
    Row button reuses .row-actions/.row-action-btn (transactions.css/
    accounts.css's own pattern, copied here since these classes are
-   page-scoped CSS, not shared - same visual language, not a new one).
-   Modal reuses the exact #valuation-modal/.val-form-* skeleton
-   (valuations.css) under fresh IDs (this page doesn't load
-   valuations.js, so no collision risk either way, but distinct IDs
-   keep the two pages' modals unambiguous in devtools). */
+   page-scoped CSS, not shared - same visual language, not a new one). */
 .row-actions { display: flex; gap: var(--sp-2); justify-content: flex-end; }
 .row-action-btn {
   width: 30px;

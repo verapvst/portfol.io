@@ -22,6 +22,7 @@ let perfResizeHandler = null;
 function initPerformanceCard(data) {
   const perf = data.analytics.performance;
   const container = $("linechart-container");
+  const toggleRow = $("benchmark-toggle-row");
 
   $("performance-card").dataset.drillType = "performance";
   $("performance-card").dataset.drillId = "performance";
@@ -44,22 +45,90 @@ function initPerformanceCard(data) {
   // to its sibling metric, not competing for space in the compact 2x2.
   $("perf-investor-return-value").textContent = fmtPct(perf.investorReturnPct);
 
+  // ---------- Performance chart: Portfolio vs. S&P 500 vs. Nasdaq-100 ----------
+  // Performance & Benchmark Engine plan, section 2/3/4/9: the portfolio
+  // line here is history.performanceSeries (scopedPerformance()'s own
+  // cash-flow-neutral normalized daily index), NEVER history.valueSeries
+  // (raw €, which jumps on every deposit/withdrawal - exactly the
+  // "€18,542 → +€4,000 looks like performance" confusion this feature
+  // exists to eliminate). Falls back to the old single-series chart only
+  // when performanceSeries isn't available (today: signed-out/public
+  // path - analytics.js's getPortfolioDataPublic() doesn't compute it,
+  // since its privacy-preserving RPCs never expose real cash-flow
+  // amounts to run Modified Dietz against).
+  const hasPerformanceSeries = data.history.performanceSeries && data.history.performanceSeries.length >= 2;
+  const availableBenchmarks = (data.history.benchmarks || []).filter((b) => b.series && b.series.length >= 2);
+
+  if (!hasPerformanceSeries) {
+    toggleRow.innerHTML = "";
+    const draw = () => {
+      if (data.history.valueSeries.length < 2) {
+        renderInsufficientData(container, "Not enough historical data yet to draw a trend.");
+        return;
+      }
+      const owner = isOwnerMode();
+      const points = owner ? data.history.valueSeries : indexValueSeries(data.history.valueSeries);
+      renderLineChart(container, points, {
+        formatValue: owner ? fmtEUR : (v) => String(Math.round(v)),
+        formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
+        formatDateLabel: formatDateTick,
+      });
+    };
+    draw();
+    if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
+    perfResizeHandler = draw;
+    window.addEventListener("resize", perfResizeHandler);
+    $("perf-more-link").innerHTML = `<a class="link-more" href="performance.html">View Performance ${icon("arrowRight")}</a>`;
+    return;
+  }
+
+  const seriesDefs = [
+    { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: data.history.performanceSeries },
+    ...availableBenchmarks.map((b) => ({
+      key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${b.dataType === "price_return" ? " · Price Return" : ""}`,
+      color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: b.series,
+    })),
+  ];
+
+  // Toggle pills - all selected by default (checkboxes 1-9 of the
+  // original spec). Multi-select, not the mutually-exclusive
+  // .filter-pill pattern the Performance page's date range uses - any
+  // combination can be active, including just one series.
+  toggleRow.innerHTML = seriesDefs.map((s) =>
+    `<button class="benchmark-toggle-pill active" type="button" data-key="${s.key}"><span class="toggle-dot" style="background:${s.color}"></span>${s.label}</button>`
+  ).join("");
+
   const draw = () => {
-    if (data.history.valueSeries.length < 2) {
-      renderInsufficientData(container, "Not enough historical data yet to draw a trend.");
+    const activeKeys = new Set(
+      [...toggleRow.querySelectorAll(".benchmark-toggle-pill.active")].map((el) => el.dataset.key)
+    );
+    const selected = seriesDefs.filter((s) => activeKeys.has(s.key));
+    // buildComparisonSeries() (calculations.js) clips every selected
+    // series to their shared overlapping real window, then re-normalizes
+    // each to 100 at that shared start - never fabricates history before
+    // any series' real inception (plan doc section 6).
+    const comparison = buildComparisonSeries(selected);
+    if (!comparison.length) {
+      renderInsufficientData(container, "Insufficient overlapping history to compare the selected series yet.");
       return;
     }
-    // Showcase mode: the curve never disappears, only its scale does -
-    // rebase to an index (first point = 100) and drop the euro sign.
-    const owner = isOwnerMode();
-    const points = owner ? data.history.valueSeries : indexValueSeries(data.history.valueSeries);
-    renderLineChart(container, points, {
-      formatValue: owner ? fmtEUR : (v) => String(Math.round(v)),
-      formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
+    renderMultiLineChart(container, comparison, {
+      formatValue: (v) => v.toFixed(1),
       formatDateLabel: formatDateTick,
     });
   };
   draw();
+
+  toggleRow.querySelectorAll(".benchmark-toggle-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // Never let the last active pill be turned off - there'd be no way
+      // back to a populated chart without a reload.
+      const activeCount = toggleRow.querySelectorAll(".benchmark-toggle-pill.active").length;
+      if (btn.classList.contains("active") && activeCount === 1) return;
+      btn.classList.toggle("active");
+      draw();
+    });
+  });
 
   if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
   perfResizeHandler = draw;

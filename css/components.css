@@ -955,6 +955,44 @@ th[data-info]:focus-visible {
 
 .chart-legend-note { margin-top: var(--sp-2); font-size: 11.5px; color: var(--muted); }
 
+/* Multi-series comparison chart (Portfolio vs. S&P 500 vs. Nasdaq-100) -
+   color key above the chart. Toggle checkboxes live in the page's own
+   markup, not here - this is a read-only legend matching whichever
+   series the caller actually passed in. */
+.multichart-legend { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin-bottom: var(--sp-2); }
+.multichart-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.multichart-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.chart-hit-multi { cursor: pointer; }
+
+/* Series-select row (Portfolio / S&P 500 / Nasdaq-100) - same pill
+   primitive as .filter-pill, but multiple can be active at once (this
+   is a set of independent toggles, not a mutually-exclusive range
+   picker), so each pill carries its own series color as a dot rather
+   than relying on a single "selected" background. */
+.benchmark-toggle-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-3) 0; }
+.benchmark-toggle-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: var(--r-pill);
+  font-size: 12.5px; font-weight: 500; color: var(--muted);
+  border: 1px solid var(--card-border); background: transparent;
+  transition: all 0.2s ease; cursor: pointer;
+}
+.benchmark-toggle-pill .toggle-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; opacity: 0.35; transition: opacity 0.2s ease; }
+.benchmark-toggle-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-float); border-color: transparent; }
+.benchmark-toggle-pill.active .toggle-dot { opacity: 1; }
+
+/* Cumulative-return-over-the-compared-window row, under the benchmark
+   comparison chart (Performance page) - "if everything started at 100,
+   where did each line end up". gap uses --sp-6, matching .kpi-grid's own
+   gap (theme.css) - --sp-5 was never a real token (the scale deliberately
+   skips 4->6, see theme.css's own "fewer choices" comment on --sp-*), a
+   bug from when this rule was added, not a missing token to fill in. */
+.benchmark-stats-row { display: flex; flex-wrap: wrap; gap: var(--sp-6); margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--card-border); }
+.benchmark-stat { display: flex; flex-direction: column; gap: 4px; }
+.benchmark-stat-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.benchmark-stat-label .toggle-dot { opacity: 1; }
+.benchmark-stat-value { font-size: 18px; font-weight: 600; }
+
 /* Container query, not a viewport breakpoint (UI/UX Stabilisation #4):
    Portfolio Allocation now lives in the ~37.5% right column, so what
    matters is the CARD's own available width, not the viewport's - a

@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=93">
-<link rel="stylesheet" href="css/layout.css?v=93">
-<link rel="stylesheet" href="css/components.css?v=93">
-<link rel="stylesheet" href="css/performance.css?v=93">
+<link rel="stylesheet" href="css/theme.css?v=100">
+<link rel="stylesheet" href="css/layout.css?v=100">
+<link rel="stylesheet" href="css/components.css?v=100">
+<link rel="stylesheet" href="css/performance.css?v=100">
 </head>
 <body>
 <div id="app">
@@ -70,23 +70,39 @@
       <div id="benchmark-body"></div>
     </section>
 
+    <!-- Phase 3 (Product & Architecture Re-Think plan §12) - Volatility/
+         Max Drawdown/Sharpe/Sortino/Beta/Alpha/Correlation, computed
+         from the exact same subPeriods/dailySeries the headline TWR and
+         Benchmark Comparison above already produced (calculations.js:
+         scopedQuantMetrics()) - never a second performance calculation.
+         Each tile shows its own honest "Insufficient history" when its
+         own real-data bar isn't met yet, never a fabricated number. -->
+    <section class="card glass interactive" id="quant-metrics-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="quant-risk-metrics" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Risk &amp; Quant Metrics</h2>
+        </div>
+      </div>
+      <div class="quant-metrics-grid" id="quant-metrics-grid"></div>
+    </section>
+
   </main>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=93"></script>
-<script src="js/supabaseClient.js?v=93"></script>
+<script src="js/supabaseConfig.js?v=100"></script>
+<script src="js/supabaseClient.js?v=100"></script>
 
-<script src="js/utils.js?v=93"></script>
-<script src="js/calculations.js?v=93"></script>
-<script src="js/repository.js?v=93"></script>
+<script src="js/utils.js?v=100"></script>
+<script src="js/calculations.js?v=100"></script>
+<script src="js/repository.js?v=100"></script>
 
-<script src="js/charts.js?v=93"></script>
-<script src="js/shell.js?v=93"></script>
-<script src="js/auth.js?v=93"></script>
-<script src="js/db.js?v=93"></script>
-<script src="js/analytics.js?v=93"></script>
-<script src="js/performance.js?v=93"></script>
+<script src="js/charts.js?v=100"></script>
+<script src="js/shell.js?v=100"></script>
+<script src="js/auth.js?v=100"></script>
+<script src="js/db.js?v=100"></script>
+<script src="js/analytics.js?v=100"></script>
+<script src="js/performance.js?v=100"></script>
 </body>
 </html>

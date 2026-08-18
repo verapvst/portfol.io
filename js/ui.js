@@ -110,7 +110,7 @@ function renderAllocationSummary(container, data) {
         ${topRegion ? `<span>${topRegion.name} <b>${topRegion.weight.toFixed(1)}%</b></span>` : ""}
         ${topCountry ? `<span>${topCountry.name} <b>${topCountry.weight.toFixed(1)}%</b></span>` : ""}
       </div>` : ""}
-    <a class="link-more" href="allocation.html">View Allocation ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="portfolio.html">View Portfolio ${icon("arrowRight")}</a>`;
 
   renderDonut(container.querySelector("#allocation-donut"), items, "Asset Class", `${total.toFixed(1)}%`, { drillType: "assetClass" });
 }
@@ -152,7 +152,7 @@ function renderHoldingsTable(container, holdings) {
         <tbody>${top5.map(holdingsRowHTML).join("")}</tbody>
       </table>
     </div>
-    <a class="link-more" href="portfolio-detail.html">View Portfolio Detail ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="portfolio.html">View Portfolio ${icon("arrowRight")}</a>`;
 }
 
 /* ---------- Exposure ----------
