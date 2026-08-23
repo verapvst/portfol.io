@@ -160,7 +160,7 @@ function initPerformanceCard(data) {
 function renderAll(data) {
   renderSnapshot($("kpi-grid"), buildKpiViewModels(data));
   initPerformanceCard(data);
-  renderHoldingsTable($("holdings-table"), data.portfolio.holdings);
+  renderHoldingsTable($("holdings-table"), data.portfolio.holdings, data.portfolio.accounts);
 
   // Asset-class summary + a geography highlight, not the full tabbed
   // breakdown (Product/Account/geography/sector/currency/style all move

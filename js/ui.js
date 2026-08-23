@@ -125,7 +125,7 @@ function renderAllocationSummary(container, data) {
 
 /* ---------- Top Holdings table ---------- */
 
-function holdingsRowHTML(h) {
+function holdingsRowHTML(h, accountName) {
   const trend = h.returnPct > 0 ? "up" : h.returnPct < 0 ? "down" : "text-muted";
   return `
     <tr data-drill-type="holding" data-drill-id="${h.id}" tabindex="0" role="button" aria-label="${h.name} details">
@@ -133,13 +133,29 @@ function holdingsRowHTML(h) {
         <p class="asset-name">${h.name}</p>
         <p class="asset-ticker">${h.ticker} · ${h.type}</p>
       </td>
+      <td>${accountName || "—"}</td>
       <td>${h.weight.toFixed(1)}%</td>
       <td>${formatMoney(h.value)}</td>
       <td class="${trend}">${h.returnPct > 0 ? "+" : ""}${h.returnPct.toFixed(2)}%</td>
     </tr>`;
 }
 
-function renderHoldingsTable(container, holdings) {
+/** Columns: Security | Account | Weight | Value | Total Return.
+    Deliberately NOT Asset Class or separate YTD/All-Time columns per
+    holding, even though the brief listed them - neither is honestly
+    available today without either fabricating or a real scope
+    increase: a holding's own asset-class isn't a stored field anywhere
+    (assetClassAllocation is a portfolio-level aggregate, not a per-
+    security label - security.type is "Fund"/"ETF"/"Stock"/"Cash", a
+    different, coarser axis that doesn't cleanly map to Equities/Bonds/
+    Alternatives), and a per-holding YTD/all-time TWR would mean a new
+    scopedPerformance(level:'security', ...) call per holding, not
+    reading an existing field - a real new calculation, not a column
+    swap, and this table is meant to stay a concise preview (the full
+    Security Allocation breakdown lives on Portfolio). Account is the
+    one addition here that's both real and free: already on every
+    holding (accountId) and every account (data.portfolio.accounts). */
+function renderHoldingsTable(container, holdings, accounts = []) {
   if (!holdings.length && !currentUser()) {
     container.innerHTML = `
       <div class="costs-signin-note">
@@ -150,14 +166,15 @@ function renderHoldingsTable(container, holdings) {
     $("holdings-signin-cta").addEventListener("click", () => window.openAuthModal());
     return;
   }
+  const accountNameById = Object.fromEntries(accounts.map((a) => [a.id, a.name]));
   const top5 = [...holdings].sort((a, b) => b.weight - a.weight).slice(0, 5);
   container.innerHTML = `
     <div class="table-scroll">
       <table class="holdings-table">
         <thead>
-          <tr><th>Asset</th><th>Weight</th><th>Market Value</th><th>Total Return</th></tr>
+          <tr><th>Security</th><th>Account</th><th>Weight</th><th>Value</th><th>Total Return</th></tr>
         </thead>
-        <tbody>${top5.map(holdingsRowHTML).join("")}</tbody>
+        <tbody>${top5.map((h) => holdingsRowHTML(h, accountNameById[h.accountId])).join("")}</tbody>
       </table>
     </div>
     <a class="link-more" href="portfolio.html">View Portfolio ${icon("arrowRight")}</a>`;
