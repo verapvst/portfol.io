@@ -342,6 +342,20 @@ function initTransactionModal() {
       // not reverse this automatically - if a transaction is voided
       // outright after the fact, its Cash effect needs a manual Update
       // Portfolio correction, same as it would for any other mistake.
+      //
+      // The baseline is Cash's value AS OF this transaction's own date
+      // (.lte("date", date), latest first) - never Cash's globally
+      // latest row regardless of date. Real incident: entering a
+      // transaction dated earlier than an already-existing later-dated
+      // Cash row let two separate buys each read and decrement the SAME
+      // credit, because ordering purely by calendar date (ignoring
+      // whether that date is before or after THIS transaction's own
+      // date) can surface a row that didn't exist yet at the real-world
+      // moment being recorded. Same nearest-prior-observation rule
+      // valueOfSecurityAsOf() (calculations.js) already uses everywhere
+      // else in this app - applied here for the first time because this
+      // is the one write path that reads a value before writing a new
+      // one from it.
       if ((payload.type === "buy" || payload.type === "sell") && !editingTransactionId) {
         const cashSecurity = securitiesCache.find((s) => s.type === "Cash" && s.id !== securityId);
         if (cashSecurity) {
@@ -350,7 +364,9 @@ function initTransactionModal() {
             .select("value_eur")
             .eq("portfolio_id", currentPortfolioId)
             .eq("security_id", cashSecurity.id)
+            .lte("date", date)
             .order("date", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(1);
           if (cashFetchError) throw cashFetchError;
           if (cashVals && cashVals.length) {
