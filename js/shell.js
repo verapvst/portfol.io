@@ -104,9 +104,13 @@ function initValuesToggle(container) {
 // indexValueSeries() moved to calculations.js - it's now the shared
 // normalization primitive for both portfolio and benchmark series (the
 // Performance & Benchmark Engine needs the exact same rebase-to-100
-// logic for both), not just a Showcase-mode chart-scale helper. Still a
-// plain global (calculations.js loads before this file), so every call
-// site below is unchanged.
+// logic for both), not just a Showcase-mode chart-scale helper. This
+// file no longer defines or re-exports it - a stray `window.
+// indexValueSeries = indexValueSeries` export left behind after the
+// move threw a ReferenceError on every page that loads shell.js
+// without also loading calculations.js (accounts.html/costs.html/
+// transactions.html - none of them chart anything, so nothing was
+// actually broken, but the console error was real and unnecessary).
 
 /* ---------- Navigation: overlay drawer, every breakpoint ----------
    One DOM structure, one behaviour, at every width: #nav-drawer is
@@ -1161,7 +1165,6 @@ function initDrillDown() {
 
 window.isOwnerMode = isOwnerMode;
 window.formatMoney = formatMoney;
-window.indexValueSeries = indexValueSeries;
 window.initNavigation = initNavigation;
 window.renderTopbar = renderTopbar;
 window.initDrawer = initDrawer;
