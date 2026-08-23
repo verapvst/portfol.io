@@ -215,6 +215,22 @@ function fmtCompact(v) {
   return new Intl.NumberFormat("en-IE", { notation: "compact", maximumFractionDigits: 1 }).format(v);
 }
 
+/** The most recent calendar year present in a scopedAnnualReturns()/
+    annualReturns() result (both shapes are {year: {returnPct,
+    hasObservationInYear, ...}}) - "YTD" here means "the latest year the
+    data actually covers", not wall-clock new Date(), so it stays honest
+    if a portfolio hasn't been updated recently. Shared by ui.js's KPI
+    tile and shell.js's drill drawer so the two can't disagree about
+    which year counts as "this year" or how a no-observation year
+    degrades. Returns null if yearlyReturns is empty. */
+function currentYearReturn(yearlyReturns) {
+  const years = Object.keys(yearlyReturns || {}).map(Number);
+  if (!years.length) return null;
+  const year = Math.max(...years);
+  const y = yearlyReturns[year];
+  return { year, returnPct: y && y.hasObservationInYear ? y.returnPct : null };
+}
+
 /** "Last updated" / "Data as of" - one shared renderer for the
     freshness caption described in docs/data-freshness.md, so this
     doesn't become dozens of hand-written date strings across pages.
@@ -289,6 +305,7 @@ window.regionForCountry = regionForCountry;
 window.fmtEUR = fmtEUR;
 window.fmtPct = fmtPct;
 window.fmtCompact = fmtCompact;
+window.currentYearReturn = currentYearReturn;
 window.lastUpdatedHTML = lastUpdatedHTML;
 window.normalizeName = normalizeName;
 window.icon = icon;

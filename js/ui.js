@@ -25,10 +25,13 @@ function buildKpiViewModels(data) {
   const sign = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
   const owner = isOwnerMode();
   const returnPct = fmtPct(perf.totalReturnPct);
+  const ytd = currentYearReturn(perf.yearlyReturns);
 
-  // Compact 2x2, always exactly these four - Investor Return (XIRR)
-  // lives on the Investment Performance card instead (see app.js), so
-  // this grid never grows past a clean 2x2 when a new metric is added.
+  // Compact 2x2 - performance leads (2 of 4 tiles), Value is context,
+  // not the star (PORTFOLIO_DESIGN_SYSTEM.md's own KPI-hierarchy note).
+  // Investor Return (XIRR) still lives on the Investment Performance
+  // card instead (see app.js) - a deliberate earlier choice, not
+  // revisited here, so this grid stays a clean 2x2.
   return [
     {
       key: "value", docKey: "portfolio-value", label: "Portfolio Value", icon: "wallet",
@@ -38,13 +41,6 @@ function buildKpiViewModels(data) {
       trend: sign(perf.totalReturnPct),
     },
     {
-      key: "cash", docKey: "cash-available", label: "Cash Available", icon: "wallet",
-      value: formatMoney(perf.cash),
-      deltaValue: fmtPct(perf.cash / perf.totalValue * 100, { signed: false }),
-      note: perf.cash > 0 ? "ready to invest" : "fully invested",
-      trend: "",
-    },
-    {
       // Headline is always the TWR % - safe to show in public mode too
       // (it reveals nothing about size), and it's the one number this
       // card exists to answer ("how did the investment perform").
@@ -52,11 +48,23 @@ function buildKpiViewModels(data) {
       // fraction of my money is currently profit") that legitimately
       // does move when capital is added/withdrawn - shown underneath,
       // labelled as its own thing, never blended into the headline.
-      key: "return", docKey: "investment-return", label: "Investment Return", icon: "trendingUp",
+      key: "return", docKey: "investment-return", label: "Portfolio Return", icon: "trendingUp",
       value: returnPct,
       deltaValue: owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : fmtPct(perf.unrealisedGainPct),
       note: "unrealised gain",
       trend: sign(perf.totalReturnPct),
+    },
+    {
+      // Same chain-linked TWR methodology as the headline above, just
+      // sliced to the latest calendar year the data covers
+      // (calculations.js:scopedAnnualReturns()/annualReturns()) - never
+      // a naive Jan-1-to-now % on raw values. "—" when the latest year
+      // has no real observation yet, not a fabricated 0%.
+      key: "ytd", docKey: "ytd-return", label: "YTD Return", icon: "barChart3",
+      value: fmtPct(ytd ? ytd.returnPct : null),
+      deltaValue: null,
+      note: ytd ? `since Jan 1, ${ytd.year}` : "not enough data yet",
+      trend: ytd ? sign(ytd.returnPct) : "",
     },
     {
       key: "invested", docKey: "net-invested", label: "Invested Capital", icon: "landmark",

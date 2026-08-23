@@ -62,12 +62,18 @@ function initPerformanceCard(data) {
   if (!hasPerformanceSeries) {
     toggleRow.innerHTML = "";
     const draw = () => {
-      if (data.history.valueSeries.length < 2) {
+      // Monthly, same reasoning as the comparison-chart branch below -
+      // Overview shows a monthly trend regardless of how densely
+      // valuations were actually recorded. Resampled BEFORE the
+      // length check - a real gap that only reads as "enough history"
+      // at raw density must not slip through as a 1-point chart.
+      const monthly = monthlyResample(data.history.valueSeries);
+      if (monthly.length < 2) {
         renderInsufficientData(container, "Not enough historical data yet to draw a trend.");
         return;
       }
       const owner = isOwnerMode();
-      const points = owner ? data.history.valueSeries : indexValueSeries(data.history.valueSeries);
+      const points = owner ? monthly : indexValueSeries(monthly);
       renderLineChart(container, points, {
         formatValue: owner ? fmtEUR : (v) => String(Math.round(v)),
         formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
@@ -82,11 +88,15 @@ function initPerformanceCard(data) {
     return;
   }
 
+  // Monthly cadence throughout - benchmarks are already monthly-only
+  // (0019), so this only actually downsamples the portfolio's own
+  // series; matches the two lines to the same visual density instead of
+  // a dense portfolio line next to 12-points-a-year benchmark dots.
   const seriesDefs = [
-    { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: data.history.performanceSeries },
+    { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: monthlyResample(data.history.performanceSeries) },
     ...availableBenchmarks.map((b) => ({
       key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${b.dataType === "price_return" ? " · Price Return" : ""}`,
-      color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: b.series,
+      color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: monthlyResample(b.series),
     })),
   ];
 

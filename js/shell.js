@@ -540,6 +540,11 @@ const METRIC_DOCS = {
     calculation: "The annual rate that makes every real cash flow (each contribution as a negative flow, current value as a hypothetical payout today) net to zero in present-value terms - the standard XIRR definition. It reads much smaller than Investment Return's +34.40% not because something's wrong, but because that figure is cumulative (total since 2017) while this one is annualised (per year) - they're on different time bases by definition, not disagreeing about the same thing.",
     source: "analytics.performance.investorReturnPct/investorReturnAvailable, computed by repository.js:xirr() over the real dated cash flows plus the current total value as a hypothetical terminal payout. investorReturnAvailable is false with fewer than 2 cash flows, shown as insufficient history rather than a fabricated 0%.",
   },
+  "ytd-return": {
+    definition: "Time-Weighted Return for the latest calendar year the data covers - the same TWR methodology as Portfolio Return, just sliced to Jan 1 of that year through the latest real observation, not since inception.",
+    calculation: "Chain-linked return over the current year's own sub-periods (calculations.js:scopedAnnualReturns()/annualReturns()) - never a naive (latest value / Jan-1 value - 1) on raw €, which would ignore contribution timing within the year.",
+    source: "analytics.performance.yearlyReturns, keyed by year - shows the most recent year the data actually has an observation for, not wall-clock \"this year\", so it stays honest if valuations haven't been updated recently.",
+  },
   "net-invested": {
     definition: "Capital actually contributed, excluding any gain or loss - a capital-flow figure, not a performance one.",
     calculation: "Sum of all contributions since the first subscription, minus any withdrawals (none on record).",
@@ -839,13 +844,15 @@ async function drillDown(type, id) {
 function kpiDrill(key, data) {
   const perf = data.analytics.performance;
   const returnPct = fmtPct(perf.totalReturnPct);
+  const ytd = currentYearReturn(perf.yearlyReturns);
   const map = {
     value: { icon: "wallet", title: "Portfolio Value", value: formatMoney(perf.totalValue) },
     // Investment Return's own value IS the TWR percentage in both modes -
     // it's safe to show in public mode (reveals nothing about size), and
     // it's the number this card exists to answer. Unrealised Gain is a
     // different question, shown separately on the Snapshot tile itself.
-    return: { icon: "trendingUp", title: "Investment Return", value: returnPct },
+    return: { icon: "trendingUp", title: "Portfolio Return", value: returnPct },
+    ytd: { icon: "barChart3", title: "YTD Return", value: fmtPct(ytd ? ytd.returnPct : null) },
     invested: { icon: "landmark", title: "Invested Capital", value: formatMoney(perf.investedCapital) },
     cash: { icon: "wallet", title: "Cash Available", value: formatMoney(perf.cash) },
     investorReturn: { icon: "barChart3", title: "Investor Return", value: fmtPct(perf.investorReturnPct) },

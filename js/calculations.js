@@ -266,6 +266,30 @@ function buildComparisonSeries(items) {
 }
 
 /**
+ * Downsamples a real, date-ascending {date, value, ...}[] series to one
+ * point per calendar month - the LAST real observation on/before each
+ * month, never an interpolated or fabricated one. Exists so the
+ * Overview's comparison chart shows the portfolio's own series at the
+ * same monthly cadence as the benchmarks (which only ever have monthly
+ * observations - see 0019_import_sp500_nasdaq100_historical.sql) once
+ * portfolio valuations move from ad-hoc/daily manual entries to a
+ * weekly cadence - a dense weekly line next to 12-points-a-year
+ * benchmark lines would read as far more precise than either actually
+ * is. Idempotent on an already-monthly series (each month has exactly
+ * one point, so nothing changes) - safe to apply unconditionally to
+ * every series fed into a comparison, benchmark or not.
+ *
+ * Only used by app.js's Overview chart - the Performance page's own
+ * comparison chart is untouched, still shows each series at its real,
+ * full density.
+ */
+function monthlyResample(points) {
+  const byMonth = new Map();
+  for (const p of points) byMonth.set(p.date.slice(0, 7), p);
+  return [...byMonth.values()];
+}
+
+/**
  * Portfolio-level chain-linked Time-Weighted Return - replaces the old
  * "longest-history holding drives the whole portfolio" simplification.
  * Never computes each security's own TWR and blends them; total
@@ -1271,6 +1295,7 @@ window.valueOfSecurityAsOf = valueOfSecurityAsOf;
 window.indexValueSeries = indexValueSeries;
 window.clipToCommonWindow = clipToCommonWindow;
 window.buildComparisonSeries = buildComparisonSeries;
+window.monthlyResample = monthlyResample;
 window.chainLinkedPortfolioReturn = chainLinkedPortfolioReturn;
 window.annualReturns = annualReturns;
 window.modifiedDietzReturn = modifiedDietzReturn;
