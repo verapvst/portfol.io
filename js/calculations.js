@@ -175,7 +175,14 @@ function valueOfSecurityAsOf(history, date, { exclusive = false } = {}) {
   for (const v of history) {
     const qualifies = exclusive ? v.date < date : v.date <= date;
     if (!qualifies) continue;
-    if (best === null || v.date > best.date) best = v;
+    // Tie-break by created_at when two rows share the max qualifying
+    // date - matching the same rule applied in analytics.js when it
+    // builds each security's history. Without this, whichever row
+    // happened to be encountered first in iteration order would win,
+    // which is not guaranteed to be the most recently recorded one.
+    if (best === null || v.date > best.date || (v.date === best.date && (v.created_at || "") > (best.created_at || ""))) {
+      best = v;
+    }
   }
   return best ? best.value_eur : 0;
 }

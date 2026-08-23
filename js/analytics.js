@@ -93,7 +93,17 @@ async function getPortfolioDataLive() {
     list.push(v);
     valuationsBySecurity.set(v.security_id, list);
   }
-  for (const list of valuationsBySecurity.values()) list.sort((a, b) => a.date.localeCompare(b.date));
+  // Tie-break by created_at, not just date: the valuations query above
+  // has no ORDER BY, so Postgres/PostgREST gives no guarantee about the
+  // order two same-date rows arrive in - without this, "the latest
+  // value" for a date with more than one observation (a correction
+  // superseding a stale row, e.g.) would resolve non-deterministically,
+  // flipping between page loads. Real incident: BPI Universal got a
+  // stale value_eur=0 "auto: full exit" row and a same-day correction -
+  // both dated 2026-08-23, only created_at tells them apart.
+  for (const list of valuationsBySecurity.values()) {
+    list.sort((a, b) => a.date.localeCompare(b.date) || (a.created_at || "").localeCompare(b.created_at || ""));
+  }
 
   const unitsBySecurity = new Map();
   const accountBySecurity = new Map(); // last account a security was transacted through

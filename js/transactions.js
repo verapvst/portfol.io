@@ -249,22 +249,32 @@ function initTransactionModal() {
 
       // Portfolio Value is driven entirely by valuations, never by
       // transactions (see analytics.js's getPortfolioDataLive() - a
-      // security only ever appears as a holding once it has a real
-      // valuation row) - a Buy with no valuation yet is invisible to
-      // it, which reads as a bug the moment you buy something brand
-      // new. Seed one initial valuation, from the purchase itself, but
-      // ONLY the first time this security is ever transacted - what
-      // you paid IS a real, dated value observation on the day you
-      // paid it, not a guess. This must never fire again after that:
-      // topping up an EXISTING holding with a second Buy must never
-      // silently overwrite its actual tracked value with just the
-      // top-up amount, so ongoing tracking still goes through the
-      // normal Update Portfolio flow.
-      if (payload.type === "buy") {
-        const { data: existingVal, error: valCheckError } = await window.db
-          .from("valuations").select("id").eq("security_id", securityId).limit(1);
+      // security only ever appears as a holding once it has a real,
+      // nonzero valuation row) - a Buy with no live valuation yet is
+      // invisible to it, which reads as a bug the moment you buy
+      // something brand new OR re-buy something you'd fully exited.
+      // Seed one initial valuation, from the purchase itself, but
+      // ONLY when there's no LIVE (nonzero) valuation already tracked -
+      // checking "latest value is 0 or missing" rather than "any
+      // valuation row exists at all", so re-entering a position after
+      // a genuine full exit (which closes it at 0) correctly re-seeds
+      // too, instead of staying stuck at that stale 0 forever. Still
+      // never fires while an existing holding is actually live: topping
+      // up with a second Buy must never overwrite its real tracked
+      // value with just the top-up amount - ongoing tracking still goes
+      // through the normal Update Portfolio flow. Also skipped on an
+      // edit (editingTransactionId set) - editing corrects the details
+      // of an already-processed purchase, it isn't a new one, so it
+      // must not re-seed on top of whatever's already there.
+      if (payload.type === "buy" && !editingTransactionId) {
+        const { data: latestVal, error: valCheckError } = await window.db
+          .from("valuations").select("value_eur")
+          .eq("security_id", securityId)
+          .order("date", { ascending: false })
+          .limit(1);
         if (valCheckError) throw valCheckError;
-        if (!existingVal || !existingVal.length) {
+        const hasLiveValuation = latestVal && latestVal.length && Number(latestVal[0].value_eur) !== 0;
+        if (!hasLiveValuation) {
           await recordValuations([{
             portfolio_id: currentPortfolioId,
             security_id: securityId,
@@ -323,7 +333,16 @@ function initTransactionModal() {
       // from its own latest one, same recordValuations() path as
       // everything else. Skipped if Cash has never been tracked here -
       // never fabricate a balance that was never actually recorded.
-      if (payload.type === "buy" || payload.type === "sell") {
+      // This is a DELTA applied to whatever Cash's latest value already
+      // is, so it must only ever fire once per real purchase/sale -
+      // skipped on an edit (editingTransactionId set), since editing
+      // corrects an already-processed transaction's details rather than
+      // recording a second economic event; applying the delta again
+      // would double-count it. A true void (no replacement) still does
+      // not reverse this automatically - if a transaction is voided
+      // outright after the fact, its Cash effect needs a manual Update
+      // Portfolio correction, same as it would for any other mistake.
+      if ((payload.type === "buy" || payload.type === "sell") && !editingTransactionId) {
         const cashSecurity = securitiesCache.find((s) => s.type === "Cash" && s.id !== securityId);
         if (cashSecurity) {
           const { data: cashVals, error: cashFetchError } = await window.db
