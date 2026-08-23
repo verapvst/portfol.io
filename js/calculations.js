@@ -541,6 +541,17 @@ function deriveNormalizedDailySeries(subPeriods, { base = 100 } = {}) {
 // validation happens, without any other change to this function.
 const DEFAULT_EXTERNAL_CASH_FLOW_TYPES = ["deposit", "withdrawal", "buy", "sell"];
 
+// The deferred refinement this file's own comment above anticipated:
+// at PORTFOLIO scope, a buy/sell is money moving from cash into a
+// security WITHIN the same portfolio, never money crossing the
+// portfolio's own boundary - only deposit/withdrawal do that. Account-
+// and security-scope calls deliberately keep the default (a buy IS a
+// cash flow crossing INTO that one account/security, even when the
+// money came from elsewhere in the same portfolio - see analytics.js's
+// own accountPerformance/holdings comments). Validated against Vera's
+// own real data and confirmed - not a guess.
+const PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES = ["deposit", "withdrawal"];
+
 /** Minimum real elapsed days before an ACCOUNT-level return is shown as
  * a number rather than "Insufficient history" - added after Trading
  * 212's real data surfaced the case: 5 observations over 11 days

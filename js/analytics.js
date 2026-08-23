@@ -183,15 +183,19 @@ async function getPortfolioDataLive() {
   // entirely as return. Any deposit/withdrawal/buy/sell inside an
   // interval is isolated via Modified Dietz weighting instead.
   //
-  // externalTypes deliberately still matches the OLD function's exact
-  // type set (buy/sell/deposit/withdrawal) - narrowing portfolio scope
-  // to deposit/withdrawal-only (buy/sell would be internal moves within
-  // the same portfolio) is a real behaviour change the plan flags as
-  // needing validation against real historical BPI data first, not done
-  // yet. This ships the validated bugfix only.
+  // externalTypes: PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES (calculations.js) -
+  // deposit/withdrawal only. A buy/sell moves money from cash into a
+  // security WITHIN the same portfolio, never across the portfolio's
+  // own boundary, so it must not be treated as external here (that was
+  // the deferred refinement this comment used to describe as
+  // "needing validation first" - validated against Vera's own real
+  // data, now the default at this scope). Account/security-level calls
+  // elsewhere in this file deliberately keep the wider default - see
+  // their own comments for why a buy IS external at those scopes.
   const latestDate = allObservationDates[allObservationDates.length - 1] || "0000-00-00";
   const portfolioPerformance = scopedPerformance({
     level: "portfolio", securityHistories, transactions: transactionsRaw, asOfDate: latestDate,
+    externalTypes: PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES,
   });
   const totalReturnAvailable = portfolioPerformance.totalReturnAvailable;
   const totalReturnPct = totalReturnAvailable ? portfolioPerformance.totalReturnPct : 0;
@@ -214,7 +218,10 @@ async function getPortfolioDataLive() {
   // a second calculation method - and Node-verified to chain back to
   // portfolioPerformance.totalReturnPct exactly (scratchpad/validate_engine.js).
   const yearlyReturns = inceptionDate
-    ? scopedAnnualReturns({ securityHistories, transactions: transactionsRaw, asOfDate: latestDate, inceptionDate })
+    ? scopedAnnualReturns({
+        securityHistories, transactions: transactionsRaw, asOfDate: latestDate, inceptionDate,
+        externalTypes: PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES,
+      })
     : {};
 
   // ---------- XIRR ----------
@@ -270,7 +277,16 @@ async function getPortfolioDataLive() {
   // market-price return (securityMarketAnalytics(), calculations.js) -
   // see docs/implementation-roadmap.md's Performance & Analytics
   // Architecture section for why those aren't the same concept.
-  const holdings = holdingsRaw.map((h) => {
+  // Excludes a fully-exited position (latest valuation = 0, either
+  // auto-closed by a full Sell - transactions.js - or manually zeroed
+  // via Update Portfolio) from the CURRENT holdings list - it should
+  // no longer read as something you own. securityHistories/valueSeries
+  // above are built from the unfiltered holdingsRaw on purpose: past
+  // dates must keep counting this security's real historical value,
+  // only its current-and-forward contribution should ever be 0 - which
+  // it already is by construction once that closing valuation exists,
+  // so totalValue needs no separate adjustment here.
+  const holdings = holdingsRaw.filter((h) => h.value !== 0).map((h) => {
     const securityTransactions = txnsBySecurity.get(h.security.id) || [];
     const securityPerformance = scopedPerformance({
       level: "security",

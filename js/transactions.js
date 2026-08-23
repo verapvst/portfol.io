@@ -276,6 +276,77 @@ function initTransactionModal() {
         }
       }
 
+      // A Sell that closes a position out entirely should stop counting
+      // it as a current holding - close its own valuation at €0, dated
+      // the sell, so both the historical value series and today's
+      // snapshot correctly reflect the exit going forward (getPortfolioDataLive()'s
+      // holdings filter drops any security whose latest valuation is 0).
+      // Only attempted when Units was actually entered on every one of
+      // this security's real transactions - Units is optional, and a
+      // full exit can't be told apart from a partial one without it, so
+      // a security with any untracked-units transaction is left alone
+      // rather than guessed at (you'd zero it out yourself via Manual
+      // Update in that case).
+      if (payload.type === "sell" && payload.units != null) {
+        const { data: allTxns, error: txnFetchError } = await window.db
+          .from("transactions")
+          .select("type, units")
+          .eq("security_id", securityId)
+          .eq("voided", false);
+        if (txnFetchError) throw txnFetchError;
+        const unitsFullyTracked = (allTxns || []).every((t) => t.units != null || (t.type !== "buy" && t.type !== "sell"));
+        if (unitsFullyTracked) {
+          const netUnits = (allTxns || []).reduce((s, t) => {
+            const sign = t.type === "sell" ? -1 : t.type === "buy" ? 1 : 0;
+            return s + sign * (t.units || 0);
+          }, 0);
+          if (netUnits <= 0) {
+            await recordValuations([{
+              portfolio_id: currentPortfolioId,
+              security_id: securityId,
+              date,
+              value_eur: 0,
+              units: 0,
+              source: "auto: full exit",
+            }]);
+          }
+        }
+      }
+
+      // Buy/Sell move value between Cash and a security WITHIN the same
+      // portfolio - they must not silently inflate/deflate total
+      // portfolio value, since neither is external money (see
+      // calculations.js's PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES for the
+      // matching fix on the return-calculation side). Cash is tracked
+      // the same way as every other holding - periodic valuation
+      // snapshots - so adjusting it means inserting a new dated row
+      // from its own latest one, same recordValuations() path as
+      // everything else. Skipped if Cash has never been tracked here -
+      // never fabricate a balance that was never actually recorded.
+      if (payload.type === "buy" || payload.type === "sell") {
+        const cashSecurity = securitiesCache.find((s) => s.type === "Cash" && s.id !== securityId);
+        if (cashSecurity) {
+          const { data: cashVals, error: cashFetchError } = await window.db
+            .from("valuations")
+            .select("value_eur")
+            .eq("portfolio_id", currentPortfolioId)
+            .eq("security_id", cashSecurity.id)
+            .order("date", { ascending: false })
+            .limit(1);
+          if (cashFetchError) throw cashFetchError;
+          if (cashVals && cashVals.length) {
+            const delta = payload.type === "buy" ? -Number(amount) : Number(amount);
+            await recordValuations([{
+              portfolio_id: currentPortfolioId,
+              security_id: cashSecurity.id,
+              date,
+              value_eur: Math.round((cashVals[0].value_eur + delta) * 100) / 100,
+              source: payload.type === "buy" ? "auto: reduced by buy" : "auto: increased by sell",
+            }]);
+          }
+        }
+      }
+
       close();
       await refreshTransactions();
     } catch (err) {
