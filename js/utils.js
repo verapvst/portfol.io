@@ -53,10 +53,18 @@ const PRIMARY_GRADIENT_STOPS = [
 /** Colors for the Portfolio-vs-benchmark comparison chart (Overview +
     Performance page both use this - shared here, not duplicated per
     page, so the two charts can't quietly drift to different colors for
-    the same series). Portfolio keeps the app's own brand coral; each
-    benchmark gets a distinct, legible PALETTE_TEXT color - a third
-    benchmark added later just needs one more entry here. */
-const BENCHMARK_SERIES_COLOR = { sp500: PALETTE_TEXT.blue, nasdaq100: PALETTE_TEXT.purple };
+    the same series). Portfolio keeps the app's own brand coral. Each
+    benchmark gets a soft, desaturated color from the SAME primary
+    gradient family (amber/orange/coral/pink - see PRIMARY_GRADIENT_STOPS)
+    rather than the cool blue/purple this used to be - those read as a
+    generic finance-chart palette pasted in, not part of this app's own
+    warm brand identity, even though they were technically already
+    PALETTE_TEXT entries. Amber and pink sit at opposite ends of the
+    gradient from coral, so all three stay visually distinct while
+    reading as one cohesive family - a third benchmark added later
+    should pick another warm-family PALETTE_TEXT color, not reach for
+    blue/purple/green again. */
+const BENCHMARK_SERIES_COLOR = { sp500: PALETTE_TEXT.amber, nasdaq100: PALETTE_TEXT.pink };
 
 /** Methodology caveat appended to a benchmark's label wherever it's
     shown (toggle rows, tooltips) - benchmarks.data_type (0023) is a real
