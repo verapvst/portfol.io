@@ -273,14 +273,17 @@ function pendingAdditionsBlockHTML() {
     </section>`;
 }
 
-/* ---------- Load to Database (real - writes Costs via Supabase) ----------
-   Deliberately scoped to Costs only, not the full "Import to Workbook"
-   ambition below: Costs is the one category a Ficha Mensal reliably gives
-   a real, dated, per-security figure for (TER/Depositary/Subscription/
+/* ---------- Load to Database (real - writes Costs, current-state
+   composition, AND monthly composition history via Supabase) ----------
+   Costs is the one category a Ficha Mensal reliably gives a real,
+   dated, per-security figure for (TER/Depositary/Subscription/
    Redemption %). Valuations would need cross-referencing the report's
    NAV/unit against how many units this portfolio actually holds - a real
-   future feature, not this one. Allocations and Detailed Portfolio don't
-   have a Supabase table yet at all (Migration Plan Phase 4/5). */
+   future feature, not this one. Allocations still doesn't have a
+   Supabase table (Migration Plan Phase 4/5) - Detailed Portfolio does,
+   as of Personal Finance Architecture Phase 2
+   (detailed_portfolio_holdings, 0025) - see the hr-holdings branch
+   below. */
 
 async function loadDbContext() {
   const user = currentUser();
@@ -377,7 +380,7 @@ function dbLoadBlockHTML(groupKey, group) {
   if (!currentUser()) {
     return `
       <div class="db-load-block">
-        <p class="db-load-signedout">Sign in to load these costs straight into the database.
+        <p class="db-load-signedout">Sign in to load this report straight into the database.
           <button type="button" data-signin-cta>Sign In</button>
         </p>
       </div>`;
@@ -441,8 +444,8 @@ function fundGroupCardHTML(groupKey, group, tables, geo) {
       ${dbLoadBlockHTML(groupKey, group)}
 
       <div class="fund-group-actions">
-        <button class="import-btn" type="button" data-import="${groupKey}">Import Allocations / Detailed Portfolio</button>
-        <span class="import-not-wired-note" data-role="import-note" hidden>These two don't have a database table yet - use "Copy to Excel" below for now, and paste into the real workbook.</span>
+        <button class="import-btn" type="button" data-import="${groupKey}">Import Allocations</button>
+        <span class="import-not-wired-note" data-role="import-note" hidden>Allocations doesn't have a database table yet - use "Copy to Excel" below for now, and paste into the real workbook. (Detailed Portfolio - fund composition history - now saves for real via "Load to Database" above, per Personal Finance Architecture Phase 2.)</span>
       </div>
 
       <button class="raw-tables-toggle" type="button" data-toggle-raw="${groupKey}">${icon("chevronDown")} Show raw parsed tables</button>
@@ -645,6 +648,52 @@ async function loadCostsToDatabase(groupKey) {
       );
       if (error) throw error;
       loaded.push(`${hr.holdings.length} full holding(s)`);
+
+      // Full monthly composition SNAPSHOT (0025_detailed_portfolio_
+      // holdings.sql, Personal Finance Architecture Phase 2) - a
+      // SEPARATE, insert-only, full-history table, deliberately not
+      // the same write as all_holdings just above (see that
+      // migration's own comment for why: all_holdings is current-
+      // state-only by design, this accumulates one full batch of rows
+      // per report_date forever, so "how did composition change since
+      // August" becomes a real query later). Reuses the exact geo-
+      // classified rows already computed for "Copy to Excel"
+      // (state.groupGeo, js/importer/geoClassifier.js) - no
+      // re-derivation, no second classification pass.
+      const geo = state.groupGeo.get(groupKey);
+      const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : v);
+      const snapshotRows = (geo ? geo.rows : []).map((r) => ({
+        security_id: securityId,
+        report_date: hrDate,
+        category_path: r[2] || null,
+        holding_name: r[3],
+        currency: r[4] || null,
+        quantity: numOrNull(r[5]),
+        price: numOrNull(r[6]),
+        price_type: r[7] || null,
+        market_value: numOrNull(r[8]),
+        weight_pct: numOrNull(r[9]),
+        exposure_country: r[10] || null,
+        exposure_region: r[11] || null,
+        source: sourceLabel,
+      }));
+      if (snapshotRows.length) {
+        // Re-processing THIS SAME report (re-uploading the same PDF,
+        // re-running a session) must not duplicate it - delete only
+        // this exact (security_id, report_date) batch first, never
+        // touching any other date's history. Still fundamentally
+        // insert-only across different observations; this only makes
+        // re-importing the same document idempotent, the same
+        // "a correction replaces the erroneous one, other history is
+        // untouched" discipline transactions' void+replace already
+        // follows elsewhere in this app.
+        const { error: deleteError } = await window.db.from("detailed_portfolio_holdings")
+          .delete().eq("security_id", securityId).eq("report_date", hrDate);
+        if (deleteError) throw deleteError;
+        const { error: snapshotError } = await window.db.from("detailed_portfolio_holdings").insert(snapshotRows);
+        if (snapshotError) throw snapshotError;
+        loaded.push(`${snapshotRows.length} monthly snapshot row(s)`);
+      }
     }
 
     if (!loaded.length) throw new Error("No fee fields, top holdings, or detailed holdings were extracted from this report - nothing to load.");
