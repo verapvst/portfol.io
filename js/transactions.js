@@ -175,6 +175,12 @@ function initTransactionModal() {
           <label for="txn-notes">Notes</label>
           <input id="txn-notes" type="text" />
         </div>
+        <div class="txn-form-field txn-form-checkbox-field">
+          <label for="txn-is-backfill">
+            <input id="txn-is-backfill" type="checkbox" />
+            Backfill / capital recognition (not new money) - money that already existed before being recorded here, e.g. importing a broker export or recognizing an untracked cash balance. Time-Weighted Return treats this the same as any deposit; Investor Return (XIRR) excludes it, since it isn't a real cash flow happening today.
+          </label>
+        </div>
       </div>
       <p class="txn-form-error" id="txn-form-error"></p>
       <div class="txn-form-actions">
@@ -230,6 +236,7 @@ function initTransactionModal() {
         fx_cost: Number($("txn-fx-cost").value || 0),
         currency,
         notes: $("txn-notes").value.trim() || null,
+        is_backfill: $("txn-is-backfill").checked,
       };
 
       if (editingTransactionId) {
@@ -418,6 +425,7 @@ function openTransactionModal(transactionId) {
   $("txn-tax").value = txn?.tax ?? 0;
   $("txn-fx-cost").value = txn?.fx_cost ?? 0;
   $("txn-notes").value = txn?.notes || "";
+  $("txn-is-backfill").checked = !!txn?.is_backfill;
   $("txn-form-error").textContent = "";
 
   const datalist = $("security-options");

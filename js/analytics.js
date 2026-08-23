@@ -236,15 +236,26 @@ async function getPortfolioDataLive() {
 
   // ---------- XIRR ----------
   // Same generic solver as repository.js (window.xirr, still loaded) -
-  // every real transaction is a dated cash flow, current total value is
-  // the hypothetical terminal one, on the latest valuation date across
-  // all holdings.
+  // every real, non-backfill transaction is a dated cash flow, current
+  // total value is the hypothetical terminal one, on the latest
+  // valuation date across all holdings.
+  //
+  // is_backfill (0026) transactions are excluded here on purpose - a
+  // backfill deposit/buy records capital that already existed before
+  // this app tracked it (a CSV import with no purchase transaction
+  // behind it, or a cash balance recognized after the fact), not real
+  // money leaving your pocket on that date. XIRR is money-weighted, so
+  // counting it as a normal cash flow would demand an unrealistic
+  // annualised rate to reconcile a large "contribution" that isn't
+  // actually new. TWR is unaffected - deposit/withdrawal stay external
+  // regardless of this flag, since TWR only needs to know it's capital,
+  // not why it's being recorded now.
   const cashflows = [
     ...transactionsRaw
-      .filter((t) => ["buy", "deposit"].includes(t.type))
+      .filter((t) => ["buy", "deposit"].includes(t.type) && !t.is_backfill)
       .map((t) => ({ date: t.date, amount: -Number(t.amount || 0) })),
     ...transactionsRaw
-      .filter((t) => ["sell", "withdrawal", "dividend"].includes(t.type))
+      .filter((t) => ["sell", "withdrawal", "dividend"].includes(t.type) && !t.is_backfill)
       .map((t) => ({ date: t.date, amount: Number(t.amount || 0) })),
     { date: latestDate, amount: totalValue },
   ].sort((a, b) => a.date.localeCompare(b.date));
