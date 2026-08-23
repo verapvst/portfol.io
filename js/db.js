@@ -257,9 +257,10 @@ async function getDailyPrice(securityId, date) {
 
 /** The small benchmarks reference table (currently 2 rows: sp500,
     nasdaq100) - same shape as loadBrokers() above, no filter, no
-    date-range. Includes data_type ('price_return' today, never silently
-    'total_return') and instrument_type ('index') so callers can label
-    honestly rather than assume. */
+    date-range. Includes data_type ('index_level' today, since 0023 -
+    real SPX/NDX index levels, not a price-return series computed from
+    an ETF) and instrument_type ('index') so callers can label honestly
+    rather than assume. */
 async function loadBenchmarks() {
   const { data, error } = await window.db.from("benchmarks").select("*").order("name");
   if (error) throw error;

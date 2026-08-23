@@ -165,12 +165,22 @@ function renderInsufficientData(container, message) {
  * if every series ends up empty (e.g. every checkbox unticked, or no
  * series had enough overlapping history).
  */
+let multiChartGradientCounter = 0;
+
 function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixed(2), formatDateLabel = (d) => d } = {}) {
   const visibleSeries = (series || []).filter((s) => s.points && s.points.length >= 2);
   if (!visibleSeries.length) {
     renderInsufficientData(container, "Insufficient history to compare yet - select at least one series with enough dated observations.");
     return;
   }
+
+  // Unique per call, not a fixed id - this chart can render more than
+  // once on one page (Overview + Performance both call it), and two
+  // <linearGradient>s sharing one id would have every url(#id) resolve
+  // to whichever def happens to come first in the DOM.
+  const gradId = `multiPerfStroke${multiChartGradientCounter}`;
+  const fillId = `multiPerfFill${multiChartGradientCounter}`;
+  multiChartGradientCounter++;
 
   const width = container.clientWidth || 640;
   const height = 260;
@@ -208,15 +218,32 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
     return best;
   };
 
+  // The brand gradient is reserved for hero elements (logo, primary CTA,
+  // the main performance line - see PORTFOLIO_DESIGN_SYSTEM.md's data-
+  // viz rules) - Portfolio gets it here too, benchmarks stay flat,
+  // distinct identity colors so Portfolio visually leads even with two
+  // comparison lines drawn alongside it.
   const seriesSegments = sortedSeries.map((s) => {
     const pts = s.points.map((p) => [xFor(p.date), yFor(p.value)]);
+    const stroke = s.key === "portfolio" ? `url(#${gradId})` : s.color;
     return pts.slice(1).map((p, i) => {
       const prev = pts[i];
       const interpolated = s.points[i].real === false || s.points[i + 1].real === false;
       const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-      return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
+      return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
     }).join("");
   }).join("");
+
+  // Soft glow under the Portfolio line only - same perfFill gradient
+  // renderLineChart() uses for the single-series chart, so both charts
+  // read as the same visual language rather than two different ones.
+  const portfolioSeries = sortedSeries.find((s) => s.key === "portfolio");
+  const areaFill = !portfolioSeries ? "" : (() => {
+    const pts = portfolioSeries.points.map((p) => [xFor(p.date), yFor(p.value)]);
+    const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+    const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${padT + innerH} L${pts[0][0].toFixed(1)},${padT + innerH} Z`;
+    return `<path d="${area}" fill="url(#${fillId})" stroke="none"/>`;
+  })();
 
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map((t) => {
     const y = padT + innerH * t;
@@ -249,7 +276,18 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
   container.innerHTML = `
     <div class="multichart-legend">${legend}</div>
     <svg viewBox="0 0 ${width} ${height}" style="width:100%;height:${height}px;display:block;overflow:visible;">
+      <defs>
+        <linearGradient id="${fillId}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${PALETTE.amber.from}" stop-opacity="0.34"/>
+          <stop offset="60%" stop-color="${PALETTE.coral.to}" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="${PALETTE.pink.to}" stop-opacity="0.04"/>
+        </linearGradient>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="1" y2="0">
+          ${PRIMARY_GRADIENT_STOPS.map((s) => `<stop offset="${s.at}" stop-color="${s.color}"/>`).join("")}
+        </linearGradient>
+      </defs>
       <g class="linechart-grid">${gridLines}</g>
+      ${areaFill}
       ${seriesSegments}
       <g class="linechart-axis">${xLabels}</g>
       <g class="chart-hits">${hitTargets}</g>
