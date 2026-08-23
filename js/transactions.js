@@ -247,6 +247,35 @@ function initTransactionModal() {
         if (error) throw error;
       }
 
+      // Portfolio Value is driven entirely by valuations, never by
+      // transactions (see analytics.js's getPortfolioDataLive() - a
+      // security only ever appears as a holding once it has a real
+      // valuation row) - a Buy with no valuation yet is invisible to
+      // it, which reads as a bug the moment you buy something brand
+      // new. Seed one initial valuation, from the purchase itself, but
+      // ONLY the first time this security is ever transacted - what
+      // you paid IS a real, dated value observation on the day you
+      // paid it, not a guess. This must never fire again after that:
+      // topping up an EXISTING holding with a second Buy must never
+      // silently overwrite its actual tracked value with just the
+      // top-up amount, so ongoing tracking still goes through the
+      // normal Update Portfolio flow.
+      if (payload.type === "buy") {
+        const { data: existingVal, error: valCheckError } = await window.db
+          .from("valuations").select("id").eq("security_id", securityId).limit(1);
+        if (valCheckError) throw valCheckError;
+        if (!existingVal || !existingVal.length) {
+          await recordValuations([{
+            portfolio_id: currentPortfolioId,
+            security_id: securityId,
+            date,
+            value_eur: Number(amount),
+            units: payload.units,
+            source: "initial purchase",
+          }]);
+        }
+      }
+
       close();
       await refreshTransactions();
     } catch (err) {
