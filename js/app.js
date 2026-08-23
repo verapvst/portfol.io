@@ -95,7 +95,7 @@ function initPerformanceCard(data) {
   const seriesDefs = [
     { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: monthlyResample(data.history.performanceSeries) },
     ...availableBenchmarks.map((b) => ({
-      key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${b.dataType === "price_return" ? " · Price Return" : ""}`,
+      key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${BENCHMARK_DATA_TYPE_LABEL[b.dataType] || ""}`,
       color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: monthlyResample(b.series),
     })),
   ];

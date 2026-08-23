@@ -17,12 +17,37 @@
 }
 .data-warning-banner b { color: var(--coral-2); }
 
-/* Scope selector (All Portfolio / per-account) - same .filter-pills
-   primitive #perf-filters already uses for the date-range picker, just
-   in its own card at the top of the page since it controls several
-   sections below, not one chart. */
+/* Scope selector (Portfolio / Accounts / Strategies / Securities) - same
+   .filter-pills primitive #perf-filters already uses for the date-range
+   picker, just in its own card at the top of the page since it controls
+   several sections below, not one chart. Two rows: the type tabs, then
+   the specific entries within whichever type is selected (hidden for
+   "Portfolio", which has none). */
 #perf-scope-card { padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-6); }
 #perf-scope-card .section-hint { margin: var(--sp-2) 0 0; }
+#perf-scope-sub-row:not(:empty) { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--card-border); }
+
+/* Scoped period selector (1W/1M/3M/6M/YTD/1Y/Since Inception) - governs
+   the stat tiles + Benchmark Comparison below, deliberately separate
+   from the scope selector above it and from Portfolio Value Over Time's
+   own #perf-filters further down. */
+#perf-scoped-range-row { margin-bottom: var(--sp-4); }
+
+#contributions-card { margin-bottom: var(--sp-8); }
+.contributions-list { display: flex; flex-direction: column; }
+.contribution-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--card-border);
+  font-size: 14px;
+}
+.contribution-row:first-child { border-top: none; padding-top: 0; }
+.contribution-label { color: var(--muted); }
+.contribution-value { font-weight: 500; font-variant-numeric: tabular-nums; }
+.contribution-row.strong .contribution-label { color: var(--ink); font-weight: 600; }
+.contribution-row.strong .contribution-value { font-weight: 700; font-size: 15px; }
 
 .perf-stats-grid {
   display: grid;

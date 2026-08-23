@@ -96,9 +96,9 @@ function renderLineChart(container, points, { formatValue = fmtEUR, formatAxisVa
     <svg id="linechart" viewBox="0 0 ${width} ${height}">
       <defs>
         <linearGradient id="perfFill" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${PALETTE.amber.from}" stop-opacity="0.34"/>
-          <stop offset="60%" stop-color="${PALETTE.coral.to}" stop-opacity="0.2"/>
-          <stop offset="100%" stop-color="${PALETTE.pink.to}" stop-opacity="0.04"/>
+          <stop offset="0%" stop-color="${PALETTE.amber.from}" stop-opacity="0.14"/>
+          <stop offset="60%" stop-color="${PALETTE.coral.to}" stop-opacity="0.07"/>
+          <stop offset="100%" stop-color="${PALETTE.pink.to}" stop-opacity="0.015"/>
         </linearGradient>
         <linearGradient id="perfStroke" x1="0" y1="0" x2="1" y2="0">
           ${brandStops}
@@ -167,7 +167,7 @@ function renderInsufficientData(container, message) {
  */
 let multiChartGradientCounter = 0;
 
-function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixed(2), formatDateLabel = (d) => d } = {}) {
+function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixed(2), formatDateLabel = (d) => d, valueLookup = null } = {}) {
   const visibleSeries = (series || []).filter((s) => s.points && s.points.length >= 2);
   if (!visibleSeries.length) {
     renderInsufficientData(container, "Insufficient history to compare yet - select at least one series with enough dated observations.");
@@ -225,12 +225,19 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
   // comparison lines drawn alongside it.
   const seriesSegments = sortedSeries.map((s) => {
     const pts = s.points.map((p) => [xFor(p.date), yFor(p.value)]);
-    const stroke = s.key === "portfolio" ? `url(#${gradId})` : s.color;
+    const isPortfolio = s.key === "portfolio";
+    const stroke = isPortfolio ? `url(#${gradId})` : s.color;
+    // Portfolio leads visually (bolder, full-opacity brand gradient);
+    // benchmarks stay thinner and slightly translucent so they read as
+    // secondary reference lines, not competing series - the "clean
+    // lines, subtle benchmark lines, stronger portfolio line" spec.
+    const strokeWidth = isPortfolio ? 2.5 : 1.5;
+    const strokeOpacity = isPortfolio ? 1 : 0.7;
     return pts.slice(1).map((p, i) => {
       const prev = pts[i];
       const interpolated = s.points[i].real === false || s.points[i + 1].real === false;
       const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-      return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
+      return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
     }).join("");
   }).join("");
 
@@ -264,23 +271,18 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
     `<rect x="${(xFor(d) - 5).toFixed(1)}" y="${padT}" width="10" height="${innerH}" fill="transparent" class="chart-hit-multi" data-date="${d}"/>`
   ).join("");
 
-  const legend = sortedSeries.map((s) =>
-    `<span class="multichart-legend-item"><span class="multichart-legend-dot" style="background:${s.color}"></span>${s.label}</span>`
-  ).join("");
-
   const hoverDots = sortedSeries.map((s) =>
     `<circle class="multichart-hover-dot" data-key="${s.key}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5" opacity="0"/>`
   ).join("");
 
   container.style.position = "relative";
   container.innerHTML = `
-    <div class="multichart-legend">${legend}</div>
     <svg viewBox="0 0 ${width} ${height}" style="width:100%;height:${height}px;display:block;overflow:visible;">
       <defs>
         <linearGradient id="${fillId}" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${PALETTE.amber.from}" stop-opacity="0.34"/>
-          <stop offset="60%" stop-color="${PALETTE.coral.to}" stop-opacity="0.2"/>
-          <stop offset="100%" stop-color="${PALETTE.pink.to}" stop-opacity="0.04"/>
+          <stop offset="0%" stop-color="${PALETTE.amber.from}" stop-opacity="0.14"/>
+          <stop offset="60%" stop-color="${PALETTE.coral.to}" stop-opacity="0.07"/>
+          <stop offset="100%" stop-color="${PALETTE.pink.to}" stop-opacity="0.015"/>
         </linearGradient>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="1" y2="0">
           ${PRIMARY_GRADIENT_STOPS.map((s) => `<stop offset="${s.at}" stop-color="${s.color}"/>`).join("")}
@@ -301,15 +303,34 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
   container.querySelectorAll(".chart-hit-multi").forEach((el) => {
     const date = el.dataset.date;
     el.addEventListener("mousemove", () => {
+      // Every series here is already rebased to 100 at the comparison
+      // window's shared start (calculations.js:indexValueSeries()/
+      // buildComparisonSeries()) - v.value - 100 IS the cumulative %
+      // return since that start, so the tooltip shows the return the
+      // user actually asked for ("+4.82%"), never the raw index level
+      // itself. Period-over-period reads the point immediately before
+      // whichever one valueAsOf() resolved to in THIS series' own real
+      // observations - genuinely the prior real change, not a fabricated
+      // one, and naturally absent for a series' very first point.
       const lines = sortedSeries.map((s) => {
         const v = valueAsOf(s.points, date);
         if (!v) { dotByKey[s.key].setAttribute("opacity", "0"); return ""; }
         dotByKey[s.key].setAttribute("cx", xFor(v.date));
         dotByKey[s.key].setAttribute("cy", yFor(v.value));
         dotByKey[s.key].setAttribute("opacity", "1");
-        return `${s.label}: ${formatValue(v.value)}${v.real === false ? " (derived)" : ""}`;
+        const idx = s.points.indexOf(v);
+        const prev = idx > 0 ? s.points[idx - 1] : null;
+        const periodPct = prev && prev.value ? (v.value / prev.value - 1) * 100 : null;
+        const cumulativePct = v.value - 100;
+        const sign = (n) => (n >= 0 ? "+" : "");
+        const derivedNote = v.real === false ? " (derived)" : "";
+        const valuePrefix = s.key === "portfolio" && valueLookup && valueLookup[v.date] != null
+          ? `${valueLookup[v.date]} · ` : "";
+        const periodNote = periodPct != null
+          ? ` <span class="chart-tooltip-sub">(${sign(periodPct)}${periodPct.toFixed(2)}% since prior)</span>` : "";
+        return `<span class="chart-tooltip-dot" style="background:${s.color}"></span>${s.label}: ${valuePrefix}${sign(cumulativePct)}${cumulativePct.toFixed(2)}%${derivedNote}${periodNote}`;
       }).filter(Boolean);
-      tooltip.innerHTML = `<strong>${date}</strong><br>${lines.join("<br>")}`;
+      tooltip.innerHTML = `<div class="chart-tooltip-date">${date}</div>${lines.join("<br>")}`;
       tooltip.style.left = xFor(date) + "px";
       tooltip.style.top = padT + "px";
       tooltip.classList.add("visible");

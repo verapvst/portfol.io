@@ -381,6 +381,65 @@ async function getPortfolioDataLive() {
     return { id: a.id, name: a.name, ...perf, yearlyReturns };
   });
 
+  // ---------- Security-level performance (full bundle, for drill-down)
+  // ----------
+  // holdings[].returnPct/.returnAvailable above are the compact figures
+  // already wired into the holdings table; this is the SAME
+  // scopedPerformance() call, re-shaped to match accountPerformance's own
+  // {id, name, ...perf, yearlyReturns, quant} bundle so the Performance
+  // page's scope selector can treat a single security exactly like an
+  // account - one drill-down mechanism, not two.
+  const securityPerformance = holdings.map((h) => {
+    const securityTransactions = txnsBySecurity.get(h.id) || [];
+    const perf = scopedPerformance({
+      level: "security", securityHistories: { [h.id]: securityHistories[h.id] || [] },
+      transactions: securityTransactions, asOfDate: latestDate,
+    });
+    const yearlyReturns = perf.firstDate
+      ? scopedAnnualReturns({
+          securityHistories: { [h.id]: securityHistories[h.id] || [] }, transactions: securityTransactions,
+          asOfDate: latestDate, inceptionDate: perf.firstDate,
+        })
+      : {};
+    return { id: h.id, name: h.name, accountId: h.accountId, ...perf, yearlyReturns };
+  });
+
+  // ---------- Strategy / mini-portfolio performance (e.g. "Global Tilts")
+  // ----------
+  // securities.sub_portfolio (0001_initial_schema.sql) - present in the
+  // schema since the original workbook import, never read or written
+  // anywhere until now. Dormant until a security is explicitly tagged
+  // (see docs/performance-benchmark-architecture.md for how to tag one) -
+  // a security with no tag simply belongs to no strategy, and this never
+  // changes any account- or portfolio-level number, which stay computed
+  // over ALL holdings regardless of tagging. Same re-scoping pattern as
+  // accountPerformance above: this strategy's own member securities'
+  // histories + only THEIR transactions, nothing invented or double
+  // counted (a security's own transactions still count once, at its
+  // account AND at its strategy - two different, non-overlapping
+  // groupings of the same underlying facts, exactly like an account and
+  // an asset class already can overlap without double-counting value).
+  const strategyNames = [...new Set(holdings.map((h) => securityById[h.id]?.sub_portfolio).filter(Boolean))];
+  const strategyPerformance = strategyNames.map((name) => {
+    const memberIds = holdings.filter((h) => securityById[h.id]?.sub_portfolio === name).map((h) => h.id);
+    const memberHistories = Object.fromEntries(memberIds.map((id) => [id, securityHistories[id] || []]));
+    const memberTransactions = transactionsRaw.filter((t) => memberIds.includes(t.security_id));
+    const perf = scopedPerformance({
+      level: "strategy", securityHistories: memberHistories, transactions: memberTransactions, asOfDate: latestDate,
+    });
+    const yearlyReturns = perf.firstDate
+      ? scopedAnnualReturns({
+          securityHistories: memberHistories, transactions: memberTransactions,
+          asOfDate: latestDate, inceptionDate: perf.firstDate,
+        })
+      : {};
+    return {
+      id: name, name,
+      members: memberIds.map((id) => holdings.find((h) => h.id === id)).filter(Boolean),
+      ...perf, yearlyReturns,
+    };
+  });
+
   const accountAllocation = accounts.map((a) => {
     const value = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.value, 0);
     return { name: a.name, value, weight: totalValue ? Math.round((value / totalValue) * 10000) / 100 : 0, tone: a.tone };
@@ -463,6 +522,16 @@ async function getPortfolioDataLive() {
       perf: a, benchmarkHistory: regressionBenchmark?.series || [], riskFreeRates,
     });
   });
+  securityPerformance.forEach((s) => {
+    s.quant = scopedQuantMetrics({
+      perf: s, benchmarkHistory: regressionBenchmark?.series || [], riskFreeRates,
+    });
+  });
+  strategyPerformance.forEach((s) => {
+    s.quant = scopedQuantMetrics({
+      perf: s, benchmarkHistory: regressionBenchmark?.series || [], riskFreeRates,
+    });
+  });
 
   const largest = holdings.length ? [...holdings].sort((a, b) => b.weight - a.weight)[0] : null;
   const health = {
@@ -511,6 +580,16 @@ async function getPortfolioDataLive() {
         // (UI wiring is a later phase); each entry also carries its own
         // firstDate/observationCount/hadCashFlows data-quality facts.
         accountPerformance,
+        // Per-security (securityPerformance) and per-strategy/mini-
+        // portfolio (strategyPerformance) cash-flow-neutral TWR - same
+        // {id, name, ...perf, yearlyReturns, quant} bundle shape as
+        // accountPerformance above, so the Performance page's scope
+        // selector can drill into an account, a security, or a tagged
+        // strategy (securities.sub_portfolio) through one shared
+        // mechanism. strategyPerformance is empty until at least one
+        // security is tagged - an honest empty list, not a placeholder.
+        securityPerformance,
+        strategyPerformance,
         // Portfolio-level Volatility/Max Drawdown/Sharpe/Sortino/Beta/
         // Alpha/Correlation (calculations.js:scopedQuantMetrics()) -
         // additive field, mirrors accountPerformance's own "nothing

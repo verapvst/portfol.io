@@ -58,6 +58,23 @@ const PRIMARY_GRADIENT_STOPS = [
     benchmark added later just needs one more entry here. */
 const BENCHMARK_SERIES_COLOR = { sp500: PALETTE_TEXT.blue, nasdaq100: PALETTE_TEXT.purple };
 
+/** Methodology caveat appended to a benchmark's label wherever it's
+    shown (toggle rows, tooltips) - benchmarks.data_type (0023) is a real
+    three-way honesty flag (price_return/total_return/index_level), and
+    the two comparison charts used to only ever surface the first of
+    those, silently showing no caveat at all for the other two - exactly
+    the "don't silently mix return types without labelling them" gap
+    flagged in the Performance & Benchmark Engine work. Today's real
+    S&P 500/Nasdaq-100 data is tagged 'index_level' (raw index points,
+    not adjusted for dividends), so it's the one that matters most in
+    practice, but all three are covered so this never quietly regresses
+    if the data source changes again. */
+const BENCHMARK_DATA_TYPE_LABEL = {
+  price_return: " · Price Return",
+  index_level: " · Index Level, ex-dividends",
+  total_return: " · Total Return",
+};
+
 function familyGradientCSS(name, angle = 135) {
   const f = PALETTE[name];
   return `linear-gradient(${angle}deg, ${f.from}, ${f.to})`;
@@ -295,6 +312,7 @@ window.PALETTE = PALETTE;
 window.PALETTE_TEXT = PALETTE_TEXT;
 window.PRIMARY_GRADIENT_STOPS = PRIMARY_GRADIENT_STOPS;
 window.BENCHMARK_SERIES_COLOR = BENCHMARK_SERIES_COLOR;
+window.BENCHMARK_DATA_TYPE_LABEL = BENCHMARK_DATA_TYPE_LABEL;
 window.familyGradientCSS = familyGradientCSS;
 window.primaryGradientCSS = primaryGradientCSS;
 window.interpolatePrimaryGradient = interpolatePrimaryGradient;
