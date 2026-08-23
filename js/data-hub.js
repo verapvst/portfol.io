@@ -708,6 +708,11 @@ function renderSourceChips() {
    ============================================================ */
 
 const UPDATE_METHODS = [
+  // Personal Finance Architecture Phase 1 (docs/personal-finance-
+  // architecture.md §F/§J) - the Sunday portfolio pulse. Listed first:
+  // this is meant to be the DEFAULT weekly habit, not one option among
+  // equals with Manual Update.
+  { key: "weekly-checkin", icon: "checkCircle", title: "Weekly Check-in", sub: "Sunday portfolio pulse — every holding, one pass", enabled: true },
   { key: "manual", icon: "edit3", title: "Manual Update", sub: "Update one holding by hand", enabled: true },
   { key: "t212", icon: "upload", title: "Trading 212 CSV", sub: "Upload or paste your Trading 212 export", enabled: true },
   // Enabled after this session's own architecture review confirmed the
@@ -736,11 +741,146 @@ function initUpdatePortfolioMethods() {
   $("update-portfolio-methods").querySelectorAll("[data-update-method]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const key = btn.dataset.updateMethod;
+      if (key === "weekly-checkin") openWeeklyCheckinModal();
       if (key === "manual") openManualUpdateModal();
       if (key === "t212") openT212Modal();
       if (key === "bpi-screenshot") openBpiScreenshotModal();
     });
   });
+}
+
+/* ---------- Weekly Check-in modal ----------
+   docs/personal-finance-architecture.md §F/§J Phase 1 - the Sunday
+   portfolio pulse. The "Portfolio | BPI | Trading 212 | Cash" table
+   Vera's own spec describes is a DISPLAY, computed live in this modal
+   (wcRecomputeSummary) - the actual write is still per-security
+   valuations, same recordValuations() path every other Update
+   Portfolio method already uses, because that's the one thing
+   holdings/TWR/weight can actually be computed from. An account-level
+   total was never stored anywhere as its own fact.
+
+   Deliberately its own getPortfolioDataAuto() fetch, not state.
+   heldSecurities - that list (built for Manual Update above) excludes
+   Cash by design ("never Cash EUR, which isn't an investment product
+   at all") and only carries id/name, not value/account. Cash IS
+   included here: Vera's own spec explicitly lists it as one of the
+   four things to check every Sunday, matching Portfolio Detail's own
+   per-holding Update (js/portfolio.js), which already treats Cash like
+   any other holding - this follows that precedent, not Manual Update's
+   narrower one.
+
+   Only a row whose value was actually EDITED gets written - a field
+   left at its pre-filled (last known) value means "nothing new to
+   report" here, not "confirmed unchanged today"; writing a fresh row
+   with an identical value would misrepresent a skipped check as a real
+   re-verification. Every written row is tagged frequency='weekly'
+   (0024_valuations_frequency.sql) so this stream is identifiable later
+   without inferring cadence from point spacing. */
+
+let wcHoldings = [];
+
+function mostRecentSunday() {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay());
+  return d.toISOString().slice(0, 10);
+}
+
+function wcKeyHandler(e) { if (e.key === "Escape") window.closeWeeklyCheckinModal(); }
+
+function wcRecomputeSummary() {
+  const inputs = [...document.querySelectorAll("#wc-table [data-wc-security]")];
+  const byAccount = new Map();
+  let total = 0;
+  inputs.forEach((input) => {
+    const v = Number(input.value || 0);
+    total += v;
+    const acc = input.dataset.wcAccount;
+    byAccount.set(acc, (byAccount.get(acc) || 0) + v);
+  });
+  const parts = [...byAccount.entries()].map(([name, v]) => `${name} ${fmtEUR(v)}`).join(" · ");
+  $("wc-summary").textContent = `Portfolio ${fmtEUR(total)}${parts ? ` — ${parts}` : ""}`;
+}
+
+function initWeeklyCheckinModal() {
+  const root = $("weekly-checkin-modal-root");
+  const close = () => {
+    root.classList.remove("open");
+    document.removeEventListener("keydown", wcKeyHandler);
+  };
+  $("weekly-checkin-modal-backdrop").addEventListener("click", close);
+  $("wc-form-cancel").addEventListener("click", close);
+  window.closeWeeklyCheckinModal = close;
+
+  $("wc-form-submit").addEventListener("click", async () => {
+    const errorEl = $("wc-form-error");
+    const submitBtn = $("wc-form-submit");
+    errorEl.textContent = "";
+
+    if (!currentUser()) { errorEl.textContent = "Sign in to save a check-in."; window.openAuthModal(); return; }
+
+    const date = $("wc-date").value;
+    if (!date) { errorEl.textContent = "Date is required."; return; }
+
+    const changed = [...document.querySelectorAll("#wc-table [data-wc-security]")]
+      .map((input) => ({
+        security_id: input.dataset.wcSecurity,
+        original: Number(input.dataset.wcOriginal),
+        value: input.value === "" ? null : Number(input.value),
+      }))
+      .filter((r) => r.value !== null && r.value !== r.original);
+
+    if (!changed.length) { errorEl.textContent = "Nothing changed since your last check-in — nothing to save."; return; }
+
+    submitBtn.disabled = true;
+    try {
+      await recordValuations(changed.map((r) => ({
+        portfolio_id: state.portfolioId,
+        security_id: r.security_id,
+        date,
+        value_eur: r.value,
+        source: "Weekly Check-in",
+        frequency: "weekly",
+      })));
+      close();
+    } catch (err) {
+      errorEl.textContent = err.message || "Something went wrong.";
+    }
+    submitBtn.disabled = false;
+  });
+}
+
+async function openWeeklyCheckinModal() {
+  const errorEl = $("wc-form-error");
+  errorEl.textContent = "";
+  if (!currentUser()) { errorEl.textContent = "Sign in to use Weekly Check-in."; window.openAuthModal(); return; }
+
+  $("wc-date").value = mostRecentSunday();
+  $("wc-table").innerHTML = `<tr><td>Loading…</td></tr>`;
+  $("weekly-checkin-modal-root").classList.add("open");
+  document.addEventListener("keydown", wcKeyHandler);
+
+  const data = await getPortfolioDataAuto();
+  const accountName = Object.fromEntries(data.portfolio.accounts.map((a) => [a.id, a.name]));
+  wcHoldings = data.portfolio.holdings
+    .map((h) => ({ id: h.id, name: h.name, accountId: h.accountId, accountName: accountName[h.accountId] || "—", value: h.value }))
+    .sort((a, b) => a.accountName.localeCompare(b.accountName) || a.name.localeCompare(b.name));
+
+  $("wc-table").innerHTML = `
+    <thead><tr><th>Account</th><th>Security</th><th>Value (EUR)</th></tr></thead>
+    <tbody>
+      ${wcHoldings.map((h) => `
+        <tr>
+          <td>${h.accountName}</td>
+          <td>${h.name}</td>
+          <td class="amount-cell">
+            <input type="number" step="any" class="wc-value-input" value="${h.value}"
+              data-wc-security="${h.id}" data-wc-account="${h.accountName}" data-wc-original="${h.value}">
+          </td>
+        </tr>`).join("")}
+    </tbody>`;
+
+  $("wc-table").querySelectorAll("input").forEach((input) => input.addEventListener("input", wcRecomputeSummary));
+  wcRecomputeSummary();
 }
 
 /* ---------- Manual Update modal ----------
@@ -1437,6 +1577,7 @@ function init() {
   initDropZone();
 
   initUpdatePortfolioMethods();
+  initWeeklyCheckinModal();
   initManualUpdateModal();
   initT212Modal();
   initBpiScreenshotModal();

@@ -381,6 +381,35 @@
 #manual-update-modal-root.open #manual-update-modal-backdrop { opacity: 1; }
 #manual-update-modal-root.open #manual-update-modal { opacity: 1; transform: translate(-50%, -50%); }
 
+/* ---------- Weekly Check-in modal - same recipe as Trading 212's
+   (a full holdings table needs the same room), own DOM root. ---------- */
+#weekly-checkin-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+#weekly-checkin-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#weekly-checkin-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#weekly-checkin-modal-root.open { pointer-events: auto; }
+#weekly-checkin-modal-root.open #weekly-checkin-modal-backdrop { opacity: 1; }
+#weekly-checkin-modal-root.open #weekly-checkin-modal { opacity: 1; transform: translate(-50%, -50%); }
+
 /* ---------- Trading 212 import modal - wider than Manual Update's
    (a review table needs the room), same backdrop/positioning recipe. ---------- */
 #t212-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
@@ -472,6 +501,21 @@
 .t212-status-matched svg, .t212-status-review svg, .t212-status-notheld svg { width: 13px; height: 13px; flex-shrink: 0; }
 
 .t212-review-summary { margin-top: var(--sp-4); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+/* ---------- Weekly Check-in ---------- */
+.wc-summary { margin-top: var(--sp-3); font-size: 13px; font-weight: 500; color: var(--ink); }
+.wc-value-input {
+  width: 110px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.wc-value-input:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
 
 /* ---------- BPI Screenshot modal - same backdrop/positioning recipe
    as Trading 212's own modal (#t212-modal-root above), plus a reading
