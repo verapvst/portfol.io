@@ -932,6 +932,151 @@ async function openWeeklyCheckinModal() {
   wcRecomputeSummary();
 }
 
+/* ---------- Update Benchmarks methods ----------
+   Its own list, separate from UPDATE_METHODS above - Portfolio Data and
+   Benchmark Data are different concepts (what YOU hold vs. an external
+   market reference to compare against), so they get their own section,
+   their own method list, and their own write path (recordBenchmarkObservations()
+   in db.js, never recordValuations()). One method today; kept as a list
+   (not a single hardcoded button) so a second source can join later the
+   same way Update Portfolio's methods did. */
+const BENCHMARK_UPDATE_METHODS = [
+  { key: "weekly-benchmark", icon: "trendingUp", title: "Weekly Benchmark Update", sub: "Log this week's S&P 500 / Nasdaq-100 levels", enabled: true },
+];
+
+function benchmarkMethodsHTML() {
+  return BENCHMARK_UPDATE_METHODS.map((m) => `
+    <button type="button" class="update-method-btn" data-benchmark-method="${m.key}"${m.enabled ? "" : " disabled"}>
+      <span class="update-method-icon">${icon(m.icon)}</span>
+      <span class="update-method-body">
+        <span class="update-method-title">${m.title}${m.enabled ? "" : ` <span class="update-method-badge">Coming Soon</span>`}</span>
+        <span class="update-method-sub">${m.sub}</span>
+      </span>
+    </button>`).join("");
+}
+
+function initUpdateBenchmarksMethods() {
+  $("update-benchmarks-methods").innerHTML = benchmarkMethodsHTML();
+  $("update-benchmarks-methods").querySelectorAll("[data-benchmark-method]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.benchmarkMethod === "weekly-benchmark") openWeeklyBenchmarkModal();
+    });
+  });
+}
+
+/* ---------- Weekly Benchmark modal ----------
+   Same weekly-cadence idea as Weekly Check-in above, but for
+   benchmark_history instead of valuations - keeps the S&P 500/Nasdaq-100
+   comparison chart on the same observation density as the portfolio
+   check-in it's compared against, rather than the one-off monthly CSV
+   import staying frozen while valuations grow weekly.
+
+   Two dates per row, deliberately never one: `date` is the shared Sunday
+   checkpoint (same field as Weekly Check-in's, so both stay aligned by
+   construction), `price_date` is that benchmark's own real market
+   trading day - markets are closed Sunday, so this is never defaulted
+   or inferred, per the app owner's explicit "don't invent a Sunday
+   market price" instruction (0027_weekly_benchmark_entries.sql's own
+   comment). A row only gets written if BOTH its trading date and index
+   level are filled in - same "only what actually changed" discipline
+   Weekly Check-in uses, applied here as "only what was actually
+   entered" since there's no prior same-week value to compare against. */
+
+function wbKeyHandler(e) { if (e.key === "Escape") window.closeWeeklyBenchmarkModal(); }
+
+function initWeeklyBenchmarkModal() {
+  const root = $("weekly-benchmark-modal-root");
+  const close = () => {
+    root.classList.remove("open");
+    document.removeEventListener("keydown", wbKeyHandler);
+  };
+  $("weekly-benchmark-modal-backdrop").addEventListener("click", close);
+  $("wb-form-cancel").addEventListener("click", close);
+  window.closeWeeklyBenchmarkModal = close;
+
+  $("wb-form-submit").addEventListener("click", async () => {
+    const errorEl = $("wb-form-error");
+    const submitBtn = $("wb-form-submit");
+    errorEl.textContent = "";
+
+    if (!currentUser()) { errorEl.textContent = "Sign in to save benchmark levels."; window.openAuthModal(); return; }
+
+    const date = $("wb-date").value;
+    if (!date) { errorEl.textContent = "Checkpoint date is required."; return; }
+
+    const rows = [...document.querySelectorAll("#wb-table [data-wb-benchmark]")]
+      .map((priceInput) => {
+        const benchmarkId = priceInput.dataset.wbBenchmark;
+        const tradingDateInput = document.querySelector(`[data-wb-trading-date="${benchmarkId}"]`);
+        return {
+          benchmark_id: benchmarkId,
+          price_date: tradingDateInput.value || null,
+          index_level: priceInput.value === "" ? null : Number(priceInput.value),
+        };
+      })
+      .filter((r) => r.index_level !== null && r.price_date);
+
+    const incomplete = [...document.querySelectorAll("#wb-table [data-wb-benchmark]")]
+      .some((priceInput) => {
+        const benchmarkId = priceInput.dataset.wbBenchmark;
+        const tradingDateInput = document.querySelector(`[data-wb-trading-date="${benchmarkId}"]`);
+        const hasValue = priceInput.value !== "";
+        const hasDate = !!tradingDateInput.value;
+        return hasValue !== hasDate; // one filled in, the other not
+      });
+    if (incomplete) { errorEl.textContent = "Each benchmark needs both a trading date and an index level, or leave both blank to skip it."; return; }
+
+    if (!rows.length) { errorEl.textContent = "Nothing entered — nothing to save."; return; }
+
+    submitBtn.disabled = true;
+    try {
+      await recordBenchmarkObservations(rows.map((r) => ({
+        benchmark_id: r.benchmark_id,
+        date,
+        price_date: r.price_date,
+        index_level: r.index_level,
+        source: "Weekly manual entry (Data Hub)",
+        frequency: "weekly",
+      })));
+      close();
+    } catch (err) {
+      errorEl.textContent = err.message || "Something went wrong.";
+    }
+    submitBtn.disabled = false;
+  });
+}
+
+async function openWeeklyBenchmarkModal() {
+  const errorEl = $("wb-form-error");
+  errorEl.textContent = "";
+  if (!currentUser()) { errorEl.textContent = "Sign in to use Weekly Benchmark Update."; window.openAuthModal(); return; }
+
+  $("wb-date").value = mostRecentSunday();
+  $("wb-table").innerHTML = `<tr><td>Loading…</td></tr>`;
+  $("weekly-benchmark-modal-root").classList.add("open");
+  document.addEventListener("keydown", wbKeyHandler);
+
+  const benchmarks = await loadBenchmarks();
+  const latestByBenchmark = await Promise.all(
+    benchmarks.map((b) => getBenchmarkHistory(b.id).then((rows) => rows[rows.length - 1] || null))
+  );
+
+  $("wb-table").innerHTML = `
+    <thead><tr><th>Benchmark</th><th>Trading Date</th><th>Index Level</th></tr></thead>
+    <tbody>
+      ${benchmarks.map((b, i) => {
+        const latest = latestByBenchmark[i];
+        const lastKnown = latest ? ` <span class="wb-last-known">last: ${latest.index_level} (${latest.date})</span>` : "";
+        return `
+        <tr>
+          <td>${b.name}${lastKnown}</td>
+          <td><input type="date" class="wb-date-input" data-wb-trading-date="${b.id}"></td>
+          <td class="amount-cell"><input type="number" step="any" class="wb-value-input" data-wb-benchmark="${b.id}" placeholder="e.g. ${latest ? latest.index_level : ""}"></td>
+        </tr>`;
+      }).join("")}
+    </tbody>`;
+}
+
 /* ---------- Manual Update modal ----------
    The security is picked from a <select> of CURRENTLY HELD securities
    only (state.heldSecurities, not the full Security Master) - an
@@ -1630,6 +1775,8 @@ function init() {
   initManualUpdateModal();
   initT212Modal();
   initBpiScreenshotModal();
+  initUpdateBenchmarksMethods();
+  initWeeklyBenchmarkModal();
 
   onAuthChange(() => loadDbContext().then(renderGroups));
   initAuth().then(loadDbContext);

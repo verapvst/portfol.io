@@ -282,76 +282,107 @@ function getMockPortfolioData() {
     { id: "a5", label: "Bought SPYM", date: "2026-07-01" },
   ];
 
-  // BPI Dinâmico's real monthly Portfolio Values history (02_Portfolio
-  // Workbook.xlsx, "Portfolio Values" sheet) - this WAS the entire
-  // portfolio until Trading212 opened on 2026-08-04, so its value alone
-  // is the real portfolio value series for every point before that date.
-  // `real: true` = an actual dated NAV observation (BPI quarterly
-  // report, a BPI/T212 quote, or the subscription itself); `real: false`
-  // = linearly interpolated between the two nearest real anchors (see
-  // that row's Notes in the workbook for exactly which two) - flagged
-  // here so a future chart pass can render interpolated stretches
-  // differently instead of pretending every point was observed.
-  // Last point is swapped to totalValue: from 2026-08-04 the portfolio
-  // also includes the Trading212 sleeve, so this is the one point where
-  // "BPI Dinâmico alone" and "whole portfolio" genuinely diverge.
+  // BPI Dinâmico's real historical NAV series - the same 167 genuine
+  // dated observations reconciled into Supabase's `valuations` table on
+  // 2026-08-26 (source: a bancobpi.pt NAV export, nav-per-unit x 25.2617
+  // units, the constant unit count from the single BPI-DIN-000001 Buy
+  // transaction). This WAS the entire portfolio until Trading212 opened
+  // on 2026-08-04, so its value alone is the real portfolio value series
+  // for every point before that date. Every point here is `real: true` -
+  // nothing interpolated or estimated. This mock exists purely as a
+  // same-shape fallback for when Supabase is unreachable while signed
+  // in (see getPortfolioDataAuto()'s "mock-fallback-error" path); it
+  // mirrors the live corrected history rather than approximating it, so
+  // even the degraded state never shows a fabricated shape. The final
+  // point (2026-08-04) intentionally keeps the pre-existing manually
+  // verified value (335.44, Trading212/BPI app cross-check) rather than
+  // the CSV-implied 339.52, matching the same kept-value decision made
+  // for the live data on 2026-08-26.
   const valueSeries = [
-    { date: "2017-06-21", value: 249.59, real: true }, { date: "2017-07-03", value: 248.58, real: true },
-    { date: "2017-07-24", value: 248.58, real: true }, { date: "2017-08-31", value: 249.28, real: false },
-    { date: "2017-09-30", value: 249.84, real: false }, { date: "2017-10-31", value: 250.41, real: false },
-    { date: "2017-11-30", value: 250.97, real: false }, { date: "2017-12-31", value: 251.55, real: false },
-    { date: "2018-01-31", value: 252.12, real: false }, { date: "2018-02-28", value: 252.64, real: false },
-    { date: "2018-03-31", value: 253.22, real: false }, { date: "2018-04-30", value: 253.78, real: false },
-    { date: "2018-05-31", value: 254.35, real: false }, { date: "2018-06-30", value: 254.91, real: false },
-    { date: "2018-07-31", value: 255.49, real: false }, { date: "2018-08-31", value: 256.06, real: false },
-    { date: "2018-09-30", value: 256.62, real: false }, { date: "2018-10-31", value: 257.19, real: false },
-    { date: "2018-11-30", value: 257.75, real: false }, { date: "2018-12-31", value: 258.33, real: false },
-    { date: "2019-01-31", value: 258.90, real: false }, { date: "2019-02-28", value: 259.42, real: false },
-    { date: "2019-03-31", value: 260.00, real: false }, { date: "2019-04-30", value: 260.56, real: false },
-    { date: "2019-05-31", value: 261.13, real: false }, { date: "2019-06-30", value: 261.69, real: false },
-    { date: "2019-07-31", value: 262.27, real: false }, { date: "2019-08-31", value: 262.84, real: false },
-    { date: "2019-09-30", value: 263.40, real: false }, { date: "2019-10-31", value: 263.98, real: false },
-    { date: "2019-11-30", value: 264.53, real: false }, { date: "2019-12-31", value: 265.11, real: false },
-    { date: "2020-01-31", value: 265.68, real: false }, { date: "2020-02-29", value: 266.22, real: false },
-    { date: "2020-03-31", value: 266.80, real: false }, { date: "2020-04-30", value: 267.36, real: false },
-    { date: "2020-05-31", value: 267.93, real: false }, { date: "2020-06-30", value: 268.49, real: false },
-    { date: "2020-07-31", value: 269.07, real: false }, { date: "2020-08-31", value: 269.64, real: false },
-    { date: "2020-09-30", value: 270.20, real: false }, { date: "2020-10-31", value: 270.77, real: false },
-    { date: "2020-11-30", value: 271.33, real: false }, { date: "2020-12-31", value: 271.91, real: false },
-    { date: "2021-01-31", value: 272.48, real: false }, { date: "2021-02-28", value: 273.00, real: false },
-    { date: "2021-03-31", value: 273.58, real: false }, { date: "2021-04-30", value: 274.14, real: false },
-    { date: "2021-05-31", value: 274.71, real: false }, { date: "2021-06-30", value: 275.27, real: false },
-    { date: "2021-07-31", value: 275.85, real: false }, { date: "2021-08-31", value: 276.42, real: false },
-    { date: "2021-09-30", value: 276.98, real: false }, { date: "2021-10-31", value: 277.55, real: false },
-    { date: "2021-11-30", value: 278.11, real: false }, { date: "2021-12-31", value: 278.69, real: false },
-    { date: "2022-01-31", value: 279.26, real: false }, { date: "2022-02-28", value: 279.78, real: false },
-    { date: "2022-03-31", value: 280.36, real: true }, { date: "2022-04-30", value: 274.74, real: false },
-    { date: "2022-05-31", value: 268.92, real: false }, { date: "2022-06-30", value: 263.30, real: true },
-    { date: "2022-07-31", value: 261.04, real: false }, { date: "2022-08-31", value: 258.78, real: false },
-    { date: "2022-09-30", value: 256.60, real: true }, { date: "2022-10-31", value: 256.75, real: false },
-    { date: "2022-11-30", value: 256.90, real: false }, { date: "2022-12-31", value: 257.05, real: true },
-    { date: "2023-01-31", value: 259.07, real: false }, { date: "2023-02-28", value: 260.89, real: false },
-    { date: "2023-03-31", value: 262.91, real: true }, { date: "2023-04-30", value: 263.96, real: false },
-    { date: "2023-05-31", value: 265.05, real: false }, { date: "2023-06-30", value: 266.10, real: true },
-    { date: "2023-07-31", value: 265.16, real: false }, { date: "2023-08-31", value: 264.23, real: false },
-    { date: "2023-09-30", value: 263.32, real: true }, { date: "2023-10-31", value: 267.49, real: false },
-    { date: "2023-11-30", value: 271.54, real: false }, { date: "2023-12-31", value: 275.71, real: true },
-    { date: "2024-01-31", value: 279.39, real: false }, { date: "2024-02-29", value: 282.84, real: false },
-    { date: "2024-03-31", value: 286.52, real: true }, { date: "2024-04-30", value: 287.34, real: false },
-    { date: "2024-05-31", value: 288.19, real: false }, { date: "2024-06-30", value: 289.01, real: true },
-    { date: "2024-07-31", value: 291.23, real: false }, { date: "2024-08-31", value: 293.45, real: false },
-    { date: "2024-09-30", value: 295.60, real: true }, { date: "2024-10-31", value: 296.56, real: false },
-    { date: "2024-11-30", value: 297.49, real: false }, { date: "2024-12-31", value: 298.45, real: true },
-    { date: "2025-01-31", value: 300.47, real: false }, { date: "2025-02-28", value: 302.30, real: false },
-    { date: "2025-03-31", value: 304.33, real: false }, { date: "2025-04-30", value: 306.29, real: false },
-    { date: "2025-05-31", value: 308.31, real: false }, { date: "2025-06-30", value: 310.27, real: false },
-    { date: "2025-07-31", value: 312.30, real: false }, { date: "2025-08-31", value: 314.32, real: false },
-    { date: "2025-09-30", value: 316.28, real: false }, { date: "2025-10-31", value: 318.31, real: false },
-    { date: "2025-11-30", value: 320.27, real: false }, { date: "2025-12-31", value: 322.29, real: false },
-    { date: "2026-01-31", value: 324.32, real: false }, { date: "2026-02-28", value: 326.15, real: false },
-    { date: "2026-03-31", value: 328.17, real: false }, { date: "2026-04-30", value: 330.13, real: false },
-    { date: "2026-05-31", value: 332.16, real: false }, { date: "2026-06-30", value: 334.12, real: false },
-    { date: "2026-07-31", value: 336.14, real: true }, { date: "2026-08-04", value: 335.44, real: true },
+    { date: "2017-07-03", value: 248.58, real: true }, { date: "2017-07-24", value: 248.58, real: true },
+    { date: "2017-08-11", value: 247.06, real: true }, { date: "2017-08-31", value: 247.06, real: true },
+    { date: "2017-09-20", value: 249.08, real: true }, { date: "2017-10-10", value: 251.35, real: true },
+    { date: "2017-10-30", value: 253.12, real: true }, { date: "2017-11-20", value: 250.85, real: true },
+    { date: "2017-12-11", value: 252.36, real: true }, { date: "2017-12-29", value: 251.61, real: true },
+    { date: "2018-01-18", value: 255.4, real: true }, { date: "2018-02-07", value: 250.09, real: true },
+    { date: "2018-02-27", value: 251.61, real: true }, { date: "2018-03-19", value: 249.84, real: true },
+    { date: "2018-04-09", value: 248.07, real: true }, { date: "2018-04-30", value: 250.34, real: true },
+    { date: "2018-05-18", value: 252.11, real: true }, { date: "2018-06-07", value: 251.1, real: true },
+    { date: "2018-06-27", value: 248.58, real: true }, { date: "2018-07-17", value: 250.09, real: true },
+    { date: "2018-08-06", value: 251.1, real: true }, { date: "2018-08-27", value: 250.34, real: true },
+    { date: "2018-09-17", value: 249.33, real: true }, { date: "2018-10-04", value: 249.59, real: true },
+    { date: "2018-10-25", value: 241.25, real: true }, { date: "2018-11-14", value: 242.26, real: true },
+    { date: "2018-12-04", value: 241.0, real: true }, { date: "2018-12-21", value: 233.17, real: true },
+    { date: "2019-01-14", value: 236.95, real: true }, { date: "2019-02-04", value: 241.0, real: true },
+    { date: "2019-02-22", value: 244.03, real: true }, { date: "2019-03-14", value: 245.29, real: true },
+    { date: "2019-04-03", value: 248.07, real: true }, { date: "2019-04-23", value: 250.09, real: true },
+    { date: "2019-05-13", value: 245.54, real: true }, { date: "2019-06-03", value: 243.78, real: true },
+    { date: "2019-06-24", value: 247.31, real: true }, { date: "2019-07-12", value: 249.08, real: true },
+    { date: "2019-08-01", value: 248.83, real: true }, { date: "2019-08-21", value: 246.3, real: true },
+    { date: "2019-09-10", value: 248.58, real: true }, { date: "2019-09-30", value: 249.33, real: true },
+    { date: "2019-10-21", value: 249.08, real: true }, { date: "2019-11-11", value: 252.11, real: true },
+    { date: "2019-11-29", value: 253.12, real: true }, { date: "2019-12-19", value: 254.89, real: true },
+    { date: "2020-01-08", value: 256.15, real: true }, { date: "2020-01-28", value: 256.15, real: true },
+    { date: "2020-02-17", value: 260.7, real: true }, { date: "2020-03-09", value: 243.02, real: true },
+    { date: "2020-03-30", value: 231.14, real: true }, { date: "2020-04-17", value: 241.75, real: true },
+    { date: "2020-05-07", value: 244.03, real: true }, { date: "2020-05-27", value: 247.31, real: true },
+    { date: "2020-06-16", value: 251.61, real: true }, { date: "2020-07-06", value: 256.91, real: true },
+    { date: "2020-07-27", value: 258.43, real: true }, { date: "2020-08-17", value: 260.45, real: true },
+    { date: "2020-09-04", value: 260.45, real: true }, { date: "2020-09-24", value: 258.17, real: true },
+    { date: "2020-10-14", value: 265.75, real: true }, { date: "2020-11-03", value: 261.71, real: true },
+    { date: "2020-11-23", value: 268.53, real: true }, { date: "2020-12-14", value: 270.05, real: true },
+    { date: "2021-01-04", value: 273.08, real: true }, { date: "2021-01-22", value: 276.11, real: true },
+    { date: "2021-02-11", value: 278.89, real: true }, { date: "2021-03-03", value: 274.85, real: true },
+    { date: "2021-03-23", value: 274.34, real: true }, { date: "2021-04-12", value: 277.37, real: true },
+    { date: "2021-05-03", value: 277.88, real: true }, { date: "2021-05-24", value: 277.37, real: true },
+    { date: "2021-06-11", value: 281.16, real: true }, { date: "2021-07-01", value: 281.67, real: true },
+    { date: "2021-07-21", value: 281.67, real: true }, { date: "2021-08-10", value: 284.7, real: true },
+    { date: "2021-08-30", value: 284.95, real: true }, { date: "2021-09-20", value: 282.17, real: true },
+    { date: "2021-10-11", value: 283.18, real: true }, { date: "2021-10-29", value: 286.22, real: true },
+    { date: "2021-11-18", value: 291.01, real: true }, { date: "2021-12-07", value: 288.74, real: true },
+    { date: "2021-12-28", value: 288.49, real: true }, { date: "2022-01-17", value: 286.72, real: true },
+    { date: "2022-02-07", value: 280.15, real: true }, { date: "2022-02-28", value: 279.39, real: true },
+    { date: "2022-03-18", value: 280.15, real: true }, { date: "2022-04-07", value: 278.13, real: true },
+    { date: "2022-04-27", value: 273.08, real: true }, { date: "2022-05-17", value: 270.3, real: true },
+    { date: "2022-06-06", value: 270.81, real: true }, { date: "2022-06-27", value: 264.49, real: true },
+    { date: "2022-07-18", value: 265.25, real: true }, { date: "2022-08-05", value: 271.06, real: true },
+    { date: "2022-08-25", value: 272.07, real: true }, { date: "2022-09-14", value: 265.0, real: true },
+    { date: "2022-10-04", value: 260.95, real: true }, { date: "2022-10-24", value: 255.9, real: true },
+    { date: "2022-11-14", value: 261.71, real: true }, { date: "2022-12-05", value: 262.72, real: true },
+    { date: "2022-12-23", value: 257.67, real: true }, { date: "2023-01-11", value: 261.96, real: true },
+    { date: "2023-02-01", value: 265.75, real: true }, { date: "2023-02-20", value: 263.73, real: true },
+    { date: "2023-03-13", value: 259.94, real: true }, { date: "2023-04-03", value: 263.73, real: true },
+    { date: "2023-04-24", value: 261.96, real: true }, { date: "2023-05-12", value: 263.23, real: true },
+    { date: "2023-06-01", value: 265.25, real: true }, { date: "2023-06-21", value: 265.5, real: true },
+    { date: "2023-07-11", value: 263.98, real: true }, { date: "2023-07-31", value: 268.28, real: true },
+    { date: "2023-08-21", value: 262.22, real: true }, { date: "2023-09-11", value: 266.51, real: true },
+    { date: "2023-09-29", value: 263.23, real: true }, { date: "2023-10-19", value: 261.96, real: true },
+    { date: "2023-11-08", value: 265.0, real: true }, { date: "2023-11-28", value: 268.53, real: true },
+    { date: "2023-12-18", value: 274.34, real: true }, { date: "2024-01-08", value: 274.59, real: true },
+    { date: "2024-01-29", value: 277.88, real: true }, { date: "2024-02-16", value: 279.9, real: true },
+    { date: "2024-03-07", value: 283.44, real: true }, { date: "2024-03-27", value: 285.96, real: true },
+    { date: "2024-04-16", value: 282.68, real: true }, { date: "2024-05-06", value: 285.2, real: true },
+    { date: "2024-05-27", value: 286.97, real: true }, { date: "2024-06-17", value: 287.98, real: true },
+    { date: "2024-07-05", value: 290.0, real: true }, { date: "2024-07-25", value: 288.24, real: true },
+    { date: "2024-08-14", value: 288.74, real: true }, { date: "2024-09-03", value: 292.03, real: true },
+    { date: "2024-09-23", value: 294.05, real: true }, { date: "2024-10-14", value: 297.58, real: true },
+    { date: "2024-11-04", value: 294.05, real: true }, { date: "2024-11-22", value: 300.61, real: true },
+    { date: "2024-12-12", value: 302.89, real: true }, { date: "2024-12-31", value: 298.34, real: true },
+    { date: "2025-01-21", value: 301.88, real: true }, { date: "2025-02-10", value: 305.92, real: true },
+    { date: "2025-03-03", value: 304.4, real: true }, { date: "2025-03-24", value: 299.86, real: true },
+    { date: "2025-04-11", value: 284.7, real: true }, { date: "2025-04-30", value: 293.79, real: true },
+    { date: "2025-05-21", value: 300.87, real: true }, { date: "2025-06-09", value: 302.64, real: true },
+    { date: "2025-06-30", value: 302.64, real: true }, { date: "2025-07-21", value: 304.91, real: true },
+    { date: "2025-08-11", value: 306.68, real: true }, { date: "2025-08-29", value: 307.94, real: true },
+    { date: "2025-09-18", value: 311.48, real: true }, { date: "2025-10-08", value: 317.54, real: true },
+    { date: "2025-10-28", value: 319.06, real: true }, { date: "2025-11-17", value: 318.04, real: true },
+    { date: "2025-12-05", value: 319.56, real: true }, { date: "2025-12-29", value: 320.32, real: true },
+    { date: "2026-01-16", value: 327.39, real: true }, { date: "2026-02-05", value: 325.88, real: true },
+    { date: "2026-02-25", value: 332.95, real: true }, { date: "2026-03-17", value: 326.13, real: true },
+    { date: "2026-04-02", value: 321.58, real: true }, { date: "2026-04-27", value: 328.4, real: true },
+    { date: "2026-05-18", value: 331.18, real: true }, { date: "2026-06-05", value: 334.97, real: true },
+    { date: "2026-06-25", value: 338.51, real: true }, { date: "2026-07-15", value: 338.0, real: true },
+    { date: "2026-08-04", value: 335.44, real: true },
   ];
   // Deliberately NOT totalValue here: this series is a return trajectory
   // (BPI Dinâmico's own value, cash-flow neutral - see totalReturnPct

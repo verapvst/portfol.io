@@ -287,6 +287,21 @@ async function getBenchmarkHistory(benchmarkId, { from, to } = {}) {
   return data || [];
 }
 
+/** The benchmark-side equivalent of recordValuations() - one plain
+    INSERT, one row per observation, never an UPDATE/overwrite (see
+    0027_weekly_benchmark_entries.sql's own comment on why this table
+    stays insert-only). Requires price_date/frequency='weekly' to be
+    supplied by the caller (js/data-hub.js's Weekly Benchmark modal) -
+    this function never defaults or infers either, since markets are
+    closed on the Sunday checkpoint date and inventing a trading date
+    would be exactly the fabrication the app owner asked to avoid.
+    rows: [{ benchmark_id, date, price_date, index_level, source, frequency }, ...] */
+async function recordBenchmarkObservations(rows) {
+  if (!rows.length) return;
+  const { error } = await window.db.from("benchmark_history").insert(rows);
+  if (error) throw error;
+}
+
 /** Risk-free rate history (supabase/migrations/0021, Performance &
     Benchmark Engine plan §12 - Sharpe/Alpha's own blocker: "no
     risk-free rate anywhere in the data model"). Same shape/discipline

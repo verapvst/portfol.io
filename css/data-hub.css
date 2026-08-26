@@ -410,6 +410,35 @@
 #weekly-checkin-modal-root.open #weekly-checkin-modal-backdrop { opacity: 1; }
 #weekly-checkin-modal-root.open #weekly-checkin-modal { opacity: 1; transform: translate(-50%, -50%); }
 
+/* ---------- Weekly Benchmark modal - same recipe as Weekly Check-in's,
+   own DOM root. ---------- */
+#weekly-benchmark-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+#weekly-benchmark-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#weekly-benchmark-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0;
+  transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#weekly-benchmark-modal-root.open { pointer-events: auto; }
+#weekly-benchmark-modal-root.open #weekly-benchmark-modal-backdrop { opacity: 1; }
+#weekly-benchmark-modal-root.open #weekly-benchmark-modal { opacity: 1; transform: translate(-50%, -50%); }
+
 /* ---------- Trading 212 import modal - wider than Manual Update's
    (a review table needs the room), same backdrop/positioning recipe. ---------- */
 #t212-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
@@ -516,6 +545,19 @@
   font-variant-numeric: tabular-nums;
 }
 .wc-value-input:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+
+/* ---------- Weekly Benchmark ---------- */
+.wb-last-known { margin-left: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wb-date-input, .wb-value-input {
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-family: inherit;
+}
+.wb-value-input { width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
+.wb-date-input:focus-visible, .wb-value-input:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
 
 /* ---------- BPI Screenshot modal - same backdrop/positioning recipe
    as Trading 212's own modal (#t212-modal-root above), plus a reading
