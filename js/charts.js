@@ -231,11 +231,19 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
     // benchmarks stay thinner and slightly translucent so they read as
     // secondary reference lines, not competing series - the "clean
     // lines, subtle benchmark lines, stronger portfolio line" spec.
-    const strokeWidth = isPortfolio ? 2.5 : 1.5;
+    const strokeWidth = isPortfolio ? 3 : 1.5;
     const strokeOpacity = isPortfolio ? 1 : 0.7;
     return pts.slice(1).map((p, i) => {
       const prev = pts[i];
-      const interpolated = s.points[i].real === false || s.points[i + 1].real === false;
+      // Portfolio stays solid even across smoothed (real:false) days -
+      // the dash pattern is still the honest disclosure for hover
+      // tooltips ("(derived)") and for the single-series chart
+      // (renderLineChart's own legend note), but a mostly-dashed line
+      // here read as visually broken/uncertain next to the fully-solid
+      // benchmark lines, when the underlying return for every point is
+      // still a real, dated observation - only the day-by-day spread
+      // between checkpoints is synthetic, not the numbers themselves.
+      const interpolated = !isPortfolio && (s.points[i].real === false || s.points[i + 1].real === false);
       const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
       return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
     }).join("");
