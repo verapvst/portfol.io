@@ -54,6 +54,24 @@
         <div class="update-portfolio-methods" id="update-benchmarks-methods"></div>
       </section>
 
+      <!-- ============ Benchmark Tracking ============
+           Read-only transparency, not an entry method - where each
+           recent weekly checkpoint's data actually came from (Manual
+           Weekly Check-in for the portfolio side, automated Alpha
+           Vantage pull or manual fallback for each benchmark). See
+           js/data-hub.js:renderBenchmarkTrackingCard(). -->
+      <section class="card glass" id="benchmark-tracking-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="data-hub-benchmark-tracking" tabindex="0" role="button" aria-label="About this section">
+            <h2 class="section-title">Benchmark Tracking</h2>
+          </div>
+        </div>
+        <p class="section-hint" id="benchmark-tracking-methodology">Loading…</p>
+        <div class="t212-review-table-scroll">
+          <table class="t212-review-table" id="benchmark-tracking-table"></table>
+        </div>
+      </section>
+
       <!-- ============ Research Data ============
            What a product itself is/contains - real, but not yours
            until you hold it. Unchanged from before this pass: same

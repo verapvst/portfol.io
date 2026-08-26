@@ -197,10 +197,45 @@ function valueOfSecurityAsOf(history, date, { exclusive = false } = {}) {
  * Carries `real` through the rebase so the observed-vs-derived
  * distinction survives normalization, not just a rescaled line with the
  * honesty flag silently dropped.
+ *
+ * SEGMENT-AWARE (0028_benchmark_proxy_automation.sql): a benchmark's
+ * history can switch instrument partway through - e.g. S&P 500's frozen
+ * real SPX index-level segment (2017-2026) followed by a live SPY ETF-
+ * price segment, at completely different absolute scales (SPX ~6,000,
+ * SPY ~600 - a pure ETF-share-price artifact, unrelated to performance).
+ * Naively rebasing the whole series to its first point would divide a
+ * SPY price by an SPX base at the seam and draw a fake ~90% "crash" -
+ * exactly the bug 0018 fixed once already for the historical import: it
+ * is never acceptable to compare or divide two points from different
+ * instruments. Every point here carries `instrumentType`/`symbol` when
+ * it has one (benchmark series do; the portfolio's own series never
+ * does, so it behaves exactly as before - a single unbroken segment).
+ * Wherever that identity changes between consecutive points, this
+ * treats it as a chain-link boundary, not a division: the new segment
+ * gets its own internal base (its own first point), and its computed
+ * index continues from wherever the previous segment's index left off
+ * - the same "multiply relative growth factors, never divide raw values
+ * across a boundary" principle chainLinkedReturn() already applies to
+ * portfolio sub-periods, applied here to a value series instead of a
+ * set of discrete returns.
  */
 function indexValueSeries(series) {
-  const base = series[0]?.value || 1;
-  return series.map((p) => ({ date: p.date, value: (p.value / base) * 100, real: p.real }));
+  if (!series.length) return [];
+  const segmentKey = (p) => p.instrumentType || p.symbol || null;
+  let base = series[0].value || 1;
+  let carry = 100;
+  let prevKey = segmentKey(series[0]);
+  const out = [];
+  for (const p of series) {
+    const key = segmentKey(p);
+    if (key !== prevKey) {
+      carry = out.length ? out[out.length - 1].value : 100;
+      base = p.value || 1;
+      prevKey = key;
+    }
+    out.push({ date: p.date, value: (p.value / base) * carry, real: p.real });
+  }
+  return out;
 }
 
 /**

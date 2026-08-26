@@ -134,6 +134,27 @@ async function recordValuations(rows) {
   if (error) throw error;
 }
 
+/** Distinct recent Weekly Check-in dates (valuations.frequency='weekly'),
+    newest first - powers Data Hub's Benchmark Tracking transparency
+    table (js/data-hub.js:renderBenchmarkTrackingCard()), which needs to
+    know WHICH Sundays the portfolio side was actually checked in on,
+    not the valuations themselves (a security's own value is Portfolio/
+    Performance's concern, not Data Hub's - this table is provenance
+    only: was this checkpoint recorded, and by what method). limit
+    caps distinct dates, not rows - one weekly check-in can touch many
+    securities on the same date. */
+async function getRecentWeeklyCheckinDates(limit = 8) {
+  const { data, error } = await window.db
+    .from("valuations")
+    .select("date")
+    .eq("frequency", "weekly")
+    .order("date", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  const distinct = [...new Set((data || []).map((r) => r.date))];
+  return distinct.slice(0, limit);
+}
+
 /** Securities's data source (supabase/migrations/0005/0006). Inner
     join on purpose - a security with no security_details row isn't a
     researchable product yet, so it has no place in this list (it might
@@ -270,14 +291,20 @@ async function loadBenchmarks() {
 /** Full (or date-bounded) real benchmark history, oldest first - same
     "no synthetic gap-filling" discipline as getHistoricalPrices(): a
     benchmark with monthly-only coverage (today's reality for sp500/
-    nasdaq100 - see 0019's own header comment) returns exactly those
-    monthly rows, never padded to look daily. Each row's `frequency`
-    ('daily'/'monthly') says which it actually is - never inferred from
-    row spacing. */
+    nasdaq100's frozen historical segment - see 0019's own header
+    comment) returns exactly those monthly rows, never padded to look
+    daily. Each row's `frequency` ('daily'/'monthly'/'weekly') says
+    which it actually is - never inferred from row spacing. `symbol`/
+    `instrument_type` are carried per row (0028_benchmark_proxy_
+    automation.sql), not read from the parent benchmarks row - a single
+    benchmark_id's history can span a real index-level segment (SPX/NDX)
+    and a later SPY/QQQ proxy segment, and calculations.js:
+    indexValueSeries() needs the per-row identity to know exactly where
+    that switch happens and never divide across it. */
 async function getBenchmarkHistory(benchmarkId, { from, to } = {}) {
   let query = window.db
     .from("benchmark_history")
-    .select("date, index_level, frequency, source, fetched_at")
+    .select("date, price_date, index_level, frequency, source, symbol, instrument_type, fetched_at")
     .eq("benchmark_id", benchmarkId)
     .order("date", { ascending: true });
   if (from) query = query.gte("date", from);

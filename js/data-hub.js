@@ -982,6 +982,8 @@ function initUpdateBenchmarksMethods() {
    Weekly Check-in uses, applied here as "only what was actually
    entered" since there's no prior same-week value to compare against. */
 
+let wbBenchmarks = [];
+
 function wbKeyHandler(e) { if (e.key === "Escape") window.closeWeeklyBenchmarkModal(); }
 
 function initWeeklyBenchmarkModal() {
@@ -1030,14 +1032,25 @@ function initWeeklyBenchmarkModal() {
 
     submitBtn.disabled = true;
     try {
-      await recordBenchmarkObservations(rows.map((r) => ({
-        benchmark_id: r.benchmark_id,
-        date,
-        price_date: r.price_date,
-        index_level: r.index_level,
-        source: "Weekly manual entry (Data Hub)",
-        frequency: "weekly",
-      })));
+      await recordBenchmarkObservations(rows.map((r) => {
+        const benchmark = wbBenchmarks.find((b) => b.id === r.benchmark_id);
+        // This is a fallback for weeks the automated Alpha Vantage pull
+        // (0029_schedule_benchmark_weekly_cron.sql) misses or gets
+        // wrong - it must land in the SAME segment that pipeline
+        // writes, proxy_symbol/'etf', not the frozen historical index-
+        // level identity, so calculations.js:indexValueSeries() treats
+        // it as a continuation, not a spurious extra segment boundary.
+        return {
+          benchmark_id: r.benchmark_id,
+          date,
+          price_date: r.price_date,
+          index_level: r.index_level,
+          source: "Weekly manual entry (Data Hub)",
+          frequency: "weekly",
+          symbol: benchmark?.proxy_symbol || benchmark?.symbol || null,
+          instrument_type: benchmark?.proxy_symbol ? "etf" : benchmark?.instrument_type || null,
+        };
+      }));
       close();
     } catch (err) {
       errorEl.textContent = err.message || "Something went wrong.";
@@ -1057,6 +1070,7 @@ async function openWeeklyBenchmarkModal() {
   document.addEventListener("keydown", wbKeyHandler);
 
   const benchmarks = await loadBenchmarks();
+  wbBenchmarks = benchmarks;
   const latestByBenchmark = await Promise.all(
     benchmarks.map((b) => getBenchmarkHistory(b.id).then((rows) => rows[rows.length - 1] || null))
   );
@@ -1067,13 +1081,85 @@ async function openWeeklyBenchmarkModal() {
       ${benchmarks.map((b, i) => {
         const latest = latestByBenchmark[i];
         const lastKnown = latest ? ` <span class="wb-last-known">last: ${latest.index_level} (${latest.date})</span>` : "";
+        const proxyHint = b.proxy_symbol ? ` <span class="wb-last-known">— enter the ${b.proxy_symbol} price, not the ${b.symbol} index level</span>` : "";
         return `
         <tr>
-          <td>${b.name}${lastKnown}</td>
+          <td>${b.name}${lastKnown}${proxyHint}</td>
           <td><input type="date" class="wb-date-input" data-wb-trading-date="${b.id}"></td>
           <td class="amount-cell"><input type="number" step="any" class="wb-value-input" data-wb-benchmark="${b.id}" placeholder="e.g. ${latest ? latest.index_level : ""}"></td>
         </tr>`;
       }).join("")}
+    </tbody>`;
+}
+
+/* ---------- Benchmark Tracking transparency card ----------
+   Read-only - no form, no write path. Answers "where did each recent
+   weekly checkpoint's numbers actually come from", not "what were the
+   numbers" (that's Performance/Overview's job). Every cell is a
+   SOURCE/status label (Manual / SPY · Auto / Missing), never a value -
+   matches the app owner's own sketch of this table exactly. Dates come
+   from the union of recent Weekly Check-in dates (valuations) and
+   recent benchmark_history dates for every benchmark that has a
+   proxy_symbol configured - a date only one side has still gets a row,
+   with "Missing" on the other side, so a skipped week is visible
+   instead of silently absent from the table. */
+
+function benchmarkTrackingMethodologyText(benchmarks) {
+  const withProxy = benchmarks.filter((b) => b.proxy_symbol);
+  if (!withProxy.length) return "Portfolio valuations are entered manually through the Weekly Check-in.";
+  const proxies = withProxy.map((b) => b.proxy_symbol).join(" and ");
+  const names = withProxy.map((b) => b.name).join(" and ");
+  return `Benchmark performance is updated weekly using ${proxies} as proxies for ${names} respectively. Portfolio valuations are entered manually through the Weekly Check-in.`;
+}
+
+async function renderBenchmarkTrackingCard() {
+  const methodologyEl = $("benchmark-tracking-methodology");
+  const tableEl = $("benchmark-tracking-table");
+
+  const benchmarks = await loadBenchmarks();
+  methodologyEl.textContent = benchmarkTrackingMethodologyText(benchmarks);
+
+  const trackedBenchmarks = benchmarks.filter((b) => b.proxy_symbol);
+  if (!trackedBenchmarks.length) { tableEl.innerHTML = ""; return; }
+
+  const [checkinDates, ...histories] = await Promise.all([
+    getRecentWeeklyCheckinDates(8),
+    ...trackedBenchmarks.map((b) => getBenchmarkHistory(b.id)),
+  ]);
+
+  // date -> { [benchmarkId]: row }, most recent 8 benchmark_history rows per benchmark only.
+  const byDateByBenchmark = new Map();
+  trackedBenchmarks.forEach((b, i) => {
+    histories[i].slice(-8).forEach((row) => {
+      if (!byDateByBenchmark.has(row.date)) byDateByBenchmark.set(row.date, {});
+      byDateByBenchmark.get(row.date)[b.id] = row;
+    });
+  });
+
+  const allDates = [...new Set([...checkinDates, ...byDateByBenchmark.keys()])]
+    .sort((a, b) => (a < b ? 1 : -1))
+    .slice(0, 8);
+
+  if (!allDates.length) {
+    tableEl.innerHTML = `<tr><td>No weekly checkpoints recorded yet.</td></tr>`;
+    return;
+  }
+
+  const sourceLabel = (row, benchmark) => {
+    if (!row) return `<span class="t212-status-notheld">Missing</span>`;
+    const auto = row.source === "alpha_vantage";
+    return `<span class="${auto ? "t212-status-matched" : "t212-status-review"}">${row.symbol || benchmark.proxy_symbol} · ${auto ? "Auto" : "Manual"}</span>`;
+  };
+
+  tableEl.innerHTML = `
+    <thead><tr><th>Checkpoint</th><th>Portfolio</th>${trackedBenchmarks.map((b) => `<th>${b.name}</th>`).join("")}</tr></thead>
+    <tbody>
+      ${allDates.map((date) => `
+        <tr>
+          <td>${date}</td>
+          <td>${checkinDates.includes(date) ? `<span class="t212-status-matched">Manual</span>` : `<span class="t212-status-notheld">Missing</span>`}</td>
+          ${trackedBenchmarks.map((b) => `<td>${sourceLabel(byDateByBenchmark.get(date)?.[b.id], b)}</td>`).join("")}
+        </tr>`).join("")}
     </tbody>`;
 }
 
@@ -1777,6 +1863,7 @@ function init() {
   initBpiScreenshotModal();
   initUpdateBenchmarksMethods();
   initWeeklyBenchmarkModal();
+  renderBenchmarkTrackingCard().catch((err) => console.warn("Benchmark tracking card unavailable:", err));
 
   onAuthChange(() => loadDbContext().then(renderGroups));
   initAuth().then(loadDbContext);

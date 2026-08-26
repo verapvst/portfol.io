@@ -55,9 +55,29 @@ async function loadBenchmarkSeries() {
       name: b.name,
       symbol: b.symbol,
       instrumentType: b.instrument_type,
+      // The live-tracking proxy this benchmark is displayed under the
+      // same name with (0028_benchmark_proxy_automation.sql) - e.g.
+      // "S&P 500" stays "S&P 500" everywhere in the UI, this is only
+      // the methodology footnote ("tracked using SPY"). Null until a
+      // proxy is configured for this benchmark.
+      proxySymbol: b.proxy_symbol,
       dataType: b.data_type,
       currency: b.currency,
-      series: histories[i].map((row) => ({ date: row.date, value: row.index_level, real: true, frequency: row.frequency })),
+      // symbol/instrumentType carried PER POINT (from benchmark_history,
+      // not the benchmarks row above) - a single benchmark's series can
+      // span a frozen real-index-level segment (SPX/NDX) and a later
+      // SPY/QQQ proxy segment. calculations.js:indexValueSeries() reads
+      // these per point to detect exactly where that switch happens and
+      // chain-link across it instead of dividing incompatible scales.
+      series: histories[i].map((row) => ({
+        date: row.date,
+        priceDate: row.price_date,
+        value: row.index_level,
+        real: true,
+        frequency: row.frequency,
+        symbol: row.symbol,
+        instrumentType: row.instrument_type,
+      })),
     }));
   } catch (err) {
     console.warn("Benchmark data unavailable:", err);
