@@ -56,11 +56,12 @@
   margin-bottom: var(--sp-8);
 }
 
-#performance-chart-card,
+#capital-chart-card,
 #annual-returns-card,
 #benchmark-card,
 #quant-metrics-card { margin-bottom: var(--sp-8); }
-#quant-metrics-card:last-child { margin-bottom: 0; }
+#quant-metrics-card:last-child,
+#capital-chart-card:last-child { margin-bottom: 0; }
 
 /* Risk & Quant Metrics (Phase 3) - same .kpi-card tile as the concentration
    grid on Portfolio (css/portfolio.css:.alloc-concentration-grid), just
@@ -78,18 +79,28 @@
   .quant-metrics-grid { grid-template-columns: 1fr; }
 }
 
-.annual-returns-list { display: flex; flex-direction: column; }
+/* Horizontal strip - year on top, return underneath - not the vertical
+   one-row-per-year list this used to be. auto-fit wraps on its own as
+   the years-covered count grows, no year count hardcoded here. */
+.annual-returns-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: var(--sp-3) 0;
+}
 .annual-return-row {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-3) 0;
-  border-top: 1px solid var(--card-border);
-  font-size: 14px;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border-left: 1px solid var(--card-border);
+  font-size: 13px;
+  text-align: center;
 }
-.annual-return-row:first-child { border-top: none; padding-top: 0; }
-.annual-return-year { color: var(--ink); }
-.annual-return-value { font-weight: 500; font-variant-numeric: tabular-nums; }
+.annual-return-row:first-child { border-left: none; }
+.annual-return-year { color: var(--muted); font-size: 12px; }
+.annual-return-value { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 14px; }
 
 @media (max-width: 900px) {
   .perf-stats-grid { grid-template-columns: 1fr; }

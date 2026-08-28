@@ -1,7 +1,9 @@
 /* ============================================================
-   performance.js - the Performance page ("how has my portfolio done?").
-   Reads data.history.valueSeries + data.analytics.performance, the exact
-   fields Overview's Performance card already reads (analytics.js/
+   performance.js - the Performance page ("how has my portfolio done?" -
+   returns only; "how much capital is here" lives on the separate
+   Capital page, js/capital.js, per the Performance & Capital split).
+   Reads data.analytics.performance (+ each scope's own dailySeries), the
+   exact fields Overview's Performance card already reads (analytics.js/
    repository.js - getPortfolioDataAuto()) - this page is that card's
    full detail, never a second computation of TWR/XIRR. The range-filter
    logic below is this repo's own prior Overview implementation (see
@@ -12,28 +14,14 @@
 
 function $(id) { return document.getElementById(id); }
 
-/** Ranges shorter than the series' real granularity legitimately resolve
-    to <2 points - that renders as "insufficient data" (see draw() below),
-    same honesty rule as everywhere else in this app, never a stretched
-    or interpolated-to-fit line. */
-const RANGE_DAYS = { "1M": 30, "3M": 91, "1Y": 365, "3Y": 365 * 3 };
-
-function filterSeriesByRange(series, range) {
-  if (range === "All") return series;
-  const lastDate = new Date(series[series.length - 1].date);
-  const startDate = range === "YTD"
-    ? new Date(lastDate.getFullYear(), 0, 1)
-    : new Date(lastDate.getTime() - RANGE_DAYS[range] * 86400000);
-  return series.filter((p) => new Date(p.date) >= startDate);
-}
-
 /* ---------- Scoped period selector (1W/1M/3M/6M/YTD/1Y/Since Inception)
    ----------
-   A different range control from perf-filters above on purpose - that
-   one filters the raw € Portfolio Value chart (always whole-portfolio,
-   §13's own "keep these separate" principle). This one governs the
-   scoped Total Return stat tile and the Benchmark Comparison chart,
-   whichever account/strategy/security/portfolio scope is selected.
+   A different range control from Capital's own Portfolio Value Over Time
+   filter-pills on purpose - that one filters the raw € chart (always
+   whole-portfolio, §13's own "keep these separate" principle). This one
+   governs the scoped Total Return stat tile and the Benchmark Comparison
+   chart, whichever account/strategy/security/portfolio scope is
+   selected.
    Reuses scopedPerformance()'s own dailySeries - never a second return
    calculation: deriveNormalizedDailySeries() (calculations.js) already
    builds it as a true geometric/compounding daily index (one point per
@@ -70,8 +58,6 @@ function formatDateTick(dateStr) {
   return d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }).replace(" ", " '");
 }
 
-let perfFilterClickHandler = null;
-let perfResizeHandler = null;
 let currentScopeType = "portfolio"; // "portfolio" | "account" | "strategy" | "security"
 let currentScopeId = null; // null for "portfolio", else the account/strategy/security id
 
@@ -125,59 +111,6 @@ function scopeBundle(data, scopeType, scopeId) {
   };
 }
 
-function renderValueChart(data) {
-  const container = $("perf-linechart-container");
-  const filtersEl = $("perf-filters");
-  const series = data.history.valueSeries;
-
-  if (series.length < 2) {
-    filtersEl.innerHTML = "";
-    renderInsufficientData(container, "Insufficient history - fewer than 2 dated Valuations exist yet for the holding that drives this series. Record another Valuation to see a trend.");
-    return;
-  }
-
-  const ranges = ["1M", "3M", "YTD", "1Y", "3Y", "All"];
-  // Preserve whichever range was selected across a redraw (sign-in/out
-  // re-fetches and calls this again) - toggling auth shouldn't silently
-  // reset the chosen time window.
-  const activeRange = filtersEl.querySelector(".filter-pill.active")?.dataset.range || "All";
-  filtersEl.innerHTML = ranges.map((r) =>
-    `<button class="filter-pill${r === activeRange ? " active" : ""}" data-range="${r}" type="button">${r}</button>`
-  ).join("");
-
-  const draw = (range) => {
-    const rawPoints = filterSeriesByRange(series, range);
-    if (rawPoints.length < 2) {
-      renderInsufficientData(container, `Not enough historical data for "${range}" yet. Try a wider range.`);
-      return;
-    }
-    // Showcase mode: the curve never disappears, only its scale does -
-    // rebase to an index (first point = 100) and drop the euro sign.
-    const owner = isOwnerMode();
-    const points = owner ? rawPoints : indexValueSeries(rawPoints);
-    renderLineChart(container, points, {
-      formatValue: owner ? fmtEUR : (v) => String(Math.round(v)),
-      formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
-      formatDateLabel: formatDateTick,
-    });
-  };
-  draw(activeRange);
-
-  if (perfFilterClickHandler) filtersEl.removeEventListener("click", perfFilterClickHandler);
-  perfFilterClickHandler = (e) => {
-    const btn = e.target.closest(".filter-pill");
-    if (!btn) return;
-    filtersEl.querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    draw(btn.dataset.range);
-  };
-  filtersEl.addEventListener("click", perfFilterClickHandler);
-
-  if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
-  perfResizeHandler = () => draw(filtersEl.querySelector(".active")?.dataset.range || "All");
-  window.addEventListener("resize", perfResizeHandler);
-}
-
 /* ---------- Stat tiles ----------
    Same .kpi-card visual component Overview's Snapshot grid uses
    (components.css) - reused for its look, not its Overview-specific
@@ -198,7 +131,6 @@ function statTileHTML({ iconName, label, docKey, value, note, drillId }) {
 }
 
 function renderStats(data, scopeType, scopeId) {
-  const owner = isOwnerMode();
   const bundle = scopeBundle(data, scopeType, scopeId);
 
   // Total Return here is windowed by currentScopedRange (the period pill
@@ -226,11 +158,13 @@ function renderStats(data, scopeType, scopeId) {
 
   if (scopeType === "portfolio") {
     const perf = data.analytics.performance;
-    // Investor Return (XIRR) and Unrealised Gain are money-weighted /
-    // cost-basis concepts tied to the whole portfolio's own cash flows -
-    // deliberately not windowed by the period selector above (a "1W
-    // XIRR" isn't a meaningful figure) and deliberately portfolio-only,
-    // same as before.
+    // Investor Return (XIRR) is a money-weighted concept tied to the
+    // whole portfolio's own cash flows - deliberately not windowed by
+    // the period selector above (a "1W XIRR" isn't a meaningful figure)
+    // and deliberately portfolio-only, same as before. Unrealised Gain
+    // moved to the Capital page (Performance & Capital split) - it's a
+    // € gain against cost basis, not a %-return, so it no longer
+    // competes for space in this returns-only tile row.
     const investorReturnValue = perf.investorReturnAvailable ? fmtPct(perf.investorReturnPct) : "Insufficient history";
 
     const tiles = [
@@ -243,11 +177,6 @@ function renderStats(data, scopeType, scopeId) {
         value: investorReturnValue,
         note: perf.investorReturnAvailable ? "annualised, money-weighted, since inception" : "not enough cash flows yet",
         drillId: "investorReturn",
-      }),
-      statTileHTML({
-        iconName: "wallet", label: "Unrealised Gain", docKey: "investment-return",
-        value: owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : fmtPct(perf.unrealisedGainPct),
-        note: "vs. invested capital, since inception",
       }),
     ];
     $("perf-stats-grid").innerHTML = tiles.join("");
@@ -372,8 +301,9 @@ function renderBenchmarkSection(data, scopeType, scopeId) {
   // brand gradient stroke and (via valueLookup below) the real € figure
   // in its tooltip line - an account/strategy/security scope has no
   // raw € series of its own in the data model, so it draws as a plain
-  // named series instead, same honest gap this page's own comments
-  // already describe for renderValueChart() above.
+  // named series instead, same honest gap js/capital.js:renderValueChart()
+  // (Portfolio Value Over Time, moved there in the Performance & Capital
+  // split) already documents for the raw € chart.
   const seriesDefs = [
     { key: scopeType === "portfolio" ? "portfolio" : "scope", label: bundle.label, color: PALETTE_TEXT.coral, points: scopedSeries },
     ...availableBenchmarks.map((b) => ({
@@ -549,13 +479,13 @@ function renderQuantMetrics(data, scopeType, scopeId) {
    selected (empty/hidden for "Portfolio", since there's only one).
    Controls the stat tiles, Annual Returns, Benchmark Comparison and
    Risk & Quant Metrics sections below (all already read through
-   scopeBundle()). Deliberately does NOT touch renderValueChart() above -
-   no per-scope raw € value series exists in the data model (only each
-   scope's own cash-flow-neutral INDEX, already read via
-   scopeBundle().dailySeries for the scoped Benchmark Comparison chart) -
-   mixing that into a €-labelled chart would blur Value and Performance
-   into one figure, exactly what this app's design deliberately keeps
-   separate everywhere else. */
+   scopeBundle()). No per-scope raw € value series exists in the data
+   model (only each scope's own cash-flow-neutral INDEX, already read
+   via scopeBundle().dailySeries for the scoped Benchmark Comparison
+   chart) - the raw € chart lives on the Capital page instead (Portfolio
+   Value Over Time, whole-portfolio only, no scope selector of its own),
+   exactly the "keep Value and Performance separate" split this app's
+   design already applies everywhere else. */
 function renderScopedSections(data) {
   renderStats(data, currentScopeType, currentScopeId);
   renderAnnualReturns(data, currentScopeType, currentScopeId);
@@ -645,61 +575,6 @@ function renderScopedRangeSelector(data) {
   });
 }
 
-/* ---------- Contributions ----------
-   "How much money have I personally put in?" vs. "how well have my
-   investments performed?" (§14/§20) - built entirely from numbers
-   analytics.js already computes (contributionsTotal/withdrawalsTotal/
-   totalValue), no new calculation. netContributions is external cash
-   only (deposit/withdrawal) - NOT investedCapital (buy transactions),
-   which is an internal reallocation from cash into a security, not new
-   money entering the portfolio (see PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES's
-   own comment, calculations.js). investmentGains = totalValue -
-   netContributions is therefore a genuinely different figure from the
-   "Unrealised Gain" tile above (which is vs. investedCapital/cost
-   basis) - both real, both correct, answering different questions;
-   shown side by side with distinct labels so they're never confused. */
-function renderContributions(data) {
-  const card = $("contributions-card");
-  const perf = data.analytics.performance;
-  if (perf.totalValue == null) { card.hidden = true; return; }
-  card.hidden = false;
-  const owner = isOwnerMode();
-
-  const netContributions = Math.round(((perf.contributionsTotal || 0) - (perf.withdrawalsTotal || 0)) * 100) / 100;
-  const investmentGains = Math.round((perf.totalValue - netContributions) * 100) / 100;
-  const investmentGainsPct = netContributions ? Math.round((investmentGains / netContributions) * 10000) / 100 : null;
-  const noBaseline = !perf.contributionsTotal && !perf.withdrawalsTotal;
-
-  // Locked (signed in, Owner Access not unlocked): same masking
-  // convention as renderStats' Unrealised Gain tile above - show each
-  // figure as a % of current portfolio value instead of a raw €
-  // amount, never a blank placeholder.
-  const asPct = (v) => perf.totalValue ? fmtPct((v / perf.totalValue) * 100) : "—";
-
-  const rows = [
-    { label: "Total Contributions", value: perf.contributionsTotal, plain: true },
-    { label: "Total Withdrawals", value: -Math.abs(perf.withdrawalsTotal || 0), plain: true },
-    { label: "Net Contributions", value: netContributions, strong: true },
-    { label: "Current Portfolio Value", value: perf.totalValue, strong: true },
-    { label: "Investment Gains (Value − Net Contributions)", value: investmentGains, strong: true, tone: investmentGains >= 0 ? "up" : "down" },
-  ];
-
-  const rowsHTML = rows.map((r) => `
-    <div class="contribution-row${r.strong ? " strong" : ""}">
-      <span class="contribution-label">${r.label}</span>
-      <span class="contribution-value${r.tone ? ` ${r.tone}` : ""}">${owner ? fmtEUR(r.value, { signed: !r.plain }) : asPct(r.value)}</span>
-    </div>`).join("");
-
-  const warning = noBaseline
-    ? `<p class="chart-legend-note">No deposit/withdrawal transactions recorded yet, so Net Contributions is €0 and Investment Gains above reflects the portfolio's full value, not just growth since a contribution baseline. Record a Deposit for your original funding to make this figure meaningful.</p>`
-    : "";
-
-  $("contributions-body").innerHTML = `
-    <div class="contributions-list">${rowsHTML}</div>
-    ${investmentGainsPct != null && owner ? `<p class="section-hint">Investment Gains: ${fmtPct(investmentGainsPct)} vs. Net Contributions.</p>` : ""}
-    ${warning}`;
-}
-
 /** Signed in but the live fetch failed (see analytics.js's
     getPortfolioDataAuto()) - without this, this state is indistinguishable
     from "genuinely on live data, genuinely flat" or from "genuinely signed
@@ -724,7 +599,7 @@ async function init() {
 
   renderTopbar($("topbar"), user, {
     heading: "Performance",
-    subtitle: "How has your portfolio performed - not any single holding's market price.",
+    subtitle: "How has your portfolio performed - not any single holding's market price. Looking for contributions or portfolio value over time? See Capital.",
   });
   initNavigation(user);
   initAuthModal();
@@ -733,8 +608,6 @@ async function init() {
   const loadAndRender = async (data) => {
     setCurrentPortfolioData(data);
     renderDataWarning(data);
-    renderValueChart(data);
-    renderContributions(data);
     renderScopeSelector(data);
     renderScopedRangeSelector(data);
     renderScopedSections(data);

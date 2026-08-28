@@ -1,6 +1,10 @@
 /* ============================================================
-   portfolio.js - the Portfolio page ("what do I own, and how is it
-   distributed?"). Merges the old Portfolio Detail (holdings table,
+   portfolio.js - the Holdings page ("what do I own, and how is it
+   distributed?" - file/URL stayed portfolio.html/portfolio.js when the
+   nav label and heading were renamed "Portfolio" -> "Holdings", since
+   the CATEGORY one level up in the nav is already "Portfolio" and two
+   "Portfolio"s was the confusing part, not the filename). Merges the
+   old Portfolio Detail (holdings table,
    Update workflow) and Allocation (asset class/concentration/security/
    account/geographic breakdowns) pages - per the Product & Architecture
    Re-Think audit, both read the exact same data.portfolio.holdings/
@@ -25,7 +29,10 @@
    own header comment), genuinely not split by account today - showing
    them filtered would either recompute something the data can't
    support or silently show whole-portfolio numbers under a per-account
-   label. Hidden with an honest explanatory note instead of faked.
+   label. The CARD stays on screen either way - only its content swaps
+   to an honest unavailable note when scoped (scopeUnavailableHTML()
+   below) - display:none-ing the whole card used to leave a gap in
+   Holdings' own two-column row and make everything below it jump.
    ============================================================ */
 
 function $(id) { return document.getElementById(id); }
@@ -217,17 +224,29 @@ function renderSecurityAllocation(holdings) {
 }
 
 /* ---------- Asset Class / Account Allocation / Geographic Exposure -
-   ALL-SCOPE ONLY, see this file's own header comment for why. ---------- */
+   ALL-SCOPE ONLY, see this file's own header comment for why. Each of
+   the three checks currentScope itself and swaps to an honest
+   unavailable note - the CARD stays on screen either way (previously
+   the whole card went display:none via setAllScopeCardsVisible(), which
+   left a gap in Holdings' own two-column row and made every full-width
+   card below jump when scope changed; real complaints, not just
+   cosmetic). ---------- */
+
+function scopeUnavailableHTML(label) {
+  return `<p class="alloc-scope-unavailable">${label} is only available at the All Portfolio level today - Accounts don't have their own asset-class/geographic breakdown in the data yet. Switch back to "All Portfolio" to see it.</p>`;
+}
 
 function renderAssetClass(data) {
+  const container = $("asset-class-viz");
+  if (currentScope !== "all") { container.innerHTML = scopeUnavailableHTML("Asset Class Allocation"); return; }
   const items = data.analytics.assetClassAllocation;
   const total = items.reduce((s, it) => s + it.weight, 0);
-  const container = $("asset-class-viz");
   container.innerHTML = `<div id="asset-class-donut"></div>`;
   renderDonut(container.querySelector("#asset-class-donut"), items, "Asset Class", `${total.toFixed(1)}%`, { drillType: "assetClass" });
 }
 
 function renderAccountAllocation(data) {
+  if (currentScope !== "all") { $("account-allocation-body").innerHTML = scopeUnavailableHTML("Account Allocation"); return; }
   const owner = isOwnerMode();
   const items = [...data.analytics.accountAllocation].sort((a, b) => b.weight - a.weight);
   if (!items.length && !currentUser()) {
@@ -243,22 +262,18 @@ function renderAccountAllocation(data) {
 }
 
 function renderGeographicExposure(data) {
+  if (currentScope !== "all") {
+    $("exposure-tabs").innerHTML = "";
+    $("exposure-hint").textContent = "";
+    $("exposure-viz").innerHTML = scopeUnavailableHTML("Geographic Exposure");
+    return;
+  }
   renderExposure({
     tabsEl: $("exposure-tabs"),
     vizEl: $("exposure-viz"),
     hintEl: $("exposure-hint"),
     titleEl: document.querySelector("#exposure-card .card-header-title"),
   }, data);
-}
-
-/** Toggles visibility of the three ALL-SCOPE-ONLY cards - .card's own
-    display:flex outranks the [hidden] UA rule, so display is set
-    directly (same pattern app.js's renderAll() already uses for
-    Health/Insights). */
-function setAllScopeCardsVisible(visible) {
-  ["asset-class-card", "account-allocation-card", "exposure-card"].forEach((id) => {
-    $(id).style.display = visible ? "" : "none";
-  });
 }
 
 function renderAll(data) {
@@ -269,13 +284,9 @@ function renderAll(data) {
   renderConcentration(data, holdings);
   renderSecurityAllocation(holdings);
 
-  const allScope = currentScope === "all";
-  setAllScopeCardsVisible(allScope);
-  if (allScope) {
-    renderAssetClass(data);
-    renderAccountAllocation(data);
-    renderGeographicExposure(data);
-  }
+  renderAssetClass(data);
+  renderAccountAllocation(data);
+  renderGeographicExposure(data);
 }
 
 /* ---------- Holdings Update workflow (unchanged from Portfolio Detail) ----------
@@ -415,7 +426,7 @@ async function init() {
   initHoldingUpdateModal();
 
   renderTopbar($("topbar"), user, {
-    heading: "Portfolio",
+    heading: "Holdings",
     subtitle: "What you own, and how it's distributed.",
   });
   initNavigation(user);

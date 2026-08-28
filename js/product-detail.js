@@ -160,6 +160,13 @@ function yourPositionHTML(holding) {
   if (!holding) return "";
   const owner = isOwnerMode();
   const tone = holding.returnAvailable ? (holding.returnPct > 0 ? "up" : holding.returnPct < 0 ? "down" : "text-muted") : "text-muted";
+  // holding can now be a fully-exited position (value === 0, from
+  // allHoldings - see the caller's own comment) - flagged explicitly so
+  // "Value €0, Weight 0.00%" reads as "you closed this position", not
+  // as a data error or a security you never actually held.
+  const closedNote = holding.value === 0
+    ? `<p class="section-hint pd-closed-note">Fully exited - this position no longer contributes to your portfolio. Your Return below is the real cash-flow-neutral return you earned while you held it.</p>`
+    : "";
   return `
     <section class="card glass interactive" id="pd-your-position-card">
       <div class="card-header">
@@ -167,6 +174,7 @@ function yourPositionHTML(holding) {
           <h2 class="section-title">Your Position</h2>
         </div>
       </div>
+      ${closedNote}
       <div class="pd-stat-row">
         ${owner ? `<div class="pd-stat"><span class="pd-stat-label">Value</span><span class="pd-stat-value">${formatMoney(holding.value)}</span></div>` : ""}
         <div class="pd-stat"><span class="pd-stat-label">Weight</span><span class="pd-stat-value">${holding.weight.toFixed(2)}%</span></div>
@@ -572,7 +580,14 @@ async function loadProductDetailPage() {
       getHistoricalPrices(id),
     ]);
     if (!product) { renderNotFound("This product doesn't have research data on file."); return; }
-    const holding = portfolioData ? portfolioData.portfolio.holdings.find((h) => h.id === id) || null : null;
+    // allHoldings, not holdings - holdings is filtered to current value
+    // !== 0 (analytics.js's own comment on that filter), which silently
+    // hid "Your Position" entirely for a fully-exited security (e.g. BPI
+    // Universal, real incident: an "auto: full exit" valuation zeroed it
+    // on 2026-08-23) instead of honestly showing what you held and how
+    // it performed while you held it. allHoldings carries every position
+    // ever held, closed or not - see that file's own comment.
+    const holding = portfolioData ? (portfolioData.portfolio.allHoldings || portfolioData.portfolio.holdings).find((h) => h.id === id) || null : null;
     const marketAnalytics = securityMarketAnalytics(product.securities, priceHistory);
     renderProduct(product, holding, marketAnalytics);
   } catch (err) {

@@ -22,7 +22,7 @@
 update public.securities set sub_portfolio = 'BPI Dinâmico'
   where name = 'BPI Dinâmico';
 
-update public.securities set sub_portfolio = 'ETF Portfolio'
+update public.securities set sub_portfolio = 'Global Factor Tilt'
   where name in (
     'UBS Core MSCI World (Acc)',
     'Avantis Global Small Cap Value (Acc)',
@@ -30,5 +30,5 @@ update public.securities set sub_portfolio = 'ETF Portfolio'
     'SPDR MSCI Emerging Markets (Acc)'
   );
 
--- Verification - expect exactly 5 rows: 1 'BPI Dinâmico' + 4 'ETF Portfolio'.
+-- Verification - expect exactly 5 rows: 1 'BPI Dinâmico' + 4 'Global Factor Tilt'.
 select name, sub_portfolio from public.securities where sub_portfolio is not null order by sub_portfolio, name;

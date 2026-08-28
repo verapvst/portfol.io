@@ -118,7 +118,7 @@ function renderAllocationSummary(container, data) {
         ${topRegion ? `<span>${topRegion.name} <b>${topRegion.weight.toFixed(1)}%</b></span>` : ""}
         ${topCountry ? `<span>${topCountry.name} <b>${topCountry.weight.toFixed(1)}%</b></span>` : ""}
       </div>` : ""}
-    <a class="link-more" href="portfolio.html">View Portfolio ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="portfolio.html">View Holdings ${icon("arrowRight")}</a>`;
 
   renderDonut(container.querySelector("#allocation-donut"), items, "Asset Class", `${total.toFixed(1)}%`, { drillType: "assetClass" });
 }
@@ -177,7 +177,7 @@ function renderHoldingsTable(container, holdings, accounts = []) {
         <tbody>${top5.map((h) => holdingsRowHTML(h, accountNameById[h.accountId])).join("")}</tbody>
       </table>
     </div>
-    <a class="link-more" href="portfolio.html">View Portfolio ${icon("arrowRight")}</a>`;
+    <a class="link-more" href="portfolio.html">View Holdings ${icon("arrowRight")}</a>`;
 }
 
 /* ---------- Exposure ----------
@@ -224,12 +224,21 @@ function exposureRegionData(data) {
 /** Real countries with their own map dot, plus one honest aggregate row
     for the real weight that genuinely isn't attributable to a single
     country (a "European Union" bond, an MSCI World tracker, ...) - not
-    a placeholder, a real number with no country to paint it on. */
+    a placeholder, a real number with no country to paint it on.
+
+    Every legend dot is the SAME flat brand gradient now, not a
+    magnitude- or category-tinted one - this is a density map, the real
+    signal already lives in the hex opacity/intensity on the map itself
+    (and the % value right next to each dot), so a per-row varying dot
+    color was implying a second, finer-grained scale that didn't
+    actually correspond to anything legible (most countries are a small
+    fraction of the largest one, so nearly every dot rendered as the
+    same pale shade anyway - not useful, just noisy). The dot is a plain
+    bullet marker here, same as it always should have been. */
 function renderCountryLegend(container, mapEl, data) {
-  const maxWeight = data.analytics.countries.length ? Math.max(...data.analytics.countries.map((c) => c.weight)) : 0;
   const countryRows = data.analytics.countries.map((c) => `
     <div class="legend-row drill-row" data-drill-type="country" data-drill-id="${c.iso}" data-code="${String(c.iso).padStart(3, "0")}" tabindex="0" role="button">
-      <span class="legend-dot" style="background:${interpolatePrimaryGradient(c.weight / maxWeight)}"></span>
+      <span class="legend-dot" style="background:var(--gradient-brand)"></span>
       <span class="legend-name">${c.name}</span>
       <span class="legend-value">${c.weight.toFixed(2)}%</span>
     </div>`).join("");
@@ -249,13 +258,22 @@ function renderCountryLegend(container, mapEl, data) {
   });
 }
 
+/** Used to tint each region a distinct categorical hue (r.tone) - looked
+    like it meant something, but the MAP itself never drew regions in
+    those hues at all (renderWorldMap only ever paints by intensity
+    along the one brand gradient, per-country, regardless of grouping -
+    see that function's own comment). A "Europe" legend dot in blue and
+    an "Asia" one in pink, sitting over a map that only ever shows
+    shades of one orange/coral gradient, is exactly the "colors don't
+    make sense" mismatch - same flat dot as the Country tab now, for the
+    same reason. */
 function renderRegionLegend(container, mapEl, data) {
   const countryRegions = exposureRegionData(data);
   container.innerHTML = data.analytics.regions.map((r) => {
     const codes = countryRegions.filter((c) => c.region === r.name).map((c) => c.code);
     return `
       <div class="legend-row drill-row" data-drill-type="region" data-drill-id="${r.name}" data-codes="${codes.join(",")}" tabindex="0" role="button">
-        <span class="legend-dot" style="background:${familyGradientCSS(r.tone)}"></span>
+        <span class="legend-dot" style="background:var(--gradient-brand)"></span>
         <span class="legend-name">${r.name}</span>
         <span class="legend-value">${r.weight.toFixed(2)}%</span>
       </div>`;

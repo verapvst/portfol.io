@@ -163,8 +163,29 @@ const NAV_CATEGORIES = [
       // Architecture Re-Think, this session's audit) - both read the
       // exact same getPortfolioDataAuto() data, so two nav entries for
       // "what do I own" was surface area without a real distinction.
-      { label: "Portfolio", href: "portfolio.html" },
+      // Labelled "Holdings", not "Portfolio" - the CATEGORY above this
+      // item is already "Portfolio" (it covers Overview/Holdings/
+      // Performance/Capital, genuinely everything), so a second
+      // "Portfolio" one level down for specifically "what do I own"
+      // was confusing about which one it meant. File stays
+      // portfolio.html - only the nav label and page heading changed,
+      // not the URL (avoids breaking any existing link/bookmark to it).
+      { label: "Holdings", href: "portfolio.html" },
+      // Performance & Capital split (this session): two different
+      // questions that used to share one page - Performance is "how has
+      // it done" (returns, scope-aware: TWR/XIRR/Annual Returns/
+      // Benchmark Comparison/Risk & Quant Metrics), Capital is "how much
+      // is here" (Contributions/Invested Capital/Unrealised Gain/
+      // Portfolio Value Over Time, always whole-portfolio). Two nav
+      // entries, not a tab toggle inside one page, matching how every
+      // other top-level question in this app already gets its own page.
       { label: "Performance", href: "performance.html" },
+      { label: "Capital", href: "capital.html" },
+      // Chronological layer connecting the pages above ("what happened,
+      // and when" - the other pages each answer a different, non-
+      // chronological question about the same underlying data). A
+      // DERIVED view (calendar-events.js), never a new source of truth.
+      { label: "Calendar", href: "calendar.html" },
     ],
   },
   {
@@ -571,8 +592,8 @@ const METRIC_DOCS = {
   },
   "allocation-asset-class": {
     definition: "How the portfolio splits across broad asset classes (Equities, Bonds, Cash, Alternatives) - the highest-level view of what kind of risk the portfolio is actually taking, independent of which product or account holds it.",
-    calculation: "Each holding's market value classified by asset class and summed as a percentage of total portfolio value. A fund-of-funds (e.g. BPI Dinâmico) contributes its own disclosed internal split, scaled by its own share of the total portfolio, rather than being counted as one opaque \"Fund\" bucket - blended with every directly-held security's own class. Recomputed from current positions on every load, never read from a stored percentage.",
-    source: "analytics.assetClassAllocation, from portfolio.holdings + BPI Dinâmico's internal split (source: BPI Ficha Mensal, June 2026 - see docs/migration-plan.md §3.3, not yet migrated to a live Supabase Allocations table, Phase 4/5).",
+    calculation: "Each holding's REAL, LIVE weight blended with its own known composition (a per-security lookup, not a stored portfolio-level percentage) and summed per class. A fund-of-funds (e.g. BPI Dinâmico, BPI Universal) contributes its own disclosed internal split scaled by its own weight - each fund is kept separate here (see this metric's drill-down for the per-holding breakdown), never blended into one combined \"BPI\" number. A holding with no known composition yet falls into \"Unclassified\", never a guessed split. Recomputed from current positions on every load.",
+    source: "analytics.js:computeAssetClassAllocation(), from portfolio.holdings + SECURITY_ASSET_CLASS_SPLIT (a hand-kept lookup of each fund/ETF's own real composition - BPI Dinâmico from its June 2026 monthly factsheet, BPI Universal from its declared benchmark mandate, Trading 212's ETFs from their own fund fact sheets). Interim source until Data Hub's BPI Monthly Factsheet/Detailed Portfolio uploads (security_details.top_holdings/all_holdings, 0011/0012) are wired up to feed this directly - a separate, larger piece of work.",
   },
   "allocation-security": {
     definition: "Weight of every individual holding (fund, ETF, stock, cash) as a share of the current scope's value (All Portfolio, or just the selected account) - the most granular view, one step up from this same page's own Holdings table.",
@@ -635,9 +656,9 @@ const METRIC_DOCS = {
     source: "analytics.performance.accountPerformance / strategyPerformance / securityPerformance, computed in analytics.js from the same valuations/transactions as everything else - one engine, not a page-local recalculation. \"Insufficient history\" shows instead of a fabricated 0% when this scope has fewer than 2 dated observations yet, or (for accounts, calculations.js:MIN_DAYS_FOR_ACCOUNT_RETURN) fewer than 30 real days of history - a brand-new account's first return is real but overconfident to headline this early, added after Trading 212's own first 11 days produced exactly that case.",
   },
   "contributions": {
-    definition: "How much money you've personally put in, separate from how well it's performed. Total Contributions/Withdrawals are real deposit/withdrawal transactions only - a Buy is NOT counted here, since it's an internal move from cash into a security, not new money entering the portfolio (see calculations.js:PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES). Investment Gains = Current Value − Net Contributions, a genuinely different figure from the Unrealised Gain tile above (which is measured against invested capital/cost basis, not net external cash flow) - both are correct, they answer different questions.",
-    calculation: "netContributions = contributionsTotal − withdrawalsTotal; investmentGains = totalValue − netContributions. No new calculation engine - every input is a field analytics.js already computes for other parts of this page.",
-    source: "analytics.performance.contributionsTotal/withdrawalsTotal/totalValue. If no deposit/withdrawal transactions are recorded yet, Net Contributions reads €0 and Investment Gains equals the portfolio's full value - flagged with an explicit note rather than presented as a real growth figure.",
+    definition: "How much money you've personally put in, separate from how well it's performed (Performance & Capital split - this card lives on the Capital page, returns live on Performance). Total Contributions/Withdrawals are real deposit/withdrawal transactions only - a Buy is NOT counted here, since it's an internal move from cash into a security, not new money entering the portfolio (see calculations.js:PORTFOLIO_EXTERNAL_CASH_FLOW_TYPES). Investment Gains = Current Value − Net Contributions, a genuinely different figure from Unrealised Gain further down this same card (which is measured against Invested Capital/cost basis, not net external cash flow) - both are correct, they answer different questions.",
+    calculation: "netContributions = contributionsTotal − withdrawalsTotal; investmentGains = totalValue − netContributions; unrealisedGain = totalValue − investedCapital. No new calculation engine - every input is a field analytics.js already computes.",
+    source: "analytics.performance.contributionsTotal/withdrawalsTotal/totalValue/investedCapital/unrealisedGain. If no deposit/withdrawal transactions are recorded yet, Net Contributions reads €0 and Investment Gains equals the portfolio's full value - flagged with an explicit note rather than presented as a real growth figure.",
   },
   "quant-risk-metrics": {
     definition: "How the portfolio behaved statistically, not just what it returned - Volatility and Max Drawdown describe how bumpy the ride was, Sharpe and Sortino ask whether the return was worth that bumpiness, Beta/Alpha/Correlation ask how the portfolio moved relative to the S&P 500. Each tile shows its own honest \"Insufficient history\" independently - a metric needing more real data than another isn't blocked by that other one.",
@@ -733,6 +754,59 @@ const METRIC_DOCS = {
     definition: "What this fund/ETF currently holds - Asset Mix, Geographic Exposure, and (where a real factsheet has been imported) a Top Holdings list. Current state only, never a history of past months' compositions - importing a new factsheet replaces this wholesale rather than accumulating one row per holding per month, since nothing in this app currently has an analytical use for that history.",
     calculation: "Asset Mix / Geographic Exposure: no calculation - real percentages from the product's own reference data. Top Holdings: no calculation either - the ranked list as printed on the source factsheet, parsed but not reweighted or filtered.",
     source: "Asset Mix/Geographic Exposure: security_details (allocation_as_of). Top Holdings: security_details.top_holdings, written by js/data-hub.js's Data Hub import (composition_as_of = the factsheet's own reporting date, never the import date) - see that card's own \"Data as of\"/\"Imported\" captions for this specific security's actual dates. Genuinely absent (not a placeholder) until a factsheet has actually been imported for this security.",
+  },
+
+  /* ---------- Costs page (redesigned 2026-08-28) ----------
+     Costs Engine: calculations.js. THE distinction every entry below
+     keeps making explicit: a fund/ETF's own TER (nav_embedded = true)
+     is already netted out of the NAV/price this app reads elsewhere -
+     it feeds the ONGOING cost rate, never "money paid". Only a real,
+     separate cash cost (nav_embedded = false - a commission, an account
+     fee) is ever summed as historically paid. */
+  "cost-current": {
+    definition: "What your portfolio costs to run TODAY - forward-looking, not a record of money already spent. Annual Cost/Monthly Equivalent are € estimates; Portfolio Cost Rate is the %-of-value version of the same figure. All three move only when your holdings or their known cost rates change, never day to day.",
+    calculation: "Σ(each current holding's weight × its own known ongoing cost rate) = Portfolio Cost Rate. Annual Cost = current portfolio value × that rate, plus any real recurring cash platform cost (see \"Where your costs come from\"). Monthly Equivalent = Annual Cost ÷ 12. A holding with no known cost rate contributes nothing and is excluded from coveragePct, never assumed to cost 0%.",
+    source: "calculations.js:computeCurrentPortfolioCost(), from portfolio.holdings' real live weights + costs rows (nav_embedded = true, unit = '%', security-scoped) - see supabase/migrations/0030_seed_real_costs.sql for where today's real cost figures came from.",
+  },
+  "cost-annual": {
+    definition: "The € version of Portfolio Cost Rate - what your current holdings are estimated to cost per year (or per month), at today's portfolio value and today's known cost rates.",
+    calculation: "Current portfolio value × Portfolio Cost Rate, plus any real recurring cash platform cost. Monthly Equivalent is simply this ÷ 12 - not a separately tracked monthly figure.",
+    source: "calculations.js:computeCurrentPortfolioCost().productAnnualEUR/platformAnnualEUR/totalAnnualEUR/monthlyEquivalentEUR.",
+  },
+  "cost-rate": {
+    definition: "The weighted-average annual ongoing cost rate of your CURRENT portfolio - a %, not a €. \"Weighted\" means a holding's own cost rate counts in proportion to how much of your portfolio it actually is, not equally with every other holding.",
+    calculation: "Σ(holding weight × its own known cost rate). Only NAV-embedded, %-denominated, security-level cost rows contribute (a fund's TER, management or depositary fee) - a real cash platform fee is tracked separately, not blended into this rate.",
+    source: "calculations.js:weightedCostRateAsOf(), from portfolio.holdings + costs (nav_embedded = true rows).",
+  },
+  "cost-breakdown": {
+    definition: "Two different splits of the same current ongoing cost: Product vs. Platform (what KIND of cost it is), and by holding (WHICH investment it comes from). A holding can have a high cost rate but a small absolute contribution if it's a small position, or vice versa - both facts are real and neither alone tells the full story.",
+    calculation: "Product costs = the full weighted cost rate's € estimate (every NAV-embedded fee, already reflected in each fund/ETF's own price). Platform & transaction costs = real, separate recurring cash fees (EUR-denominated, annualised by their own frequency) - kept apart on purpose, never blended into one number that would hide which kind of cost dominates. Per-holding bars show each holding's own € contribution, ranked largest first.",
+    source: "calculations.js:computeCurrentPortfolioCost() - byHolding/platformItems.",
+  },
+  "cost-historical": {
+    definition: "What you have ACTUALLY paid, in real €, so far - a completely different question from the current ongoing cost rate above. Only real, separate cash costs count (a brokerage commission, an account/custody fee that isn't already netted into a fund's own NAV) - never an embedded TER, which was never a separate payment to begin with.",
+    calculation: "Each real cash cost row contributes across the real date range it was actually in effect (its own date until a later row for the same security/account+cost name supersedes it, or through today if it never has) - a 'One-off' row contributes once, on its own date; a recurring one is annualised and applied over its elapsed real period, using real portfolio value where a %-based rate needs one. Running total shown as a cumulative chart.",
+    source: "calculations.js:computeHistoricalCashCosts(), from costs rows where nav_embedded = false only. Reads null (not €0) - \"None recorded yet\" - when no real cash cost has ever been recorded, which is this app's honest starting state until one is.",
+  },
+  "cost-annual-breakdown": {
+    definition: "How much this portfolio has cost, per real calendar year, since you started - unlike \"Costs actually paid\" above, this INCLUDES an estimate of embedded fees (a fund's own TER) for the years you actually held it, not just real cash. embeddedEUR is always an estimate, never money verified to have separately left the account - kept in its own column, never blended silently into a single \"paid\" figure.",
+    calculation: "Each cost row's real effective period (same rules as \"Costs actually paid\") is split PROPORTIONALLY across every calendar year it spans, weighted by real day-overlap - a fee recorded once but held for years contributes to every one of those years, not lump-summed into whichever year it happens to end in. The first row for a security is extended backward to that security's own earliest real valuation, so one known cost snapshot estimates its whole held history rather than showing years of blank €0 before the day it was recorded.",
+    source: "calculations.js:computeAnnualCostBreakdown().",
+  },
+  "cost-evolution": {
+    definition: "Has your portfolio's ongoing cost rate changed over time? The SAME weighted cost rate calculation as \"today\", re-computed at every real historical valuation date - not a projection, not smoothed between points.",
+    calculation: "calculations.js:weightedCostRateAsOf(), re-run at each real observation date using that date's own real holding weights and whichever cost rate was actually known as of that date (a cost record dated after that day is never used before it was actually known). If only ONE cost record has ever existed for a holding, it's treated as the best available estimate for that holding's entire known history, not just from its own recorded date forward - flagged internally (assumedFromEarliest) rather than presented as a rate genuinely dated that far back.",
+    source: "calculations.js:computeCostEvolution().",
+  },
+  "cost-at-size": {
+    definition: "What today's weighted cost rate would mean in € at portfolio sizes other than your own real current one - purely illustrative, to make a %-based rate more tangible. Not a projection of what your own portfolio will actually be worth.",
+    calculation: "Portfolio size × today's Portfolio Cost Rate, at a handful of round illustrative sizes.",
+    source: "Uses calculations.js:computeCurrentPortfolioCost().weightedCostPct directly - no new calculation.",
+  },
+  "nav-embedded": {
+    definition: "Whether this specific cost row is already reflected in the security's own NAV/price (a fund's TER, management or depositary fee - \"Embedded\") or a real, separate amount that actually left the account (a brokerage commission, an account fee - \"Cash\"). Set explicitly per row, never guessed.",
+    calculation: "No calculation - a fact recorded when the cost row was added (costs.nav_embedded).",
+    source: "costs.nav_embedded (supabase/migrations/0030_seed_real_costs.sql) - determines whether a cost feeds the ongoing cost rate (Embedded) or the historical cash-costs total (Cash), never both.",
   },
 };
 
@@ -925,7 +999,15 @@ function performanceDrill(data) {
 }
 
 async function holdingDrill(id, data) {
-  const h = data.portfolio.holdings.find((x) => x.id === id);
+  // allHoldings, not holdings - see analytics.js's own comment on that
+  // field. Every row this drawer is actually opened FROM today
+  // (Holdings table, Top Concentrations, Security Allocation) already
+  // only lists current, non-zero holdings, so this rarely changes what
+  // renders in practice - it's here so a closed position never silently
+  // resolves to "" if something ever does link to one (e.g. a future
+  // history view), instead of duplicating the filtered lookup this
+  // drawer had before.
+  const h = (data.portfolio.allHoldings || data.portfolio.holdings).find((x) => x.id === id);
   if (!h) return { icon: "pieChart", title: "Holding", bodyHTML: "" };
   const account = data.portfolio.accounts.find((a) => a.id === h.accountId);
   // Avg. Cost Basis / Unrealised P&L: Private-only, per
@@ -981,31 +1063,23 @@ async function holdingDrill(id, data) {
 
 function assetClassDrill(name, data) {
   const item = data.analytics.assetClassAllocation.find((a) => a.name === name);
-  // Looked up by name -> real account id, same fix as accountDrill()
-  // above needed for the same reason: a real Supabase account id is a
-  // UUID, never the mock's hardcoded "bpi" literal. This one was missed
-  // when that fix landed - on live data every holding's accountId
-  // (including BPI Dinâmico's own) is trivially !== "bpi", so
-  // t212Holdings wrongly included BPI Dinâmico itself, t212Total wrongly
-  // summed close to 100%, and bpiPortion (item.weight - t212Total) went
-  // sharply negative - the exact "Equities = -42%" bug this fixes.
-  const bpiAccount = data.portfolio.accounts.find((a) => a.name === "BPI");
-  const t212Holdings = data.portfolio.holdings.filter((h) => h.accountId !== bpiAccount?.id);
-  // Every class except Equities comes entirely from BPI Dinâmico's own
-  // internal split (Trading212 is 100% equity ETFs, a real fact) - so
-  // BPI shows as one "portion" row, not a fabricated per-holding split
-  // the workbook doesn't have. Equities blends that portion with every
-  // real T212 holding, which the workbook does have individually.
-  const t212Total = t212Holdings.reduce((s, h) => s + h.weight, 0);
-  const bpiPortion = item ? Math.round((item.weight - (name === "Equities" ? t212Total : 0)) * 100) / 100 : 0;
-  const rows = name === "Equities"
-    ? [rowHTML("BPI Dinâmico (equity portion)", `${bpiPortion.toFixed(2)}%`), ...t212Holdings.map((h) => rowHTML(h.name, `${h.weight.toFixed(1)}%`))]
-    : [rowHTML("BPI Dinâmico (this class only)", `${bpiPortion.toFixed(2)}%`)];
+  // byHolding: analytics.js:computeAssetClassAllocation()'s own real,
+  // per-security breakdown - each holding's REAL contribution to this
+  // class (its own known composition x its own live weight), never a
+  // hand-derived "whatever's left over after subtracting Trading212"
+  // approximation. This is what fixed BPI Dinâmico and BPI Universal
+  // (Fundo) showing as one blended "BPI" row (real bug, caught
+  // 2026-08-28): they're two genuinely different funds with two
+  // genuinely different real compositions, and now render as two
+  // separate rows with two separate real numbers, each labelled with
+  // its own source (a live monthly factsheet vs. a declared benchmark
+  // mandate - not the same kind of fact, so never blended silently).
+  const rows = (item?.byHolding || []).map((h) => rowHTML(`${h.name}${h.source ? ` — ${h.source}` : ""}`, `${h.weight.toFixed(2)}%`));
   return {
     icon: "pieChart", title: name, subtitle: item ? `${item.weight.toFixed(2)}% of portfolio` : "",
     bodyHTML: `
       <div class="drawer-rows">${rows.join("")}</div>
-      ${comingSoon(["Historical evolution of this class"])}`,
+      ${comingSoon(["Historical evolution of this class", "Composition sourced from Data Hub's BPI Monthly Factsheet/Detailed Portfolio uploads, once wired up"])}`,
   };
 }
 

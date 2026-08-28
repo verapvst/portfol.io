@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=118">
-<link rel="stylesheet" href="css/layout.css?v=118">
-<link rel="stylesheet" href="css/components.css?v=118">
-<link rel="stylesheet" href="css/costs.css?v=118">
+<link rel="stylesheet" href="css/theme.css?v=135">
+<link rel="stylesheet" href="css/layout.css?v=135">
+<link rel="stylesheet" href="css/components.css?v=135">
+<link rel="stylesheet" href="css/costs.css?v=135">
 </head>
 <body>
 <div id="app">
@@ -18,32 +18,137 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <section class="card glass" id="costs-card">
-      <div class="card-header costs-card-header-row">
-        <div class="card-header-title">
-          <h2 class="section-title">Costs</h2>
+    <div id="costs-signedout-slot"></div>
+
+    <!-- Everything below is signed-in only (same gate the old flat-table
+         page already had - costs are financial-sensitive, no Showcase
+         variant, matching Transactions/Accounts' own precedent). Kept
+         in the DOM and toggled visible, not built fresh each time, so
+         chart resize handlers etc. don't need re-wiring on every
+         sign-in. -->
+    <div id="costs-signedin" hidden>
+
+      <!-- Hero: "what am I paying today" - the one thing this page
+           should answer within a few seconds (this file's own design
+           brief, §14/§20). Forward-looking/estimated, labelled as such -
+           never confused with the actual recorded historical figure
+           two cards down. -->
+      <section class="card glass interactive" id="cost-hero-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="cost-current" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">What you're paying today</h2>
+          </div>
         </div>
-        <button class="add-cost-btn" id="add-cost-btn" type="button">+ Add Cost</button>
-      </div>
-      <p class="section-hint">TERs, custody fees, commissions — reads and writes Supabase directly. Insert-only: a changed fee is a new dated row, not an edit.</p>
-      <div class="costs-toolbar">
-        <select id="costs-filter-category"><option value="">All categories</option></select>
-      </div>
-      <div id="costs-table-container"></div>
-    </section>
+        <p class="section-hint">Forward-looking estimate, based on your current holdings and their known ongoing costs.</p>
+        <div class="cost-kpi-grid" id="cost-kpi-grid"></div>
+      </section>
+
+      <!-- "Where are my costs coming from?" - product vs platform split
+           + per-holding breakdown, the two views the design brief calls
+           the most useful next question (§5/§6). -->
+      <section class="card glass interactive" id="cost-breakdown-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="cost-breakdown" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">Where your costs come from</h2>
+          </div>
+        </div>
+        <div id="cost-breakdown-body"></div>
+      </section>
+
+      <!-- "What have I actually paid?" - deliberately separate from the
+           hero's forward-looking estimate (§7). Only real, recorded
+           cash costs - never an embedded TER presented as money paid. -->
+      <section class="card glass interactive" id="cost-historical-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="cost-historical" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">Costs actually paid</h2>
+          </div>
+        </div>
+        <div id="cost-historical-body"></div>
+      </section>
+
+      <!-- "How much has this cost me, per year, since I started?" -
+           embedded (estimated) + cash costs, kept in separate columns,
+           broken down by real calendar year (added per the app owner's
+           own follow-up request, 2026-08-28). Deliberately its own card,
+           not folded into "Costs actually paid" above - it answers a
+           different question (includes an ESTIMATE of embedded fees,
+           that card is real cash only) and conflating the two would
+           blur exactly the distinction this whole page is built to keep
+           clear. -->
+      <section class="card glass interactive" id="cost-annual-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="cost-annual-breakdown" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">Estimated cost per year</h2>
+          </div>
+        </div>
+        <p class="section-hint" id="cost-annual-note"></p>
+        <div id="cost-annual-body"></div>
+      </section>
+
+      <!-- "Has your portfolio become cheaper?" - the weighted ongoing
+           rate re-computed at every real historical observation (§9). -->
+      <section class="card glass interactive" id="cost-evolution-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="cost-evolution" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">Cost rate over time</h2>
+          </div>
+        </div>
+        <p class="section-hint" id="cost-evolution-insight"></p>
+        <div id="cost-evolution-chart"></div>
+      </section>
+
+      <!-- Optional per the design brief (§10) - makes a %-based rate
+           tangible in €, at portfolio sizes other than the real current
+           one. Purely illustrative, uses today's own weighted rate. -->
+      <section class="card glass interactive" id="cost-at-size-card" hidden>
+        <div class="card-header">
+          <div class="card-header-title" data-info="cost-at-size" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">What this rate means at different sizes</h2>
+          </div>
+        </div>
+        <div id="cost-at-size-body"></div>
+      </section>
+
+      <!-- Raw records - secondary, collapsed by default (§15). The
+           existing insert-only Add Cost workflow lives entirely inside
+           here, unchanged in behaviour. -->
+      <details id="cost-records-details">
+        <summary class="cost-records-summary">
+          <span>Cost assumptions &amp; records</span>
+          <span class="cost-records-toggle-hint"></span>
+        </summary>
+        <section class="card glass" id="cost-records-card">
+          <div class="card-header costs-card-header-row">
+            <p class="section-hint">TERs, custody fees, commissions — reads and writes Supabase directly. Insert-only: a changed fee is a new dated row, not an edit.</p>
+            <button class="add-cost-btn" id="add-cost-btn" type="button">+ Add Cost</button>
+          </div>
+          <div class="costs-toolbar">
+            <select id="costs-filter-category"><option value="">All categories</option></select>
+          </div>
+          <div id="costs-table-container"></div>
+        </section>
+      </details>
+
+    </div>
 
   </main>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=118"></script>
-<script src="js/supabaseClient.js?v=118"></script>
+<script src="js/supabaseConfig.js?v=135"></script>
+<script src="js/supabaseClient.js?v=135"></script>
 
-<script src="js/utils.js?v=118"></script>
-<script src="js/shell.js?v=118"></script>
-<script src="js/auth.js?v=118"></script>
-<script src="js/db.js?v=118"></script>
-<script src="js/costs.js?v=118"></script>
+<script src="js/utils.js?v=135"></script>
+<script src="js/calculations.js?v=135"></script>
+<script src="js/repository.js?v=135"></script>
+
+<script src="js/charts.js?v=135"></script>
+<script src="js/shell.js?v=135"></script>
+<script src="js/auth.js?v=135"></script>
+<script src="js/db.js?v=135"></script>
+<script src="js/analytics.js?v=135"></script>
+<script src="js/costs.js?v=135"></script>
 </body>
 </html>

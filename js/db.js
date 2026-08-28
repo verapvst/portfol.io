@@ -143,6 +143,25 @@ async function recordValuations(rows) {
     only: was this checkpoint recorded, and by what method). limit
     caps distinct dates, not rows - one weekly check-in can touch many
     securities on the same date. */
+/** Every cost row for this portfolio - the same insert-only/effective-
+    date table costs.js's own loadCosts() already reads for the raw
+    table, exposed here too so analytics.js's cost-calculation layer
+    (calculations.js) can compute the current weighted cost rate and
+    historical cash-cost totals from the exact same real rows, never a
+    second query with different filtering. Ordered oldest-first (unlike
+    costs.js's own newest-first table view) since every consumer here
+    needs to resolve "latest row as of a date" by scanning forward. */
+async function getCosts(portfolioId) {
+  const { data, error } = await window.db
+    .from("costs")
+    .select("*")
+    .eq("portfolio_id", portfolioId)
+    .order("date", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
 async function getRecentWeeklyCheckinDates(limit = 8) {
   const { data, error } = await window.db
     .from("valuations")

@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=118">
-<link rel="stylesheet" href="css/layout.css?v=118">
-<link rel="stylesheet" href="css/components.css?v=118">
-<link rel="stylesheet" href="css/performance.css?v=118">
+<link rel="stylesheet" href="css/theme.css?v=135">
+<link rel="stylesheet" href="css/layout.css?v=135">
+<link rel="stylesheet" href="css/components.css?v=135">
+<link rel="stylesheet" href="css/performance.css?v=135">
 </head>
 <body>
 <div id="app">
@@ -30,29 +30,15 @@
          type is selected. Same .filter-pill primitive as Portfolio
          page's own scope row (js/portfolio.js:renderScopeSelector()).
          Controls the stat tiles, Annual Returns, Benchmark Comparison
-         and Risk & Quant Metrics below - deliberately NOT the Portfolio
-         Value Over Time chart just below it, which stays whole-portfolio
-         always (no per-scope raw € series exists in the data model; see
-         js/performance.js:renderScopeSelector()'s own comment). -->
+         and Risk & Quant Metrics below - the raw € Portfolio Value Over
+         Time chart moved to the Capital page (Performance & Capital
+         split) precisely because it has no per-scope series to be
+         controlled by this selector in the first place (no per-scope
+         raw € series exists in the data model). -->
     <section class="card glass interactive" id="perf-scope-card">
       <div class="filter-pills glass-quiet" id="perf-scope-type-row"></div>
       <div class="filter-pills glass-quiet" id="perf-scope-sub-row"></div>
       <p class="section-hint" id="perf-scope-hint"></p>
-    </section>
-
-    <!-- "How much money have I personally put in?" vs. "how well have
-         my investments performed?" (§14/§20 of the Performance &
-         Benchmark request) - built entirely from numbers analytics.js
-         already computes, no new calculation. Hidden for signed-out
-         visitors (totalValue is null on that path), same precedent as
-         Health/Insights on the Overview page. -->
-    <section class="card glass interactive" id="contributions-card" hidden>
-      <div class="card-header">
-        <div class="card-header-title" data-info="contributions" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title">Contributions</h2>
-        </div>
-      </div>
-      <div id="contributions-body"></div>
     </section>
 
     <!-- "How has my portfolio performed?" - per
@@ -62,40 +48,19 @@
          belongs on that security's own page once Securities and
          daily_prices are live) - see the info popover on each metric.
          Scope-aware: Total Return (TWR) reflects the selected scope;
-         Investor Return (XIRR) and Unrealised Gain are portfolio-only
-         concepts (no per-account cash-flow/cost-basis aggregation exists
-         yet) and are replaced with Volatility/Max Drawdown when an
-         account is selected, rather than shown as a fabricated or
-         silently-stale portfolio-wide number. Period-windowed by the row
+         Investor Return (XIRR) is a portfolio-only concept (no per-
+         account cash-flow aggregation exists yet) and is replaced with
+         Volatility/Max Drawdown when an account/strategy/security is
+         selected, rather than shown as a fabricated or silently-stale
+         portfolio-wide number. Unrealised Gain moved to the Capital page
+         (Performance & Capital split) - it's a € gain against cost
+         basis, not a %-return, so it now lives with Contributions/
+         Invested Capital instead of here. Period-windowed by the row
          below (1W/1M/3M/6M/YTD/1Y/Since Inception) - a different range
-         control from Portfolio Value Over Time's own filter-pills, on
-         purpose (js/performance.js's own comment on this). -->
+         control from Capital's own Portfolio Value Over Time filter-
+         pills, on purpose (js/capital.js's own comment on this). -->
     <div class="filter-pills glass-quiet" id="perf-scoped-range-row"></div>
     <div class="perf-stats-grid" id="perf-stats-grid"></div>
-
-    <section class="card glass interactive" id="performance-chart-card">
-      <div class="card-header">
-        <div class="card-header-title" data-info="investment-performance" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title">Portfolio Value Over Time</h2>
-        </div>
-        <div class="filter-pills glass-quiet" id="perf-filters"></div>
-      </div>
-      <div id="perf-linechart-container"></div>
-    </section>
-
-    <!-- Same chain-linked TWR primitive as the headline number above,
-         just sliced by calendar year (js/calculations.js:
-         annualReturns()) - not a second calculation method. Years with
-         no real growth signal yet (a data gap, not zero performance)
-         are labelled honestly rather than shown as a flat 0%. -->
-    <section class="card glass interactive" id="annual-returns-card">
-      <div class="card-header">
-        <div class="card-header-title" data-info="annual-returns" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title" id="annual-returns-title">Annual Returns</h2>
-        </div>
-      </div>
-      <div id="annual-returns-body"></div>
-    </section>
 
     <!-- Honest unavailable state, not a placeholder chart - no benchmark
          is configured and comparing to one needs daily_prices, which is
@@ -108,6 +73,25 @@
         </div>
       </div>
       <div id="benchmark-body"></div>
+    </section>
+
+    <!-- Same chain-linked TWR primitive as the headline number above,
+         just sliced by calendar year (js/calculations.js:
+         annualReturns()) - not a second calculation method. Years with
+         no real growth signal yet (a data gap, not zero performance)
+         are labelled honestly rather than shown as a flat 0%. Placed
+         after Benchmark Comparison (not before it) and laid out as a
+         compact horizontal strip - year on top, return underneath -
+         rather than one row per year, so a decade of history reads as a
+         glance-able ledger instead of a tall list (js/performance.js's
+         own renderAnnualReturns() comment on this). -->
+    <section class="card glass interactive" id="annual-returns-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="annual-returns" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title" id="annual-returns-title">Annual Returns</h2>
+        </div>
+      </div>
+      <div id="annual-returns-body"></div>
     </section>
 
     <!-- Phase 3 (Product & Architecture Re-Think plan §12) - Volatility/
@@ -131,18 +115,18 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=118"></script>
-<script src="js/supabaseClient.js?v=118"></script>
+<script src="js/supabaseConfig.js?v=135"></script>
+<script src="js/supabaseClient.js?v=135"></script>
 
-<script src="js/utils.js?v=118"></script>
-<script src="js/calculations.js?v=118"></script>
-<script src="js/repository.js?v=118"></script>
+<script src="js/utils.js?v=135"></script>
+<script src="js/calculations.js?v=135"></script>
+<script src="js/repository.js?v=135"></script>
 
-<script src="js/charts.js?v=118"></script>
-<script src="js/shell.js?v=118"></script>
-<script src="js/auth.js?v=118"></script>
-<script src="js/db.js?v=118"></script>
-<script src="js/analytics.js?v=118"></script>
-<script src="js/performance.js?v=118"></script>
+<script src="js/charts.js?v=135"></script>
+<script src="js/shell.js?v=135"></script>
+<script src="js/auth.js?v=135"></script>
+<script src="js/db.js?v=135"></script>
+<script src="js/analytics.js?v=135"></script>
+<script src="js/performance.js?v=135"></script>
 </body>
 </html>

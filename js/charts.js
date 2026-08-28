@@ -46,19 +46,19 @@ function renderLineChart(container, points, { formatValue = fmtEUR, formatAxisVa
   const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
   const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${padT + innerH} L${pts[0][0].toFixed(1)},${padT + innerH} Z`;
 
-  // Interpolated stretches (real:false - see repository.js/analytics.js)
-  // draw dashed, not solid, so a filled-in gap between two known values
-  // never reads as "observed" - the "future chart pass" the data's own
-  // `real` flag was always waiting for. `real` defaults to true when
-  // absent, so callers that never set it (every live Supabase series)
-  // draw one continuous solid line exactly as before.
+  // ONE continuous path for the whole line, not one <path> per segment.
+  // The per-segment version used to dash any stretch between two
+  // points where either was real:false (deriveNormalizedDailySeries()'s
+  // day-by-day smoothing marks most interior days that way) - besides
+  // the dashing, many short independent round-capped segments packed
+  // tightly together visually "bead up" into a dotted look even before
+  // dasharray enters into it (same root cause fixed in
+  // renderMultiLineChart() for the comparison chart). `real` is still
+  // honestly disclosed - the hover tooltip below says "(interpolated)"
+  // per point - just not via a broken line, which fights legibility
+  // more than it adds honesty once the tooltip already covers it.
   const hasInterpolated = points.some((p) => p.real === false);
-  const segmentPaths = pts.slice(1).map((p, i) => {
-    const prev = pts[i];
-    const interpolated = points[i].real === false || points[i + 1].real === false;
-    const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-    return `<path d="${d}" fill="none" stroke="url(#perfStroke)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
-  }).join("");
+  const segmentPaths = `<path d="${line}" fill="none" stroke="url(#perfStroke)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
 
   // Below €1K, "K" compact notation rounds everything to "€0K" - show
   // plain euros instead so a small, early-stage portfolio stays legible.
@@ -112,7 +112,7 @@ function renderLineChart(container, points, { formatValue = fmtEUR, formatAxisVa
       <circle id="linechart-hover-dot" r="4" fill="${dotColor}" stroke="#fff" stroke-width="1.5" opacity="0"/>
     </svg>
     <div class="chart-tooltip"></div>
-    ${hasInterpolated ? `<p class="chart-legend-note">- - - interpolated between known values</p>` : ""}`;
+    ${hasInterpolated ? `<p class="chart-legend-note">Hover a point for its date - some days between real checkpoints are smoothed for the chart, never fabricated (see tooltip)</p>` : ""}`;
 
   const tooltip = container.querySelector(".chart-tooltip");
   const hoverDot = container.querySelector("#linechart-hover-dot");
@@ -226,24 +226,35 @@ function renderMultiLineChart(container, series, { formatValue = (v) => v.toFixe
   const seriesSegments = sortedSeries.map((s) => {
     const pts = s.points.map((p) => [xFor(p.date), yFor(p.value)]);
     const isPortfolio = s.key === "portfolio";
-    const stroke = isPortfolio ? `url(#${gradId})` : s.color;
     // Portfolio leads visually (bolder, full-opacity brand gradient);
     // benchmarks stay thinner and slightly translucent so they read as
     // secondary reference lines, not competing series - the "clean
     // lines, subtle benchmark lines, stronger portfolio line" spec.
+    const stroke = isPortfolio ? `url(#${gradId})` : s.color;
     const strokeWidth = isPortfolio ? 3 : 1.5;
     const strokeOpacity = isPortfolio ? 1 : 0.7;
+
+    // Portfolio: ONE continuous path for the whole series, not one
+    // <path> per segment. With ~100+ short, nearly-flat month-to-month
+    // segments (BPI's real growth is genuinely gentle), many independent
+    // round-capped segments visually "bead up" into a dotted look even
+    // with zero stroke-dasharray - each segment's own rounded end-caps
+    // bulge slightly past its endpoints, and packed tightly together
+    // that reads as dots, not a line. A single path with round LINE
+    // JOINS (not per-segment caps) renders as one smooth solid stroke
+    // regardless of how many points make it up - matches renderLineChart
+    // (the single-series chart)'s own approach, and is deliberately
+    // never dashed: the day-by-day smoothing between real checkpoints
+    // is disclosed via the hover tooltip's "(derived)" text instead of
+    // a dashed line, which would fight this fix by reintroducing gaps.
+    if (isPortfolio) {
+      const d = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+      return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }
+
     return pts.slice(1).map((p, i) => {
       const prev = pts[i];
-      // Portfolio stays solid even across smoothed (real:false) days -
-      // the dash pattern is still the honest disclosure for hover
-      // tooltips ("(derived)") and for the single-series chart
-      // (renderLineChart's own legend note), but a mostly-dashed line
-      // here read as visually broken/uncertain next to the fully-solid
-      // benchmark lines, when the underlying return for every point is
-      // still a real, dated observation - only the day-by-day spread
-      // between checkpoints is synthetic, not the numbers themselves.
-      const interpolated = !isPortfolio && (s.points[i].real === false || s.points[i + 1].real === false);
+      const interpolated = s.points[i].real === false || s.points[i + 1].real === false;
       const d = `M${prev[0].toFixed(1)},${prev[1].toFixed(1)} L${p[0].toFixed(1)},${p[1].toFixed(1)}`;
       return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" stroke-linecap="round" stroke-linejoin="round"${interpolated ? ' stroke-dasharray="5 4"' : ""}/>`;
     }).join("");
@@ -496,9 +507,10 @@ async function renderWorldMap(container, exposureData) {
   };
 
   // ---- 2. Pointy-top hex grid over the whole canvas, small enough to
-  // read as a texture rather than individual cells (~120 hexes across
-  // the width, matching a "small hexagon" density). ----
-  const hexR = Math.max(3.2, width / 120);
+  // read as a texture rather than individual cells (~155 hexes across
+  // the width - bumped up from 120, a finer/smaller-hex texture per the
+  // app owner's own request, 2026-08-28). ----
+  const hexR = Math.max(2.6, width / 155);
   const hexDrawR = hexR * 0.8; // slightly smaller than the tiling pitch, for a visible gap between hexes
   const colSpacing = Math.sqrt(3) * hexR;
   const rowSpacing = 1.5 * hexR;

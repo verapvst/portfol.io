@@ -16,7 +16,9 @@
 /**
  * Contract - the returned object always has these domains:
  *
- *   portfolio: { holdings, accounts, cash, transactions }
+ *   portfolio: { holdings, allHoldings, accounts, cash, transactions }
+ *     (allHoldings is holdings PLUS any fully-exited position, current
+ *     value €0 - see analytics.js:getPortfolioDataLive()'s own comment)
  *   history:   { valueSeries, inceptionDate, benchmarks, marketData }
  *   analytics: { assetClassAllocation, productAllocation, accountAllocation,
  *                regions, countries, notCountrySpecificWeight, currency,
@@ -174,6 +176,25 @@ function getMockPortfolioData() {
     { id: "xdeq", name: "Xtrackers MSCI World Quality", ticker: "XDEQ", type: "ETF", accountId: "t212", value: 24.00, weight: 4.84, returnPct: 0, tone: tokenColor("asset", "XDEQ") },
     { id: "spym", name: "SPDR Emerging Markets", ticker: "SPYM", type: "ETF", accountId: "t212", value: 16.00, weight: 3.23, returnPct: 0, tone: tokenColor("asset", "SPYM") },
   ].map((h) => ({ ...h, ...unrealisedPnL(h.value, costBasisFromTransactions(holdingBuys[h.id] || [])) }));
+
+  // ---------- Costs (fallback-only - a rare, signed-in-load-failure
+  // path, so this stays deliberately simple, not the full engine) ----------
+  // Same real, sourced figures as supabase/migrations/0030_seed_real_costs.sql
+  // (see that migration's own comments for provenance) - reused here
+  // via the SAME calculations.js functions the live path calls, not a
+  // second cost formula. Only `current` is computed - `evolution`/
+  // `historical` need real securityHistories/dated cost rows this
+  // static mock was never built to model, so they honestly stay empty
+  // rather than a fabricated chart.
+  const MOCK_COST_ROWS = [
+    { security_id: "bpi-dinamico", date: "2026-06-30", cost_name: "TER", cost_category: "Management", unit: "%", value: 0.835, nav_embedded: true, source: "BPI Ficha Mensal, Jun 2026" },
+    { security_id: "bpi-dinamico", date: "2026-06-30", cost_name: "Depositary Fee", cost_category: "Custody", unit: "%", value: 0.090, nav_embedded: true, source: "BPI Ficha Mensal, Jun 2026" },
+    { security_id: "uetw", date: "2026-08-09", cost_name: "TER", cost_category: "Management", unit: "%", value: 0.06, nav_embedded: true, source: "Fund fact sheet (index tracker)" },
+    { security_id: "avws", date: "2026-08-09", cost_name: "TER", cost_category: "Management", unit: "%", value: 0.39, nav_embedded: true, source: "Fund fact sheet (factor ETF)" },
+    { security_id: "xdeq", date: "2026-08-09", cost_name: "TER", cost_category: "Management", unit: "%", value: 0.25, nav_embedded: true, source: "Fund fact sheet (factor ETF)" },
+    { security_id: "spym", date: "2026-08-09", cost_name: "TER", cost_category: "Management", unit: "%", value: 0.18, nav_embedded: true, source: "Fund fact sheet (index tracker)" },
+  ];
+  const currentCost = computeCurrentPortfolioCost(holdings, MOCK_COST_ROWS, totalValue, new Date().toISOString().slice(0, 10));
 
   const accountAllocation = accounts.map((a) => {
     const value = holdings.filter((h) => h.accountId === a.id).reduce((s, h) => s + h.value, 0);
@@ -420,7 +441,13 @@ function getMockPortfolioData() {
   };
 
   return {
-    portfolio: { holdings, accounts, cash, transactions },
+    // allHoldings: analytics.js:getPortfolioDataLive()'s own allHoldings
+    // field (every position ever held, including a fully-exited one) -
+    // this static mock has no closed positions to model, so it's simply
+    // the same array as holdings, kept only so consumers that read
+    // portfolio.allHoldings (product-detail.js, shell.js's holdingDrill())
+    // don't need a defensive fallback for this path.
+    portfolio: { holdings, allHoldings: holdings, accounts, cash, transactions },
     // marketData: real per-security price history (js/db.js:
     // getHistoricalPrices(), backed by daily_prices) - genuinely empty
     // here, not a stub to fill in later. Showcase/mock has no live
@@ -439,6 +466,7 @@ function getMockPortfolioData() {
       notCountrySpecificWeight,
       currency,
       health,
+      costs: { current: currentCost, evolution: [], historical: { totalEUR: null, byHolding: [], series: [], excluded: [] }, annual: [] },
       performance: {
         totalValue,
         investedCapital,

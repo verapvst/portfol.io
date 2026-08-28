@@ -45,105 +45,58 @@ function initPerformanceCard(data) {
   // to its sibling metric, not competing for space in the compact 2x2.
   $("perf-investor-return-value").textContent = fmtPct(perf.investorReturnPct);
 
-  // ---------- Performance chart: Portfolio vs. S&P 500 vs. Nasdaq-100 ----------
-  // Performance & Benchmark Engine plan, section 2/3/4/9: the portfolio
-  // line here is history.performanceSeries (scopedPerformance()'s own
-  // cash-flow-neutral normalized daily index), NEVER history.valueSeries
-  // (raw €, which jumps on every deposit/withdrawal - exactly the
-  // "€18,542 → +€4,000 looks like performance" confusion this feature
-  // exists to eliminate). Falls back to the old single-series chart only
-  // when performanceSeries isn't available (today: signed-out/public
-  // path - analytics.js's getPortfolioDataPublic() doesn't compute it,
-  // since its privacy-preserving RPCs never expose real cash-flow
-  // amounts to run Modified Dietz against).
-  const hasPerformanceSeries = data.history.performanceSeries && data.history.performanceSeries.length >= 2;
-  const availableBenchmarks = (data.history.benchmarks || []).filter((b) => b.series && b.series.length >= 2);
-
-  if (!hasPerformanceSeries) {
-    toggleRow.innerHTML = "";
-    const draw = () => {
-      // Monthly, same reasoning as the comparison-chart branch below -
-      // Overview shows a monthly trend regardless of how densely
-      // valuations were actually recorded. Resampled BEFORE the
-      // length check - a real gap that only reads as "enough history"
-      // at raw density must not slip through as a 1-point chart.
-      const monthly = monthlyResample(data.history.valueSeries);
-      if (monthly.length < 2) {
-        renderInsufficientData(container, "Not enough historical data yet to draw a trend.");
-        return;
-      }
-      const owner = isOwnerMode();
-      const points = owner ? monthly : indexValueSeries(monthly);
-      renderLineChart(container, points, {
-        formatValue: owner ? fmtEUR : (v) => String(Math.round(v)),
-        formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
-        formatDateLabel: formatDateTick,
-      });
-    };
-    draw();
-    if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
-    perfResizeHandler = draw;
-    window.addEventListener("resize", perfResizeHandler);
-    $("perf-more-link").innerHTML = `<a class="link-more" href="performance.html">View Performance ${icon("arrowRight")}</a>`;
-    return;
-  }
-
-  // Monthly cadence throughout - benchmarks are already monthly-only
-  // (0019), so this only actually downsamples the portfolio's own
-  // series; matches the two lines to the same visual density instead of
-  // a dense portfolio line next to 12-points-a-year benchmark dots.
-  const seriesDefs = [
-    { key: "portfolio", label: "Portfolio", color: PALETTE_TEXT.coral, points: monthlyResample(data.history.performanceSeries) },
-    ...availableBenchmarks.map((b) => ({
-      key: b.id, label: `${b.name}${b.symbol ? ` (${b.symbol})` : ""}${BENCHMARK_DATA_TYPE_LABEL[b.dataType] || ""}`,
-      color: BENCHMARK_SERIES_COLOR[b.id] || PALETTE_TEXT.green, points: monthlyResample(b.series),
-    })),
-  ];
-
-  // Toggle pills - all selected by default (checkboxes 1-9 of the
-  // original spec). Multi-select, not the mutually-exclusive
-  // .filter-pill pattern the Performance page's date range uses - any
-  // combination can be active, including just one series.
-  toggleRow.innerHTML = seriesDefs.map((s) =>
-    `<button class="benchmark-toggle-pill active" type="button" data-key="${s.key}"><span class="toggle-dot" style="background:${s.color}"></span>${s.label}</button>`
-  ).join("");
-
+  // ---------- Performance chart: the portfolio's own trend, nothing else ----------
+  // Overview deliberately shows ONLY the portfolio's own line now - no
+  // benchmark toggle pills, no Nasdaq/S&P 500 comparison. That richer
+  // "laboratory" (toggle benchmarks on/off, toggle scope between
+  // Portfolio/Accounts/Strategies/Securities, pick a period) lives on
+  // the Performance page (js/performance.js:renderBenchmarkSection()) -
+  // deliberate separation, per the app owner's own framing: Overview is
+  // "what is", Performance is "the dedicated analysis tool". Keeping a
+  // second, smaller copy of that same toggle UI here would only
+  // duplicate it at a size too small to be useful anyway.
+  //
+  // Uses history.performanceSeries (cash-flow-neutral, the same series
+  // the headline TWR % above is computed from) - NOT the raw €
+  // valueSeries. A first attempt at this simplification used valueSeries
+  // and it looked wrong for a real, concrete reason: a genuine deposit
+  // (the 2026-08-04 Trading212 lump sum) reads as a near-vertical spike
+  // in raw €, which isn't performance at all - exactly the "€X →
+  // +€4,000 looks like performance" confusion this app has always taken
+  // care to avoid (see repository.js's own historical comments on this).
+  // performanceSeries is cash-flow-neutral by construction, so a real
+  // deposit continues the line smoothly instead of faking a jump - and
+  // it no longer shares an axis with Nasdaq/S&P 500, so it also isn't
+  // squashed flat by their much larger scale. Index-based, not real €
+  // (matches how this exact series was always formatted, even in the
+  // former multi-line chart's owner-mode tooltip) - real € belongs to
+  // the "Portfolio Value" KPI tile above, not this trend line.
+  toggleRow.innerHTML = "";
   const draw = () => {
-    const activeKeys = new Set(
-      [...toggleRow.querySelectorAll(".benchmark-toggle-pill.active")].map((el) => el.dataset.key)
-    );
-    const selected = seriesDefs.filter((s) => activeKeys.has(s.key));
-    // buildComparisonSeries() (calculations.js) clips every selected
-    // series to their shared overlapping real window, then re-normalizes
-    // each to 100 at that shared start - never fabricates history before
-    // any series' real inception (plan doc section 6).
-    const comparison = buildComparisonSeries(selected);
-    if (!comparison.length) {
-      renderInsufficientData(container, "Insufficient overlapping history to compare the selected series yet.");
+    const hasPerformanceSeries = data.history.performanceSeries && data.history.performanceSeries.length >= 2;
+    // Resampled BEFORE the length check - a real gap that only reads as
+    // "enough history" at raw density must not slip through as a
+    // 1-point chart.
+    const monthly = monthlyResample(hasPerformanceSeries ? data.history.performanceSeries : data.history.valueSeries);
+    if (monthly.length < 2) {
+      renderInsufficientData(container, "Not enough historical data yet to draw a trend.");
       return;
     }
-    renderMultiLineChart(container, comparison, {
-      formatValue: (v) => v.toFixed(1),
+    // Fallback path (signed-out/public - getPortfolioDataPublic() never
+    // computes performanceSeries) still needs SOME line: raw €, privacy-
+    // rebased for non-owners exactly as before, real € for the owner.
+    const owner = isOwnerMode();
+    const points = hasPerformanceSeries ? monthly : (owner ? monthly : indexValueSeries(monthly));
+    renderLineChart(container, points, {
+      formatValue: hasPerformanceSeries ? (v) => v.toFixed(1) : (owner ? fmtEUR : (v) => String(Math.round(v))),
+      formatAxisValue: hasPerformanceSeries ? (v) => v.toFixed(0) : (owner ? undefined : (v) => String(Math.round(v))),
       formatDateLabel: formatDateTick,
     });
   };
   draw();
-
-  toggleRow.querySelectorAll(".benchmark-toggle-pill").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      // Never let the last active pill be turned off - there'd be no way
-      // back to a populated chart without a reload.
-      const activeCount = toggleRow.querySelectorAll(".benchmark-toggle-pill.active").length;
-      if (btn.classList.contains("active") && activeCount === 1) return;
-      btn.classList.toggle("active");
-      draw();
-    });
-  });
-
   if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
   perfResizeHandler = draw;
   window.addEventListener("resize", perfResizeHandler);
-
   $("perf-more-link").innerHTML = `<a class="link-more" href="performance.html">View Performance ${icon("arrowRight")}</a>`;
 }
 

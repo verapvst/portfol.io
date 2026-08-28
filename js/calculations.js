@@ -83,6 +83,453 @@ function costDrag(grossReturnPct, annualCostPct, horizonYears) {
   return Math.round(dragPct * 100) / 100;
 }
 
+/* ============================================================
+   Costs Engine (Costs page redesign, 2026-08-28) - "what is my
+   portfolio costing me?", answered two genuinely different ways:
+
+   1. ONGOING/product cost rate - what the portfolio costs to run
+      TODAY, forward-looking. Every currently-held security's own
+      NAV-embedded cost rate (TER, depositary fee, ...) blended by its
+      REAL current weight - weightedCostRateAsOf() below. Read from the
+      `costs` table (supabase/migrations/0002, 0030's real seed data),
+      never a second source.
+
+   2. Historical cash costs - what has ACTUALLY left the account so
+      far, backward-looking. Only costs.nav_embedded === false rows
+      count here - computeHistoricalCashCosts() below.
+
+   THE central rule every function in this section obeys: a cost row
+   with nav_embedded = true (a fund's own TER/management/depositary fee)
+   is ALREADY subtracted from that security's reported NAV/valuation -
+   the exact same figure this app's valueOfSecurityAsOf()/valuations
+   already reflect. Blending it into the weighted ongoing cost rate
+   (#1) is correct and the whole point; ever adding it on top of a
+   historical value/performance series, or counting it in "money
+   actually paid" (#2), would double-count the identical expense - the
+   single most important thing this engine must never do. Only a real,
+   separate cash cost (nav_embedded = false - a brokerage commission, an
+   account/custody fee not already netted into a NAV, an FX spread) is
+   ever summed as money paid.
+
+   Same insert-only/effective-date discipline as every other observation
+   table in this app (valuations, benchmark_history): a cost row is
+   valid from its own `date` until a later row for the same
+   security/account + cost_name supersedes it - latestCostRowsAsOf()
+   resolves "what rate was actually in effect on this date", never the
+   row that happens to be newest overall.
+   ============================================================ */
+
+/** Resolves each (security_id|account_id, cost_name) to its single
+    most-recent row with date <= asOfDate - the nearest-prior-
+    observation rule valueOfSecurityAsOf() already applies to
+    valuations, applied here to cost rate schedules instead. A row dated
+    after asOfDate is invisible (a rate wasn't "in effect" before it was
+    actually recorded), matching this app's no-fabrication discipline. */
+function latestCostRowsAsOf(costRows, asOfDate) {
+  const latest = new Map();
+  const earliest = new Map();
+  for (const c of costRows) {
+    const key = `${c.security_id || ""}|${c.account_id || ""}|${c.cost_name}`;
+
+    // Track the single earliest-known row per key regardless of
+    // asOfDate - the fallback below for a date earlier than every real
+    // record of this cost.
+    const earliestSoFar = earliest.get(key);
+    if (!earliestSoFar || c.date < earliestSoFar.date || (c.date === earliestSoFar.date && (c.created_at || "") < (earliestSoFar.created_at || ""))) {
+      earliest.set(key, c);
+    }
+
+    if (c.date > asOfDate) continue;
+    const existing = latest.get(key);
+    if (!existing || c.date > existing.date || (c.date === existing.date && (c.created_at || "") > (existing.created_at || ""))) {
+      latest.set(key, c);
+    }
+  }
+
+  // A date earlier than the ONLY (or earliest) known record for a given
+  // cost falls back to that earliest record, extended backward - one
+  // fund factsheet snapshot is the best available estimate for that
+  // fund's entire known holding period, not evidence the cost was 0%/
+  // unrecorded before the specific day it happened to be transcribed
+  // (a real, otherwise-unhelpful gap: BPI Dinâmico has one recent Ficha
+  // Mensal, dated 2026-06-30, covering a real holding period back to
+  // 2017 - without this fallback, computeCostEvolution() below would
+  // show "unknown" for 9 years then a rate appearing out of nowhere).
+  // Flagged assumedFromEarliest so a caller/UI can show this honestly,
+  // never at the same confidence as a rate genuinely dated for that
+  // period. Only kicks in when NO qualifying (date <= asOfDate) row
+  // exists at all - a security with 2+ real dated records still
+  // respects each one's own actual validity window as before, never
+  // overridden by this.
+  for (const [key, e] of earliest.entries()) {
+    if (!latest.has(key)) latest.set(key, { ...e, assumedFromEarliest: true });
+  }
+
+  return [...latest.values()];
+}
+
+/**
+ * The current weighted-average ongoing cost rate of a set of holdings -
+ * Σ(holding weight × its own known NAV-embedded %-of-value cost rate).
+ * Only nav_embedded/'%'/security-scoped rows contribute (a flat EUR
+ * platform fee has no rate to blend by weight - see
+ * computeCurrentPortfolioCost() below for how that's handled
+ * separately). A holding with no known cost row contributes nothing
+ * and is flagged known:false rather than silently assumed to cost 0% -
+ * coveragePct exposes exactly how much of the portfolio's weight the
+ * returned rate is actually based on, so "0.42%, 100% of portfolio
+ * known" and "0.42%, 78% known - BPI Universal's cost isn't recorded
+ * yet" are never presented as the same confidence of number.
+ *
+ * weights: [{id, weight}] - security ids with a 0-100 weight, already
+ * summing to ~100 for whatever scope is being asked about (the whole
+ * portfolio today, or one real historical observation date via
+ * weightsAsOf() below).
+ */
+function weightedCostRateAsOf(weights, costRows, asOfDate) {
+  const latest = latestCostRowsAsOf(costRows, asOfDate);
+  const bySecurity = new Map();
+  for (const c of latest) {
+    if (!c.nav_embedded || c.unit !== "%" || !c.security_id) continue;
+    const entry = bySecurity.get(c.security_id) || { ratePct: 0, breakdown: [] };
+    entry.ratePct = Math.round((entry.ratePct + Number(c.value)) * 10000) / 10000;
+    entry.breakdown.push({ costName: c.cost_name, ratePct: Number(c.value), category: c.cost_category, source: c.source, assumedFromEarliest: !!c.assumedFromEarliest });
+    bySecurity.set(c.security_id, entry);
+  }
+
+  let weightedCostPct = 0;
+  let knownWeight = 0;
+  const byHolding = weights.map((h) => {
+    const entry = bySecurity.get(h.id);
+    if (!entry) return { id: h.id, weight: h.weight, ratePct: null, contributionPct: null, known: false, breakdown: [] };
+    const contributionPct = Math.round((entry.ratePct * h.weight / 100) * 10000) / 10000;
+    weightedCostPct = Math.round((weightedCostPct + contributionPct) * 10000) / 10000;
+    knownWeight = Math.round((knownWeight + h.weight) * 100) / 100;
+    return { id: h.id, weight: h.weight, ratePct: entry.ratePct, contributionPct, known: true, breakdown: entry.breakdown };
+  });
+
+  return {
+    weightedCostPct: knownWeight > 0 ? weightedCostPct : null,
+    coveragePct: Math.min(100, Math.round(knownWeight * 100) / 100),
+    byHolding: byHolding.sort((a, b) => (b.contributionPct || 0) - (a.contributionPct || 0)),
+  };
+}
+
+/**
+ * Full "what is my portfolio costing me today?" bundle - the weighted
+ * ongoing rate (weightedCostRateAsOf() above) plus the € figures it
+ * implies, using the portfolio's REAL current holdings/value (never a
+ * parallel valuation - holdings/totalValue are read straight from
+ * analytics.js's own already-computed figures). Also splits out
+ * "platform costs" - real recurring CASH costs (nav_embedded = false,
+ * account- or security-scoped, EUR-denominated) annualised by
+ * frequency and added on top of the product-cost rate's € estimate,
+ * kept in its own bucket per the app owner's own "product vs platform"
+ * distinction (a %-of-AUM platform fee, if one is ever recorded, is
+ * intentionally NOT blended into weightedCostPct itself - it's a
+ * separate real cash line, not a product's own NAV-embedded rate).
+ */
+function computeCurrentPortfolioCost(holdings, costRows, totalValue, asOfDate) {
+  const weights = holdings.map((h) => ({ id: h.id, weight: h.weight }));
+  const { weightedCostPct, coveragePct, byHolding } = weightedCostRateAsOf(weights, costRows, asOfDate);
+
+  const holdingsById = Object.fromEntries(holdings.map((h) => [h.id, h]));
+  const productByHolding = byHolding
+    .filter((h) => h.known && h.contributionPct > 0)
+    .map((h) => ({
+      id: h.id,
+      name: holdingsById[h.id]?.name || "—",
+      weight: h.weight,
+      ratePct: h.ratePct,
+      contributionPct: h.contributionPct,
+      annualEUR: totalValue ? Math.round((totalValue * h.contributionPct / 100) * 100) / 100 : null,
+      breakdown: h.breakdown,
+    }))
+    .sort((a, b) => (b.annualEUR || 0) - (a.annualEUR || 0));
+
+  const productAnnualEUR = weightedCostPct != null && totalValue ? Math.round((totalValue * weightedCostPct / 100) * 100) / 100 : null;
+
+  // Platform & transaction: real, separate cash costs - never blended
+  // into weightedCostPct (that stays product-only, see this function's
+  // own header comment). Only EUR-denominated, currently-in-effect rows
+  // count; a % platform fee or a USD one is surfaced honestly as
+  // "not included" rather than guessed at (no FX rate available here,
+  // and a %-of-what base is genuinely ambiguous for an account-scoped
+  // row without more structure than this table has today).
+  const latest = latestCostRowsAsOf(costRows, asOfDate);
+  const FREQUENCY_PER_YEAR = { Annual: 1, Quarterly: 4, Monthly: 12, Daily: 365, "One-off": 0 };
+  const platformRows = latest.filter((c) => !c.nav_embedded && c.unit === "EUR" && FREQUENCY_PER_YEAR[c.frequency]);
+  const platformAnnualEUR = platformRows.length
+    ? Math.round(platformRows.reduce((s, c) => s + Number(c.value) * FREQUENCY_PER_YEAR[c.frequency], 0) * 100) / 100
+    : null;
+
+  const totalAnnualEUR = productAnnualEUR != null || platformAnnualEUR != null
+    ? Math.round(((productAnnualEUR || 0) + (platformAnnualEUR || 0)) * 100) / 100
+    : null;
+
+  return {
+    weightedCostPct, coveragePct,
+    productAnnualEUR, platformAnnualEUR, totalAnnualEUR,
+    monthlyEquivalentEUR: totalAnnualEUR != null ? Math.round((totalAnnualEUR / 12) * 100) / 100 : null,
+    byHolding: productByHolding,
+    platformItems: platformRows.map((c) => ({ name: c.cost_name, category: c.cost_category, frequency: c.frequency, annualEUR: Math.round(Number(c.value) * FREQUENCY_PER_YEAR[c.frequency] * 100) / 100 })),
+  };
+}
+
+/** Per-security weight at one real date, from the SAME securityHistories
+    shape scopedPerformance()/analytics.js already build - never a
+    second position-tracking system. Used only to walk the weighted cost
+    rate backwards over real observation dates (computeCostEvolution()
+    below); the live "today" weights used everywhere else on this page
+    come straight from analytics.js's own holdings[].weight. */
+function weightsAsOf(securityHistories, date) {
+  const values = {};
+  let total = 0;
+  for (const [id, hist] of Object.entries(securityHistories)) {
+    const v = valueOfSecurityAsOf(hist, date);
+    if (v > 0) { values[id] = v; total += v; }
+  }
+  if (!total) return [];
+  return Object.entries(values).map(([id, v]) => ({ id, weight: Math.round((v / total) * 10000) / 100 }));
+}
+
+/**
+ * "Has your portfolio become cheaper?" - the weighted ongoing cost rate
+ * (weightedCostRateAsOf()) re-computed at every REAL valuation
+ * observation date, never interpolated between them (same discipline
+ * valueSeries/performanceSeries already follow everywhere else in this
+ * app). A holding with no known cost rate simply doesn't contribute
+ * that day - if NO cost rows exist yet at all, this correctly returns
+ * an empty series rather than a fabricated flat line, and the UI shows
+ * an honest "not enough cost history yet" state (same convention as
+ * every other "Insufficient history" surface in this app). Real,
+ * meaningful movement only shows up once holdings with genuinely
+ * different cost rates (e.g. BPI Dinâmico's ~0.92% vs. an ETF's
+ * ~0.1-0.4%) actually change their relative weight over time - exactly
+ * what the BPI Dinâmico -> ETF transition should show, once it's
+ * reflected in real weight-over-time data. */
+function computeCostEvolution(securityHistories, observationDates, costRows) {
+  return observationDates
+    .map((date) => {
+      const weights = weightsAsOf(securityHistories, date);
+      const { weightedCostPct, coveragePct } = weightedCostRateAsOf(weights, costRows, date);
+      return { date, value: weightedCostPct, coveragePct, real: true };
+    })
+    .filter((p) => p.value != null);
+}
+
+const COST_FREQUENCY_PER_YEAR = { Annual: 1, Quarterly: 4, Monthly: 12, Daily: 365 };
+
+/**
+ * Shared core of computeHistoricalCashCosts()/computeAnnualCostBreakdown()
+ * below: walks a (caller-filtered) set of cost rows and resolves each
+ * one's real effective PERIOD (a €/year rate applying over a real date
+ * range) or, for a 'One-off' row, a single discrete € event - the same
+ * "what rate applied, over what real real date range" resolution,
+ * factored out once so those two functions (one lump-sums a period for
+ * a cumulative running total, the other splits it proportionally across
+ * calendar years - genuinely different post-processing, but must never
+ * resolve the underlying period two different ways).
+ *
+ * Each row's period runs from its own `date` until a later row for the
+ * same security/account + cost_name supersedes it, or through asOfDate
+ * if it never has been - EXCEPT the very first (earliest) row for a
+ * given key, whose period is extended backward to that security's own
+ * earliest REAL valuation observation (never earlier - a cost can't
+ * have applied before the security was even held). Same "one known
+ * snapshot is the best available estimate for the security's whole
+ * known holding period" principle latestCostRowsAsOf() already applies
+ * for the current/evolution rate - without it, a fund held since 2017
+ * with its cost only recorded in 2026 would show €0 for nine years then
+ * a number appearing out of nowhere, a worse, less honest answer than a
+ * clearly-labelled estimate.
+ *
+ * % rows need a real value to apply the rate to - only security-scoped
+ * ones are resolved here (securityHistories, real observations only,
+ * via valueOfSecurityAsOf()'s own nearest-prior rule), using the simple
+ * average of the period's start/end value rather than a daily integral
+ * this app doesn't have the observation density to actually support
+ * honestly. USD rows and account-scoped % rows are excluded (no FX rate
+ * or "% of what account value" base available here) rather than guessed -
+ * callers can inspect `excluded` for what was left out and why, never
+ * silently. Not exported - always called through one of the two public
+ * functions, which decide WHICH rows (nav_embedded true/false/both) go in.
+ */
+function costPeriodsFromRows(rows, securityHistories, asOfDate) {
+  const byKey = new Map();
+  for (const c of rows) {
+    const key = `${c.security_id || ""}|${c.account_id || ""}|${c.cost_name}`;
+    const list = byKey.get(key) || [];
+    list.push(c);
+    byKey.set(key, list);
+  }
+  for (const list of byKey.values()) {
+    list.sort((a, b) => a.date.localeCompare(b.date) || (a.created_at || "").localeCompare(b.created_at || ""));
+  }
+
+  const periods = []; // {startDate, endDate, annualAmount, label, navEmbedded}
+  const oneOffs = []; // {date, amountEUR, label, navEmbedded}
+  const excluded = [];
+  for (const keyRows of byKey.values()) {
+    // Earliest real observation for this key's own security, if any -
+    // the backward-extension floor for keyRows[0]'s period only (see
+    // this function's own header comment).
+    const history = keyRows[0]?.security_id ? securityHistories[keyRows[0].security_id] : null;
+    const earliestObservation = history && history.length
+      ? history.reduce((min, v) => (min == null || v.date < min ? v.date : min), null)
+      : null;
+
+    for (let i = 0; i < keyRows.length; i++) {
+      const c = keyRows[i];
+      const label = c.securities?.name || c.accounts?.name || c.cost_name;
+
+      if (c.frequency === "One-off") {
+        if (c.unit === "EUR") oneOffs.push({ date: c.date, amountEUR: Math.round(Number(c.value) * 100) / 100, label, navEmbedded: !!c.nav_embedded });
+        else excluded.push({ costName: c.cost_name, reason: `${c.unit} one-off cost - no reliable EUR amount without a recorded conversion` });
+        continue;
+      }
+
+      const perYear = COST_FREQUENCY_PER_YEAR[c.frequency];
+      const startDate = i === 0 && earliestObservation && earliestObservation < c.date ? earliestObservation : c.date;
+      const endDate = i + 1 < keyRows.length ? keyRows[i + 1].date : asOfDate;
+      if (!perYear || daysBetweenDates(startDate, endDate) <= 0) continue;
+
+      let annualAmount = null;
+      if (c.unit === "EUR") {
+        annualAmount = Number(c.value) * perYear;
+      } else if (c.unit === "%" && c.security_id && securityHistories[c.security_id]) {
+        const startValue = valueOfSecurityAsOf(securityHistories[c.security_id], startDate);
+        const endValue = valueOfSecurityAsOf(securityHistories[c.security_id], endDate);
+        annualAmount = ((startValue + endValue) / 2) * Number(c.value) / 100;
+      } else {
+        excluded.push({ costName: c.cost_name, reason: c.unit === "%" ? "% cost with no security value to apply it to (account-scoped % isn't supported yet)" : `${c.unit}-denominated - no FX conversion available` });
+        continue;
+      }
+      periods.push({ startDate, endDate, annualAmount, label, navEmbedded: !!c.nav_embedded });
+    }
+  }
+  return { periods, oneOffs, excluded };
+}
+
+/** Real days of [periodStart, periodEnd) that fall within calendar year
+    `year` - the day-count weight computeAnnualCostBreakdown() uses to
+    split one multi-year period's accumulated cost proportionally across
+    the actual years it spans, instead of lump-summing it all into
+    whichever year the period happens to end in. */
+function daysOverlapInYear(periodStart, periodEnd, year) {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year + 1}-01-01`;
+  const start = periodStart > yearStart ? periodStart : yearStart;
+  const end = periodEnd < yearEnd ? periodEnd : yearEnd;
+  const days = daysBetweenDates(start, end);
+  return days > 0 ? days : 0;
+}
+
+/**
+ * "What have I actually paid?" - cumulative REAL cash costs only
+ * (costs.nav_embedded === false - see this section's own header comment
+ * on why a NAV-embedded row is excluded entirely here, not just
+ * de-weighted - the exact rows computeAnnualCostBreakdown() below DOES
+ * include, kept in a clearly separate column). Built from
+ * costPeriodsFromRows() - see that function's own header comment for
+ * the effective-period/backward-extension rules every period here
+ * follows. Each period is lump-summed at its own end date for this
+ * running total - correct for a cumulative figure (the total by
+ * asOfDate is the same regardless of how smoothly it's spread out), but
+ * NOT what a per-year breakdown needs - see computeAnnualCostBreakdown()
+ * below for why that one splits proportionally by day instead.
+ *
+ * Returns totalEUR: null (not €0) when there's genuinely no cash-cost
+ * data yet - the current real state of this app's `costs` table, until
+ * an actual brokerage commission/account fee gets recorded.
+ */
+function computeHistoricalCashCosts(costRows, securityHistories, asOfDate) {
+  const cashRows = costRows.filter((c) => !c.nav_embedded);
+  if (!cashRows.length) return { totalEUR: null, byHolding: [], series: [], excluded: [] };
+
+  const { periods, oneOffs, excluded } = costPeriodsFromRows(cashRows, securityHistories, asOfDate);
+  const events = [
+    ...oneOffs,
+    ...periods.map((p) => ({
+      date: p.endDate,
+      amountEUR: Math.round(p.annualAmount * (daysBetweenDates(p.startDate, p.endDate) / 365) * 100) / 100,
+      label: p.label,
+    })),
+  ];
+  if (!events.length) return { totalEUR: null, byHolding: [], series: [], excluded };
+
+  events.sort((a, b) => a.date.localeCompare(b.date));
+  let running = 0;
+  const series = events.map((e) => {
+    running = Math.round((running + e.amountEUR) * 100) / 100;
+    return { date: e.date, value: running, real: true };
+  });
+
+  const byHoldingMap = new Map();
+  for (const e of events) byHoldingMap.set(e.label, Math.round(((byHoldingMap.get(e.label) || 0) + e.amountEUR) * 100) / 100);
+  const byHolding = [...byHoldingMap.entries()].map(([name, eur]) => ({ name, eur })).sort((a, b) => b.eur - a.eur);
+
+  return { totalEUR: running, byHolding, series, excluded };
+}
+
+/**
+ * "How much has this portfolio cost me, per year, since I started?" -
+ * unlike computeHistoricalCashCosts() above (real cash only), this
+ * deliberately includes BOTH kinds of cost, kept in separate columns
+ * per year rather than blended into one number: embeddedEUR (NAV-
+ * embedded - a fund's own TER/depositary fee, an ESTIMATE of what that
+ * fee cost given the real value it applied to that year, never verified
+ * cash out of the account) and cashEUR (nav_embedded = false - real,
+ * separate money that actually left the account, same rows
+ * computeHistoricalCashCosts() sums). totalEUR is their sum - this
+ * function itself doesn't render anything, so labelling embeddedEUR as
+ * an estimate (never as "paid") happens in costs.js.
+ *
+ * A multi-year period (the normal case - most cost rows are recorded
+ * once and apply for years) is split PROPORTIONALLY across every
+ * calendar year it actually spans, weighted by real day-overlap
+ * (daysOverlapInYear() above) - not lump-summed into whichever year it
+ * happens to end in, which is what computeHistoricalCashCosts()'s own
+ * cumulative-total shortcut does (fine for a running total, wrong for
+ * "how much per year"). Years are every real calendar year spanned by
+ * the earliest known cost period/event through asOfDate's own year -
+ * never padded with invented years before any cost was ever known.
+ */
+function computeAnnualCostBreakdown(costRows, securityHistories, asOfDate) {
+  const { periods, oneOffs } = costPeriodsFromRows(costRows, securityHistories, asOfDate);
+  if (!periods.length && !oneOffs.length) return [];
+
+  const firstYear = Math.min(
+    ...periods.map((p) => Number(p.startDate.slice(0, 4))),
+    ...oneOffs.map((e) => Number(e.date.slice(0, 4))),
+  );
+  const lastYear = Number(asOfDate.slice(0, 4));
+  const byYear = new Map();
+  for (let y = firstYear; y <= lastYear; y++) byYear.set(y, { year: y, embeddedEUR: 0, cashEUR: 0 });
+
+  for (const p of periods) {
+    const startYear = Number(p.startDate.slice(0, 4));
+    const endYear = Number(p.endDate.slice(0, 4));
+    for (let y = startYear; y <= endYear; y++) {
+      const bucket = byYear.get(y);
+      if (!bucket) continue; // defensive - every spanned year is already seeded above
+      const days = daysOverlapInYear(p.startDate, p.endDate, y);
+      if (days <= 0) continue;
+      const amount = p.annualAmount * (days / 365);
+      if (p.navEmbedded) bucket.embeddedEUR = Math.round((bucket.embeddedEUR + amount) * 100) / 100;
+      else bucket.cashEUR = Math.round((bucket.cashEUR + amount) * 100) / 100;
+    }
+  }
+  for (const e of oneOffs) {
+    const bucket = byYear.get(Number(e.date.slice(0, 4)));
+    if (!bucket) continue;
+    if (e.navEmbedded) bucket.embeddedEUR = Math.round((bucket.embeddedEUR + e.amountEUR) * 100) / 100;
+    else bucket.cashEUR = Math.round((bucket.cashEUR + e.amountEUR) * 100) / 100;
+  }
+
+  return [...byYear.values()].map((b) => ({ ...b, totalEUR: Math.round((b.embeddedEUR + b.cashEUR) * 100) / 100 }));
+}
+
 /**
  * The 9-dimension Product Score - ported verbatim from the old
  * Portfol.io engine's productScores() (weights and thresholds
@@ -1371,3 +1818,10 @@ window.scopedSortino = scopedSortino;
 window.alignedReturnPairs = alignedReturnPairs;
 window.betaAlphaCorrelation = betaAlphaCorrelation;
 window.scopedQuantMetrics = scopedQuantMetrics;
+window.latestCostRowsAsOf = latestCostRowsAsOf;
+window.weightedCostRateAsOf = weightedCostRateAsOf;
+window.computeCurrentPortfolioCost = computeCurrentPortfolioCost;
+window.weightsAsOf = weightsAsOf;
+window.computeCostEvolution = computeCostEvolution;
+window.computeHistoricalCashCosts = computeHistoricalCashCosts;
+window.computeAnnualCostBreakdown = computeAnnualCostBreakdown;

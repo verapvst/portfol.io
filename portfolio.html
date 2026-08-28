@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfol.io — Portfolio</title>
+<title>Portfol.io — Holdings</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=118">
-<link rel="stylesheet" href="css/layout.css?v=118">
-<link rel="stylesheet" href="css/components.css?v=118">
-<link rel="stylesheet" href="css/portfolio.css?v=118">
+<link rel="stylesheet" href="css/theme.css?v=135">
+<link rel="stylesheet" href="css/layout.css?v=135">
+<link rel="stylesheet" href="css/components.css?v=135">
+<link rel="stylesheet" href="css/portfolio.css?v=135">
 </head>
 <body>
 <div id="app">
@@ -31,24 +31,34 @@
       <p class="section-hint" id="portfolio-summary"></p>
     </section>
 
-    <section class="card glass interactive" id="holdings-detail-card">
-      <div class="card-header">
-        <div class="card-header-title" data-info="portfolio" tabindex="0" role="button" aria-label="About this page">
-          <h2 class="section-title">Holdings</h2>
+    <!-- Holdings + Asset Class Allocation side by side, not stacked full-
+         width - the two used to each be a "giant" full-width card back
+         to back, which was more vertical space than either needed.
+         Holdings gets the wider column (it's the page's primary
+         content, a scrollable table - see .table-scroll inside it for
+         how it handles overflow at this narrower width); Asset Class
+         Allocation's donut doesn't need full width to read clearly.
+         Collapses to one column on tablet/mobile (css/portfolio.css). -->
+    <div class="portfolio-top-row">
+      <section class="card glass interactive" id="holdings-detail-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="portfolio" tabindex="0" role="button" aria-label="About this page">
+            <h2 class="section-title">Holdings</h2>
+          </div>
         </div>
-      </div>
-      <div id="holdings-detail-table"></div>
-    </section>
+        <div id="holdings-detail-table"></div>
+      </section>
 
-    <section class="card glass interactive" id="asset-class-card">
-      <div class="card-header">
-        <div class="card-header-title" data-info="allocation-asset-class" tabindex="0" role="button" aria-label="About this metric">
-          <h2 class="section-title">Asset Class Allocation</h2>
+      <section class="card glass interactive" id="asset-class-card">
+        <div class="card-header">
+          <div class="card-header-title" data-info="allocation-asset-class" tabindex="0" role="button" aria-label="About this metric">
+            <h2 class="section-title">Asset Class Allocation</h2>
+          </div>
         </div>
-      </div>
-      <p class="section-hint">The highest-level view of what kind of risk the portfolio is taking</p>
-      <div id="asset-class-viz"></div>
-    </section>
+        <p class="section-hint">The highest-level view of what kind of risk the portfolio is taking</p>
+        <div id="asset-class-viz"></div>
+      </section>
+    </div>
 
     <section class="card glass interactive" id="concentration-card">
       <div class="card-header">
@@ -96,22 +106,22 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=118"></script>
-<script src="js/supabaseClient.js?v=118"></script>
+<script src="js/supabaseConfig.js?v=135"></script>
+<script src="js/supabaseClient.js?v=135"></script>
 
-<script src="js/utils.js?v=118"></script>
-<script src="js/calculations.js?v=118"></script>
-<script src="js/repository.js?v=118"></script>
+<script src="js/utils.js?v=135"></script>
+<script src="js/calculations.js?v=135"></script>
+<script src="js/repository.js?v=135"></script>
 
-<script src="vendor/d3.min.js?v=118"></script>
-<script src="vendor/topojson-client.min.js?v=118"></script>
+<script src="vendor/d3.min.js?v=135"></script>
+<script src="vendor/topojson-client.min.js?v=135"></script>
 
-<script src="js/charts.js?v=118"></script>
-<script src="js/shell.js?v=118"></script>
-<script src="js/auth.js?v=118"></script>
-<script src="js/db.js?v=118"></script>
-<script src="js/analytics.js?v=118"></script>
-<script src="js/ui.js?v=118"></script>
-<script src="js/portfolio.js?v=118"></script>
+<script src="js/charts.js?v=135"></script>
+<script src="js/shell.js?v=135"></script>
+<script src="js/auth.js?v=135"></script>
+<script src="js/db.js?v=135"></script>
+<script src="js/analytics.js?v=135"></script>
+<script src="js/ui.js?v=135"></script>
+<script src="js/portfolio.js?v=135"></script>
 </body>
 </html>

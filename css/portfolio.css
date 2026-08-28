@@ -7,7 +7,11 @@
    world map all reuse existing components too.
    ============================================================ */
 
-#scope-card { padding-bottom: var(--sp-4); }
+/* margin-bottom (not just padding-bottom) - every OTHER card on this
+   page gets its gap-to-the-next-card from its own margin-bottom
+   (portfolio-top-row/#exposure-card etc. below); this one was missing
+   that, so it visually touched the row right under it. */
+#scope-card { padding-bottom: var(--sp-4); margin-bottom: var(--sp-8); }
 
 /* Scope selector (All Portfolio / BPI / Trading 212) - same .filter-pill
    primitive as Performance page's date-range picker, mutually exclusive
@@ -15,8 +19,48 @@
    only one scope is ever active at a time). */
 .portfolio-scope-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--r-pill); width: fit-content; }
 
+/* Holdings + Asset Class Allocation side by side (portfolio.html) - was
+   two full-width "giant" cards stacked back to back, more vertical
+   space than either needed. Holdings gets the wider column (primary
+   content, a scrollable table); the donut doesn't need full width to
+   read. min-width: 0 on both is required for the table's own
+   .table-scroll to actually scroll horizontally inside its column
+   instead of blowing out the grid track (same fix .overview-left/
+   .overview-right already use for the same reason). No max-width on the
+   row itself - matches .overview-columns' own precedent of just using
+   #main's available width rather than a second, independent cap. */
+.portfolio-top-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: var(--sp-8);
+  /* stretch (the grid default - not "start") so Asset Class Allocation's
+     card runs the full height of whichever card is taller, its own
+     bottom edge lining up with Holdings' instead of stopping short. */
+  align-items: stretch;
+  margin-bottom: var(--sp-8);
+}
 #holdings-detail-card,
-#asset-class-card,
+#asset-class-card { margin-bottom: 0; min-width: 0; }
+/* .card is display:flex/column already (components.css) - push the
+   donut+legend to vertically center within whatever extra height
+   stretch gave this card, instead of leaving them pinned to the top
+   with dead space below. */
+#asset-class-card #asset-class-viz { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+@media (max-width: 1023px) {
+  .portfolio-top-row { grid-template-columns: 1fr; }
+}
+
+/* Asset Class Allocation / Account Allocation / Geographic Exposure stay
+   ALL-SCOPE ONLY (see portfolio.js's own header comment) - but the CARD
+   itself never disappears via display:none any more when BPI/Trading
+   212 is selected; only its content swaps to this honest note. A card
+   vanishing out from under the two-column row above left an ugly gap
+   where its grid track used to be, and a full-width card vanishing
+   elsewhere made everything below it jump - both real complaints, fixed
+   by keeping the frame stable. */
+.alloc-scope-unavailable { color: var(--muted); font-size: 14px; line-height: 1.5; }
+
 #concentration-card,
 #security-allocation-card,
 #account-allocation-card,

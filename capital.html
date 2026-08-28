@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Capital</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=135">
+<link rel="stylesheet" href="css/layout.css?v=135">
+<link rel="stylesheet" href="css/components.css?v=135">
+<!-- Reuses performance.css, not a new stylesheet - .contribution-row/
+     .contributions-list/.data-warning-banner are already page-agnostic
+     class names there (no perf-specific selector scoping), and this
+     page is performance.html's own Contributions + Portfolio Value Over
+     Time sections split out, not a new visual language. -->
+<link rel="stylesheet" href="css/performance.css?v=135">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <!-- Only rendered when signed in AND the live Supabase fetch failed -
+         same convention as every other page's own data-warning slot
+         (js/performance.js, js/analytics.js:getPortfolioDataAuto()). -->
+    <div id="cap-data-warning"></div>
+
+    <!-- "How much money have I personally put in, and what's it worth
+         today?" - split out of performance.html (Performance & Capital
+         split, per the app owner's own framing: Performance answers
+         "how well did it do" (returns, scope-aware), Capital answers
+         "how much is here" (money in/out, always whole-portfolio - no
+         per-scope capital breakdown exists in the data model, same gap
+         js/performance.js's own renderValueChart() comment already
+         documented before this split). Hidden for signed-out visitors
+         (totalValue is null on that path), same precedent as Health/
+         Insights on the Overview page. -->
+    <section class="card glass interactive" id="contributions-card" hidden>
+      <div class="card-header">
+        <div class="card-header-title" data-info="contributions" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Contributions</h2>
+        </div>
+      </div>
+      <div id="contributions-body"></div>
+    </section>
+
+    <section class="card glass interactive" id="capital-chart-card">
+      <div class="card-header">
+        <div class="card-header-title" data-info="investment-performance" tabindex="0" role="button" aria-label="About this metric">
+          <h2 class="section-title">Portfolio Value Over Time</h2>
+        </div>
+        <div class="filter-pills glass-quiet" id="cap-filters"></div>
+      </div>
+      <div id="cap-linechart-container"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=135"></script>
+<script src="js/supabaseClient.js?v=135"></script>
+
+<script src="js/utils.js?v=135"></script>
+<script src="js/calculations.js?v=135"></script>
+<script src="js/repository.js?v=135"></script>
+
+<script src="js/charts.js?v=135"></script>
+<script src="js/shell.js?v=135"></script>
+<script src="js/auth.js?v=135"></script>
+<script src="js/db.js?v=135"></script>
+<script src="js/analytics.js?v=135"></script>
+<script src="js/capital.js?v=135"></script>
+</body>
+</html>

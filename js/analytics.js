@@ -9,18 +9,31 @@
    mock | Excel parser | API") is exactly what this file now sits behind.
 
    Deliberate, honest boundary - NOT everything below is computed from
-   Supabase: assetClassAllocation, countries, regions and
-   notCountrySpecificWeight still come from repository.js's real data,
-   because their source (the Allocations / Detailed Portfolio / Security
-   Classifications sheets) hasn't been migrated to Supabase yet (Migration
-   Plan §2.6/§3.3/§3.4, Phase 4-5). Per the workbook doc's own Dashboard
-   Principle - "if a metric cannot be derived from the database, the
-   missing data belongs in the database, not the dashboard" - faking a
-   Supabase-only version of these would mean either recomputing something
-   coarser than what's already real and known, or inventing structure
-   that isn't there. repository.js doesn't disappear yet; it shrinks to
-   cover only what hasn't migrated, exactly as much as is still true and
-   no more. It disappears entirely once Phase 4/5 land.
+   Supabase: countries, regions and notCountrySpecificWeight still come
+   from repository.js's real data, because their source (the Detailed
+   Portfolio / Security Classifications sheets) hasn't been migrated to
+   Supabase yet (Migration Plan §2.6/§3.4, Phase 4-5). Per the workbook
+   doc's own Dashboard Principle - "if a metric cannot be derived from
+   the database, the missing data belongs in the database, not the
+   dashboard" - faking a Supabase-only version of these would mean
+   either recomputing something coarser than what's already real and
+   known, or inventing structure that isn't there. repository.js doesn't
+   disappear yet; it shrinks to cover only what hasn't migrated, exactly
+   as much as is still true and no more. It disappears entirely once
+   Phase 4/5 land.
+
+   assetClassAllocation moved OFF that static list (this session,
+   2026-08-28) - see computeAssetClassAllocation()/
+   SECURITY_ASSET_CLASS_SPLIT below: it's now computed fresh from real,
+   live portfolio.holdings weights blended with each specific security's
+   own known composition, kept separate per holding rather than one
+   static portfolio-level snapshot. Not the full Phase 4/5 migration
+   (that reads real composition from Data Hub's own
+   security_details.top_holdings/all_holdings uploads, still not wired
+   up) - a smaller, honest interim step using known real facts about
+   each security, that fixed a genuine bug (BPI Dinâmico and BPI
+   Universal, two different funds, were being silently blended into one
+   number) without waiting for that larger migration.
    ============================================================ */
 
 /** Loads real benchmark reference data + history (supabase/migrations/
@@ -85,15 +98,109 @@ async function loadBenchmarkSeries() {
   }
 }
 
+/** Known real per-security asset-class composition - NOT computed from
+    live position data (no pipeline for that exists yet; see this file's
+    header comment on assetClassAllocation/regions/countries/currency
+    still being repository.js's not-yet-migrated static import). Real,
+    sourced facts about each specific fund/ETF, kept separate PER
+    SECURITY on purpose - blending BPI Dinâmico and BPI Universal
+    (Fundo) into one number was exactly the bug the app owner caught
+    2026-08-28: repository.js's old bpiInternalSplit was BPI Dinâmico's
+    own real June-2026-factsheet split, but got scaled by the WHOLE BPI
+    account's weight (both funds combined) as if it were the account's
+    one single blended split - a leftover from when BPI Dinâmico was the
+    only BPI holding, silently wrong the moment BPI Universal became a
+    second one. Replace an entry here with real composition data the
+    moment it's available via Data Hub's BPI Monthly Factsheet/Detailed
+    Portfolio upload (security_details.top_holdings/all_holdings, 0011/
+    0012 - already wired to write real data, just not yet wired to be
+    READ back into this computation, a separate, larger piece of work)
+    - this lookup is the honest interim source until then, matched by
+    ticker first (stable), falling back to name for the two BPI funds
+    that have none. A holding with no entry here falls into
+    "Unclassified" in computeAssetClassAllocation() below, never a
+    guessed split. */
+const SECURITY_ASSET_CLASS_SPLIT = {
+  // BPI Dinâmico - real, from its own June 2026 monthly factsheet (BPI
+  // Ficha Mensal): Liquidez 5.67% / Obrigações 36.04% / Ações 37.77% /
+  // Outros Investimentos 20.53%.
+  "BPI Dinâmico": { source: "BPI Ficha Mensal, Jun 2026", split: { Equities: 37.77, Bonds: 36.04, Alternatives: 20.53, Cash: 5.67 } },
+  // BPI Universal (Fundo) - its declared benchmark mandate (60% MSCI
+  // World / 40% Euro Bond, supabase/migrations/
+  // 0006_seed_products_and_brokers.sql) - real, but a different
+  // provenance from BPI Dinâmico's own live-factsheet number above
+  // (a target mandate, not a monthly actual holding breakdown), kept
+  // labelled as such wherever this is shown.
+  "BPI Universal (Fundo)": { source: "Declared benchmark mandate (60/40)", split: { Equities: 60, Bonds: 40, Alternatives: 0, Cash: 0 } },
+  // Trading 212 ETFs - each a real equity index/factor tracker, 100%
+  // equity by construction (their own fund fact sheets) - matched by
+  // ticker, more stable than a display name that can pick up suffixes
+  // like "(Acc)" over time.
+  UETW: { source: "Fund fact sheet (index tracker)", split: { Equities: 100, Bonds: 0, Alternatives: 0, Cash: 0 } },
+  AVWS: { source: "Fund fact sheet (factor ETF)", split: { Equities: 100, Bonds: 0, Alternatives: 0, Cash: 0 } },
+  XDEQ: { source: "Fund fact sheet (factor ETF)", split: { Equities: 100, Bonds: 0, Alternatives: 0, Cash: 0 } },
+  SPYM: { source: "Fund fact sheet (index tracker)", split: { Equities: 100, Bonds: 0, Alternatives: 0, Cash: 0 } },
+};
+
+/** Blends every currently-held security's own known composition
+    (SECURITY_ASSET_CLASS_SPLIT above), weighted by that security's REAL
+    LIVE portfolio weight - replaces the old static repository.js
+    snapshot for this one field. Each class carries `byHolding` (per-
+    security contribution + its own source) so shell.js's
+    assetClassDrill() can show BPI Dinâmico and BPI Universal (or any
+    other two holdings sharing a class) as genuinely separate rows with
+    real numbers, instead of one hand-derived "whatever's left over"
+    approximation. A holding with no known composition contributes to
+    "Unclassified" instead of a guess - same honesty rule as everywhere
+    else in this app. */
+function computeAssetClassAllocation(holdings) {
+  const CLASSES = ["Equities", "Bonds", "Alternatives", "Cash"];
+  const perClass = Object.fromEntries(CLASSES.map((c) => [c, { total: 0, byHolding: [] }]));
+  const unclassified = { total: 0, byHolding: [] };
+
+  for (const h of holdings) {
+    const known = SECURITY_ASSET_CLASS_SPLIT[h.ticker] || SECURITY_ASSET_CLASS_SPLIT[h.name];
+    if (!known) {
+      unclassified.total = Math.round((unclassified.total + h.weight) * 100) / 100;
+      unclassified.byHolding.push({ name: h.name, weight: h.weight, source: "No known composition yet" });
+      continue;
+    }
+    for (const cls of CLASSES) {
+      const pct = known.split[cls] || 0;
+      if (pct <= 0) continue;
+      const contribution = Math.round((pct * h.weight / 100) * 100) / 100;
+      if (contribution <= 0) continue;
+      perClass[cls].total = Math.round((perClass[cls].total + contribution) * 100) / 100;
+      perClass[cls].byHolding.push({ name: h.name, weight: contribution, source: known.source });
+    }
+  }
+
+  const out = CLASSES.map((c) => ({
+    name: c,
+    weight: perClass[c].total,
+    tone: tokenColor("assetClass", c),
+    byHolding: perClass[c].byHolding.sort((a, b) => b.weight - a.weight),
+  })).filter((c) => c.weight > 0);
+
+  if (unclassified.total > 0) {
+    out.push({
+      name: "Unclassified", weight: unclassified.total, tone: tokenColor("assetClass", "Unclassified"),
+      byHolding: unclassified.byHolding,
+    });
+  }
+  return out;
+}
+
 async function getPortfolioDataLive() {
   const portfolioId = await ensurePortfolio();
   if (!portfolioId) throw new Error("No portfolio for the current user.");
 
-  const [accountsRows, securitiesRows, txnRows, valRows] = await Promise.all([
+  const [accountsRows, securitiesRows, txnRows, valRows, costRows] = await Promise.all([
     loadAccountsForPortfolio(portfolioId),
     loadSecurities(),
     window.db.from("transactions").select("*").eq("portfolio_id", portfolioId).eq("voided", false),
     window.db.from("valuations").select("*").eq("portfolio_id", portfolioId),
+    getCosts(portfolioId),
   ]);
   const transactionsRaw = txnRows.data || [];
   const valuationsRaw = valRows.data || [];
@@ -327,7 +434,7 @@ async function getPortfolioDataLive() {
   // only its current-and-forward contribution should ever be 0 - which
   // it already is by construction once that closing valuation exists,
   // so totalValue needs no separate adjustment here.
-  const holdings = holdingsRaw.filter((h) => h.value !== 0).map((h) => {
+  const shapeHolding = (h) => {
     const securityTransactions = txnsBySecurity.get(h.security.id) || [];
     const securityPerformance = scopedPerformance({
       level: "security",
@@ -353,7 +460,18 @@ async function getPortfolioDataLive() {
       ...unrealisedPnL(h.value, costBasisFromTransactions(securityTransactions)),
       tone: tokenColor("asset", h.security.name.replace(/[^a-zA-Z0-9]/g, "_")),
     };
-  });
+  };
+  // allHoldings: EVERY position ever held, including a fully-exited one
+  // (current value now €0, e.g. BPI Universal). product-detail.js's
+  // "Your Position" and shell.js's drill-down drawer (holdingDrill())
+  // read THIS, not the filtered `holdings` below - otherwise a closed
+  // position's detail view silently rendered nothing at all the moment
+  // its value hit 0, instead of an honest "you held this, here's how it
+  // did" (real bug, caught 2026-08-28 - same class of issue the
+  // accountPerformance/securityPerformance/strategyPerformance fix above
+  // already addressed for the Performance page's scope selector).
+  const allHoldings = holdingsRaw.map(shapeHolding);
+  const holdings = allHoldings.filter((h) => h.value !== 0);
 
   // currency/institution/accountType/jurisdiction all carried through
   // from the real accounts row already fetched above (loadAccountsForPortfolio,
@@ -381,7 +499,18 @@ async function getPortfolioDataLive() {
   // portfolio, so the default (deposit/withdrawal/buy/sell) applies
   // as-is, no override needed.
   const accountPerformance = accounts.map((a) => {
-    const accountSecurityIds = holdings.filter((h) => h.accountId === a.id).map((h) => h.id);
+    // holdingsRaw here, deliberately NOT holdings - holdings is filtered
+    // to value !== 0 (see its own comment above) for "what do I
+    // currently own" UI (Holdings Table/Allocation), and a fully closed/
+    // redeemed position's CURRENT value correctly hits 0 there. But its
+    // real historical valuations still exist and this account's own
+    // Total Return must keep counting them - reusing the filtered array
+    // here silently erased a closed position's ENTIRE account-scoped
+    // history the moment its value hit 0, not just its current-and-
+    // forward contribution (real bug: BPI's account scope showed
+    // "Insufficient history" despite 9 real years of BPI Dinâmico data,
+    // the moment BPI Dinâmico's balance went to €0 on the ETF move).
+    const accountSecurityIds = holdingsRaw.filter((h) => h.accountId === a.id).map((h) => h.security.id);
     const accountSecurityHistories = Object.fromEntries(
       accountSecurityIds.map((id) => [id, securityHistories[id] || []])
     );
@@ -420,19 +549,25 @@ async function getPortfolioDataLive() {
   // {id, name, ...perf, yearlyReturns, quant} bundle so the Performance
   // page's scope selector can treat a single security exactly like an
   // account - one drill-down mechanism, not two.
-  const securityPerformance = holdings.map((h) => {
-    const securityTransactions = txnsBySecurity.get(h.id) || [];
+  const securityPerformance = holdingsRaw.map((h) => {
+    // holdingsRaw, not holdings - same reasoning as accountPerformance
+    // above: a fully redeemed security (e.g. BPI Dinâmico, value now €0)
+    // must still be selectable under Securities scope with its full real
+    // history, not vanish from the list entirely just because it's
+    // currently worth nothing.
+    const id = h.security.id;
+    const securityTransactions = txnsBySecurity.get(id) || [];
     const perf = scopedPerformance({
-      level: "security", securityHistories: { [h.id]: securityHistories[h.id] || [] },
+      level: "security", securityHistories: { [id]: securityHistories[id] || [] },
       transactions: securityTransactions, asOfDate: latestDate,
     });
     const yearlyReturns = perf.firstDate
       ? scopedAnnualReturns({
-          securityHistories: { [h.id]: securityHistories[h.id] || [] }, transactions: securityTransactions,
+          securityHistories: { [id]: securityHistories[id] || [] }, transactions: securityTransactions,
           asOfDate: latestDate, inceptionDate: perf.firstDate,
         })
       : {};
-    return { id: h.id, name: h.name, accountId: h.accountId, ...perf, yearlyReturns };
+    return { id, name: h.security.name, accountId: h.accountId, ...perf, yearlyReturns };
   });
 
   // ---------- Strategy / mini-portfolio performance (e.g. "Global Tilts")
@@ -450,9 +585,14 @@ async function getPortfolioDataLive() {
   // account AND at its strategy - two different, non-overlapping
   // groupings of the same underlying facts, exactly like an account and
   // an asset class already can overlap without double-counting value).
-  const strategyNames = [...new Set(holdings.map((h) => securityById[h.id]?.sub_portfolio).filter(Boolean))];
+  // holdingsRaw, not holdings - same reasoning as accountPerformance/
+  // securityPerformance above: a strategy with a now-fully-redeemed
+  // member (BPI Dinâmico, €0 today) must still show that member's real
+  // historical contribution, not silently drop it the moment its
+  // current value hits 0.
+  const strategyNames = [...new Set(holdingsRaw.map((h) => h.security.sub_portfolio).filter(Boolean))];
   const strategyPerformance = strategyNames.map((name) => {
-    const memberIds = holdings.filter((h) => securityById[h.id]?.sub_portfolio === name).map((h) => h.id);
+    const memberIds = holdingsRaw.filter((h) => h.security.sub_portfolio === name).map((h) => h.security.id);
     const memberHistories = Object.fromEntries(memberIds.map((id) => [id, securityHistories[id] || []]));
     const memberTransactions = transactionsRaw.filter((t) => memberIds.includes(t.security_id));
     const perf = scopedPerformance({
@@ -564,20 +704,40 @@ async function getPortfolioDataLive() {
     });
   });
 
+  // Live-computed now (computeAssetClassAllocation() above), not
+  // staticReal.assetClassAllocation - see that function's own comment.
+  const assetClassAllocation = computeAssetClassAllocation(holdings);
+
+  // ---------- Costs Engine (calculations.js - see that file's own
+  // "Costs Engine" header comment for the full product-vs-cash-cost,
+  // current-vs-historical distinction this powers) ----------
+  // costRows: real `costs` table rows, fetched alongside everything
+  // else above. asOfDate is latestDate (the portfolio's own latest real
+  // observation), same "now" every other live figure on this page uses -
+  // never wall-clock today, which could claim a rate was "current" on a
+  // day this portfolio has no real data for yet.
+  const currentCost = computeCurrentPortfolioCost(holdings, costRows, totalValue, latestDate);
+  const costEvolution = computeCostEvolution(securityHistories, allObservationDates, costRows);
+  const historicalCashCosts = computeHistoricalCashCosts(costRows, securityHistories, latestDate);
+  // Per-year breakdown (embedded estimate + real cash, kept separate) -
+  // see calculations.js:computeAnnualCostBreakdown()'s own header
+  // comment for why embeddedEUR is an ESTIMATE, never "paid".
+  const annualCostBreakdown = computeAnnualCostBreakdown(costRows, securityHistories, latestDate);
+
   const largest = holdings.length ? [...holdings].sort((a, b) => b.weight - a.weight)[0] : null;
   const health = {
     holdingsCount: holdings.length,
     accountsCount: accounts.length,
     transactionsCount: transactions.length,
     countriesCount: staticReal.countries.length,
-    assetClassesCount: staticReal.assetClassAllocation.length,
+    assetClassesCount: assetClassAllocation.length,
     currenciesCount: currency.length,
     largestPosition: largest ? { name: largest.name, weight: largest.weight } : { name: "—", weight: 0 },
     cashRatio: totalValue ? Math.round((cash / totalValue) * 10000) / 100 : 0,
   };
 
   return {
-    portfolio: { holdings, accounts, cash, transactions },
+    portfolio: { holdings, allHoldings, accounts, cash, transactions },
     // performanceSeries: the cash-flow-neutral normalized daily index
     // (calculations.js:scopedPerformance()'s own dailySeries, base 100
     // at the portfolio's own inception) - deliberately separate from
@@ -587,7 +747,7 @@ async function getPortfolioDataLive() {
     // Nasdaq-100 chart is built from - see plan doc section C/§4.
     history: { valueSeries, performanceSeries: portfolioPerformance.dailySeries, inceptionDate, benchmarks, marketData },
     analytics: {
-      assetClassAllocation: staticReal.assetClassAllocation,
+      assetClassAllocation,
       productAllocation,
       accountAllocation,
       regions: staticReal.regions,
@@ -595,6 +755,13 @@ async function getPortfolioDataLive() {
       notCountrySpecificWeight: staticReal.notCountrySpecificWeight,
       currency,
       health,
+      // currentCost/costEvolution/historicalCashCosts:
+      // calculations.js's Costs Engine - see that section's own header
+      // comment. currentCost is forward-looking (what the portfolio
+      // costs to run today); historicalCashCosts is backward-looking
+      // (real cash actually paid, nav_embedded costs excluded on
+      // purpose - never double-counted against valuations/performance).
+      costs: { current: currentCost, evolution: costEvolution, historical: historicalCashCosts, annual: annualCostBreakdown },
       performance: {
         totalValue, investedCapital, unrealisedGain, unrealisedGainPct,
         totalReturnPct, totalReturnAvailable,
@@ -748,7 +915,7 @@ async function getPortfolioDataPublic() {
   };
 
   return {
-    portfolio: { holdings: [], accounts: [], cash: null, transactions: [] },
+    portfolio: { holdings: [], allHoldings: [], accounts: [], cash: null, transactions: [] },
     history: { valueSeries, inceptionDate, benchmarks, marketData: {} },
     analytics: {
       assetClassAllocation,
@@ -759,6 +926,16 @@ async function getPortfolioDataPublic() {
       notCountrySpecificWeight: 100,
       currency: [],
       health,
+      // Costs are never computed for the signed-out/public path - a
+      // security-level % rate isn't privacy-sensitive on its own, but
+      // there's no real holding weight here to blend it against (this
+      // path's own header comment: portfolio.holdings is deliberately
+      // empty), so an honest empty bundle, not a guess.
+      costs: {
+        current: { weightedCostPct: null, coveragePct: 0, productAnnualEUR: null, platformAnnualEUR: null, totalAnnualEUR: null, monthlyEquivalentEUR: null, byHolding: [], platformItems: [] },
+        evolution: [],
+        historical: { totalEUR: null, byHolding: [], series: [], excluded: [] }, annual: [],
+      },
       performance: {
         totalValue: null, investedCapital: null, unrealisedGain: null, unrealisedGainPct: null,
         totalReturnPct, totalReturnAvailable,
@@ -789,7 +966,7 @@ async function getPortfolioDataPublic() {
     to show - graceful degradation, never a silent leak. */
 function getPortfolioDataPublicUnavailable(loadError) {
   return {
-    portfolio: { holdings: [], accounts: [], cash: null, transactions: [] },
+    portfolio: { holdings: [], allHoldings: [], accounts: [], cash: null, transactions: [] },
     history: { valueSeries: [], inceptionDate: null, benchmarks: null, marketData: {} },
     analytics: {
       assetClassAllocation: [], productAllocation: [], accountAllocation: [],
@@ -797,6 +974,11 @@ function getPortfolioDataPublicUnavailable(loadError) {
       health: {
         holdingsCount: null, accountsCount: null, transactionsCount: null, countriesCount: null,
         assetClassesCount: null, currenciesCount: null, largestPosition: null, cashRatio: 0,
+      },
+      costs: {
+        current: { weightedCostPct: null, coveragePct: 0, productAnnualEUR: null, platformAnnualEUR: null, totalAnnualEUR: null, monthlyEquivalentEUR: null, byHolding: [], platformItems: [] },
+        evolution: [],
+        historical: { totalEUR: null, byHolding: [], series: [], excluded: [] }, annual: [],
       },
       performance: {
         totalValue: null, investedCapital: null, unrealisedGain: null, unrealisedGainPct: null,
