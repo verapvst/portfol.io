@@ -70,7 +70,11 @@ function buildKpiViewModels(data) {
       key: "invested", docKey: "net-invested", label: "Invested Capital", icon: "landmark",
       value: formatMoney(perf.investedCapital),
       deltaValue: null,
-      note: `since ${data.history.inceptionDate}`,
+      // Same honest-fallback pattern as YTD Return just above - inceptionDate
+      // is genuinely null before the portfolio has any real observation
+      // (e.g. the public snapshot not populated yet), and interpolating
+      // that straight into the string used to literally render "since null".
+      note: data.history.inceptionDate ? `since ${data.history.inceptionDate}` : "not enough data yet",
       trend: "",
     },
   ];

@@ -959,7 +959,7 @@ function kpiDrill(key, data) {
     // (data.history.valueSeries) - no need to promise it again here.
     // Benchmark comparison is real now too (Performance page's own
     // Benchmark Comparison card) - no longer listed as not-built here.
-    bodyHTML: `<p class="drawer-hint">Full history is the chart above, since ${data.history.inceptionDate}.</p>${cashFlowRows}`,
+    bodyHTML: `<p class="drawer-hint">Full history is the chart above${data.history.inceptionDate ? `, since ${data.history.inceptionDate}` : ""}.</p>${cashFlowRows}`,
   };
 }
 
@@ -990,7 +990,7 @@ function performanceDrill(data) {
     .map(([year, y]) => rowHTML(Number(year) === currentYear ? `${year} YTD` : year, fmtPct(y.returnPct)));
   return {
     icon: "trendingUp", title: "Investment Performance",
-    subtitle: `${fmtPct(perf.totalReturnPct)} (TWR) since ${data.history.inceptionDate}`,
+    subtitle: data.history.inceptionDate ? `${fmtPct(perf.totalReturnPct)} (TWR) since ${data.history.inceptionDate}` : `${fmtPct(perf.totalReturnPct)} (TWR)`,
     bodyHTML: `
       ${summaryRows}
       ${yearRows.length ? `<div class="drawer-rows">${yearRows.join("")}</div>` : ""}

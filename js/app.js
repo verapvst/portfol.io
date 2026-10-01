@@ -35,9 +35,13 @@ function initPerformanceCard(data) {
   // repository.js) so it doesn't have that problem.
   const sign = perf.totalReturnPct > 0 ? "up" : perf.totalReturnPct < 0 ? "down" : "";
   $("perf-value").innerHTML = `<span class="${sign}">${fmtPct(perf.totalReturnPct)}</span>`;
+  // inceptionDate is genuinely null before the portfolio has any real
+  // observation (e.g. signed-out, before the public snapshot has ever
+  // been populated) - interpolating that straight into the string used
+  // to literally render "Time-Weighted Return since null".
   $("perf-secondary").textContent = isOwnerMode()
     ? `Time-Weighted Return · ${fmtEUR(perf.unrealisedGain, { signed: true })} · ${fmtEUR(perf.totalValue)} today`
-    : `Time-Weighted Return since ${data.history.inceptionDate}`;
+    : data.history.inceptionDate ? `Time-Weighted Return since ${data.history.inceptionDate}` : "Time-Weighted Return";
 
   // Investor Return (XIRR) lives here, not as a fifth KPI tile - it's a
   // genuinely different question from the TWR headline above ("what did
