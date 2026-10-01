@@ -736,6 +736,30 @@ async function getPortfolioDataLive() {
     cashRatio: totalValue ? Math.round((cash / totalValue) * 10000) / 100 : 0,
   };
 
+  // ---------- Publish the public performance snapshot (0031) ----------
+  // Best-effort, fire-and-forget-safe: wrapped in its own try/catch so a
+  // write failure (RLS misconfiguration, a network hiccup) never breaks
+  // Overview for Vera herself. Percentages and a base-100 index curve
+  // only - see 0031's own header for why this is safe to expose via the
+  // anon-readable public_portfolio_performance() RPC. Upserted on every
+  // signed-in load, not just once, so the public figure stays current
+  // with whatever Vera's own session last computed.
+  try {
+    await window.db.from("public_performance_snapshot").upsert({
+      portfolio_id: portfolioId,
+      total_return_pct: totalReturnPct,
+      total_return_available: totalReturnAvailable,
+      investor_return_pct: investorReturnPct,
+      investor_return_available: investorReturnAvailable,
+      yearly_returns: yearlyReturns,
+      performance_series: portfolioPerformance.dailySeries,
+      inception_date: inceptionDate,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn("Public performance snapshot publish failed:", err);
+  }
+
   return {
     portfolio: { holdings, allHoldings, accounts, cash, transactions },
     // performanceSeries: the cash-flow-neutral normalized daily index
@@ -853,14 +877,21 @@ async function getPortfolioDataLive() {
     history.marketData/portfolio.transactions (unchanged from before -
     out of scope for the public path). */
 async function getPortfolioDataPublic() {
-  const [historyRes, flowsRes, allocRes] = await Promise.all([
+  const [historyRes, flowsRes, allocRes, perfRes] = await Promise.all([
     window.db.rpc("public_portfolio_value_history"),
     window.db.rpc("public_cash_flow_dates"),
     window.db.rpc("public_portfolio_allocation"),
+    window.db.rpc("public_portfolio_performance"),
   ]);
   if (historyRes.error) throw historyRes.error;
   if (flowsRes.error) throw flowsRes.error;
   if (allocRes.error) throw allocRes.error;
+  // public_portfolio_performance (0031) is allowed to fail soft - a
+  // migration not yet run, or Vera never having loaded the app signed
+  // in yet, should degrade to "insufficient history" below, never break
+  // the whole signed-out page the way historyRes/flowsRes/allocRes
+  // failing genuinely should.
+  const perfRow = !perfRes.error && perfRes.data && perfRes.data.length ? perfRes.data[0] : null;
 
   const historyRows = historyRes.data || [];
   const flows = flowsRes.data || [];
@@ -871,21 +902,29 @@ async function getPortfolioDataPublic() {
   const portfolioHistory = historyRows
     .map((r) => ({ date: r.date, value_eur: r.scaled_value }))
     .sort((a, b) => a.date.localeCompare(b.date));
-  const securityHistories = { portfolio: portfolioHistory };
 
-  const allObservationDates = portfolioHistory.map((p) => p.date);
-  const latestDate = allObservationDates[allObservationDates.length - 1] || "0000-00-00";
   const valueSeries = portfolioHistory.map((p) => ({ date: p.date, value: p.value_eur, real: true }));
 
-  const cashFlowDates = [...new Set(flows.map((f) => f.date))].sort();
-  const inceptionDate = cashFlowDates[0] || null;
-
-  const twrResult = cashFlowDates.length
-    ? chainLinkedPortfolioReturn(securityHistories, cashFlowDates, latestDate)
-    : { subPeriods: [], totalReturnPct: null };
-  const totalReturnAvailable = twrResult.totalReturnPct != null;
-  const totalReturnPct = totalReturnAvailable ? twrResult.totalReturnPct : 0;
-  const yearlyReturns = inceptionDate ? annualReturns(securityHistories, cashFlowDates, latestDate, inceptionDate) : {};
+  // ---------- Real TWR/XIRR/yearly breakdown, read from the signed-in
+  // client's own published snapshot (0031), never recomputed here from
+  // the narrower public data this path has access to - see 0031's own
+  // header for why (this used to run the OLDER chainLinkedPortfolioReturn()/
+  // annualReturns() against cash-flow DATES only, the exact class of
+  // bug this session spent hours fixing on the signed-in side; signed-in
+  // and signed-out disagreeing, sometimes with signed-out showing a
+  // wrong negative return, is exactly what this migration closes).
+  const inceptionDate = perfRow?.inception_date || null;
+  const totalReturnAvailable = !!perfRow?.total_return_available;
+  const totalReturnPct = totalReturnAvailable ? perfRow.total_return_pct : 0;
+  const investorReturnAvailable = !!perfRow?.investor_return_available;
+  const investorReturnPct = investorReturnAvailable ? perfRow.investor_return_pct : 0;
+  const yearlyReturns = perfRow?.yearly_returns || {};
+  // The same base-100 normalized index the signed-in Investment
+  // Performance card and Portfolio-vs-benchmark comparison chart draw
+  // from (js/app.js:initPerformanceCard) - populating this for anon too
+  // means signed-out visitors see the real cash-flow-neutral curve AND
+  // get the S&P 500/Nasdaq-100 comparison chart, not just the headline %.
+  const performanceSeries = perfRow?.performance_series || null;
 
   // ---------- Layer 2 aggregate allocation - category-level only ----------
   const byDimension = (dim) => allocRows.filter((r) => r.dimension === dim && r.weight_pct > 0);
@@ -916,7 +955,7 @@ async function getPortfolioDataPublic() {
 
   return {
     portfolio: { holdings: [], allHoldings: [], accounts: [], cash: null, transactions: [] },
-    history: { valueSeries, inceptionDate, benchmarks, marketData: {} },
+    history: { valueSeries, performanceSeries, inceptionDate, benchmarks, marketData: {} },
     analytics: {
       assetClassAllocation,
       productAllocation: [],
@@ -939,11 +978,12 @@ async function getPortfolioDataPublic() {
       performance: {
         totalValue: null, investedCapital: null, unrealisedGain: null, unrealisedGainPct: null,
         totalReturnPct, totalReturnAvailable,
-        investorReturnPct: 0, investorReturnAvailable: false,
+        investorReturnPct, investorReturnAvailable,
         yearlyReturns,
-        // Same reasoning as investorReturnPct above: real amounts,
-        // deliberately never exposed to anon (public_cash_flow_dates()
-        // returns date+type only, no amount) - null here, not a guess.
+        // Real amounts (contributions/withdrawals/cash) stay deliberately
+        // never exposed to anon (public_cash_flow_dates() returns
+        // date+type only, no amount, and 0031's snapshot is percentages/
+        // an index curve only) - null here, not a guess.
         contributionsTotal: null, withdrawalsTotal: null,
         todayChange: null, todayChangePct: null, cash: null,
       },

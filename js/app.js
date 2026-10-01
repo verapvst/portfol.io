@@ -43,7 +43,14 @@ function initPerformanceCard(data) {
   // genuinely different question from the TWR headline above ("what did
   // I personally earn, given my own deposit timing") and belongs next
   // to its sibling metric, not competing for space in the compact 2x2.
-  $("perf-investor-return-value").textContent = fmtPct(perf.investorReturnPct);
+  // investorReturnAvailable gated the same way Performance's own tile
+  // already does (js/performance.js:renderStats()) - this used to call
+  // fmtPct() unconditionally, so "not enough cash flows yet"
+  // (investorReturnPct defaults to 0 when unavailable) rendered as a
+  // literal "0.00%", implying a real, calculated zero return instead of
+  // "unknown". Same bug class this app's own *Available flag
+  // convention exists to prevent everywhere else - just missed here.
+  $("perf-investor-return-value").textContent = perf.investorReturnAvailable ? fmtPct(perf.investorReturnPct) : "Insufficient history";
 
   // ---------- Performance chart: the portfolio's own trend, nothing else ----------
   // Overview deliberately shows ONLY the portfolio's own line now - no
