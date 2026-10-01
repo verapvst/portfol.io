@@ -191,6 +191,41 @@ function computeAssetClassAllocation(holdings) {
   return out;
 }
 
+/** Real, privacy-safe "Investment journey" milestones for the public
+    Overview (recruiter-readiness audit §7/§12) - built ONLY from
+    public_cash_flow_dates()'s own {date, type} shape (no security, no
+    amount - never crosses that function's own privacy boundary).
+    "Diversification" is detected, not invented: the real date with the
+    most simultaneous 'buy' events IS a genuine fact ("several positions
+    opened the same day"), derivable from type+date alone without ever
+    naming what was bought. Returns [] when there's no real cash-flow
+    data to build from yet (never a placeholder milestone). */
+function computePublicMilestones(flows, inceptionDate) {
+  if (!flows.length || !inceptionDate) return [];
+  const milestones = [{ date: inceptionDate, label: "Portfolio inception" }];
+
+  const buysByDate = new Map();
+  for (const f of flows) {
+    if (f.type !== "buy") continue;
+    buysByDate.set(f.date, (buysByDate.get(f.date) || 0) + 1);
+  }
+  let busiestDate = null;
+  let busiestCount = 0;
+  for (const [date, count] of buysByDate.entries()) {
+    if (count > busiestCount) { busiestDate = date; busiestCount = count; }
+  }
+  if (busiestDate && busiestDate !== inceptionDate && busiestCount >= 2) {
+    milestones.push({ date: busiestDate, label: `Diversified into ${busiestCount} new holdings` });
+  }
+
+  const lastDate = flows[flows.length - 1]?.date;
+  if (lastDate && lastDate !== inceptionDate && lastDate !== busiestDate) {
+    milestones.push({ date: lastDate, label: "Most recent recorded activity" });
+  }
+
+  return milestones.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 async function getPortfolioDataLive() {
   const portfolioId = await ensurePortfolio();
   if (!portfolioId) throw new Error("No portfolio for the current user.");
@@ -769,7 +804,12 @@ async function getPortfolioDataLive() {
     // is NOT safe to feed into a benchmark comparison chart). This is
     // what the Overview/Performance page's Portfolio-vs-S&P500-vs-
     // Nasdaq-100 chart is built from - see plan doc section C/§4.
-    history: { valueSeries, performanceSeries: portfolioPerformance.dailySeries, inceptionDate, benchmarks, marketData },
+    // milestones: owner mode shows its own real history inline (Holdings/
+    // Transactions/Calendar), so this stays empty here - the Investment
+    // Journey timeline (computePublicMilestones, below) is a signed-out-
+    // only feature. Present as [] rather than omitted so every `history`
+    // shape across this file/repository.js is the same shape to read.
+    history: { valueSeries, performanceSeries: portfolioPerformance.dailySeries, inceptionDate, benchmarks, marketData, milestones: [] },
     analytics: {
       assetClassAllocation,
       productAllocation,
@@ -926,6 +966,18 @@ async function getPortfolioDataPublic() {
   // get the S&P 500/Nasdaq-100 comparison chart, not just the headline %.
   const performanceSeries = perfRow?.performance_series || null;
 
+  // ---------- Public "Investment journey" milestones (recruiter-
+  // readiness audit §7/§12) - real, derived from public_cash_flow_dates()
+  // alone (date + TYPE only, no security/amount - that function's own
+  // privacy boundary, never crossed here). "Diversification" is a real,
+  // privacy-safe signal: counting how many 'buy' events land on the same
+  // date reveals "several new positions opened together" without ever
+  // naming what was bought. Never invented - a date only becomes a
+  // milestone because it's genuinely the inception date, genuinely the
+  // single busiest real buy-date (2+ buys, otherwise skipped), or
+  // genuinely the latest recorded activity.
+  const milestones = computePublicMilestones(flows, inceptionDate);
+
   // ---------- Layer 2 aggregate allocation - category-level only ----------
   const byDimension = (dim) => allocRows.filter((r) => r.dimension === dim && r.weight_pct > 0);
   const assetClassAllocation = byDimension("asset_class")
@@ -955,7 +1007,7 @@ async function getPortfolioDataPublic() {
 
   return {
     portfolio: { holdings: [], allHoldings: [], accounts: [], cash: null, transactions: [] },
-    history: { valueSeries, performanceSeries, inceptionDate, benchmarks, marketData: {} },
+    history: { valueSeries, performanceSeries, inceptionDate, benchmarks, marketData: {}, milestones },
     analytics: {
       assetClassAllocation,
       productAllocation: [],
@@ -1007,7 +1059,7 @@ async function getPortfolioDataPublic() {
 function getPortfolioDataPublicUnavailable(loadError) {
   return {
     portfolio: { holdings: [], allHoldings: [], accounts: [], cash: null, transactions: [] },
-    history: { valueSeries: [], inceptionDate: null, benchmarks: null, marketData: {} },
+    history: { valueSeries: [], inceptionDate: null, benchmarks: null, marketData: {}, milestones: [] },
     analytics: {
       assetClassAllocation: [], productAllocation: [], accountAllocation: [],
       regions: [], countries: [], notCountrySpecificWeight: 100, currency: [],

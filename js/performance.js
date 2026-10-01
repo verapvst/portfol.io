@@ -330,8 +330,13 @@ function renderBenchmarkSection(data, scopeType, scopeId) {
     total_return: "dividend-adjusted total return",
   };
   const shownDataTypes = [...new Set(availableBenchmarks.map((b) => b.dataType).filter(Boolean))];
+  // "Indexed to 100" stated plainly, not just implied by the chart's own
+  // shape - recruiter-readiness audit §6: a multi-line chart that goes
+  // up and down reads as "value" by default, this is a rebased RETURN
+  // comparison (every series starts at 100, regardless of how large the
+  // real portfolio or index actually is).
   const legendNote = shownDataTypes.length
-    ? `Benchmark data: ${shownDataTypes.map((t) => BENCHMARK_DATA_TYPE_NOTE[t] || t).join("; ")}. The portfolio's own return above already reflects all real cash-flow effects - a benchmark without dividends isn't a strict like-for-like comparison.`
+    ? `Indexed to 100 at the start of this window - shows RETURN, not value. Benchmark data: ${shownDataTypes.map((t) => BENCHMARK_DATA_TYPE_NOTE[t] || t).join("; ")}. The portfolio's own return above already reflects all real cash-flow effects - a benchmark without dividends isn't a strict like-for-like comparison.`
     : "";
 
   body.innerHTML = `

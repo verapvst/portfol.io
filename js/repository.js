@@ -456,7 +456,7 @@ function getMockPortfolioData() {
     // treat an empty marketData map as "no market-data feed for this
     // mode", the same honest gap this file already applies everywhere
     // else (e.g. totalReturnAvailable, investorReturnAvailable).
-    history: { valueSeries, inceptionDate, benchmarks: null, marketData: {} },
+    history: { valueSeries, inceptionDate, benchmarks: null, marketData: {}, milestones: [] },
     analytics: {
       assetClassAllocation,
       productAllocation,

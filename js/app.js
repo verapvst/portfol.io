@@ -103,12 +103,70 @@ function initPerformanceCard(data) {
       formatAxisValue: hasPerformanceSeries ? (v) => v.toFixed(0) : (owner ? undefined : (v) => String(Math.round(v))),
       formatDateLabel: formatDateTick,
     });
+    // Recruiter-readiness audit §6: nothing on this chart said it wasn't
+    // a euro value - a line that goes up and down reads as "my money"
+    // by default, when this is actually a cash-flow-neutral RETURN curve
+    // (same series the headline % above is computed from). One line,
+    // shown for every viewer (not just signed-out) since the chart is
+    // index-based either way whenever hasPerformanceSeries is true.
+    $("perf-chart-caption").textContent = hasPerformanceSeries
+      ? "Indexed to 100 at inception - shows how the RETURN evolved, not the portfolio's euro value."
+      : "";
   };
   draw();
   if (perfResizeHandler) window.removeEventListener("resize", perfResizeHandler);
   perfResizeHandler = draw;
   window.addEventListener("resize", perfResizeHandler);
   $("perf-more-link").innerHTML = `<a class="link-more" href="performance.html">View Performance ${icon("arrowRight")}</a>`;
+}
+
+/** Signed-out hero: identity strip + 3 privacy-safe headline stats (never
+    current €/holdings - see analytics.js's own privacy boundary) + a
+    short real-milestones timeline (computePublicMilestones in
+    analytics.js, date-derived only from public_cash_flow_dates(), never
+    invented). Hidden entirely in owner mode: Vera's own session already
+    has every one of these facts, and far more, in the KPI grid and
+    Performance card right below it - showing this too would just be a
+    duplicate, staler copy competing for the same space. */
+function renderPublicHero(data) {
+  const card = $("public-hero-card");
+  if (isOwnerMode()) { card.hidden = true; return; }
+
+  const inceptionDate = data.history.inceptionDate;
+  const perf = data.analytics.performance;
+  if (!inceptionDate || !perf?.totalReturnAvailable) { card.hidden = true; return; }
+
+  const sinceYear = inceptionDate.slice(0, 4);
+  $("public-hero-kicker").textContent = `PORTFOL.IO · Personal Investment Portfolio · Since ${sinceYear}`;
+
+  const days = Math.floor((Date.now() - new Date(inceptionDate).getTime()) / 86400000);
+  const years = Math.floor(days / 365);
+  // annualizeReturnPct (calculations.js) returns null itself below its own
+  // minDaysForAnnualisedReturn gate - same "don't annualise a few weeks"
+  // guard the Performance page's own quant metrics already use.
+  const cagr = window.annualizeReturnPct(perf.totalReturnPct, days);
+
+  const stats = [
+    { label: "Cumulative Return", value: fmtPct(perf.totalReturnPct) },
+    { label: "Annualised Return (CAGR)", value: cagr != null ? fmtPct(cagr) : "Insufficient history" },
+    { label: "Years Tracked", value: years >= 1 ? String(years) : "<1" },
+  ];
+  $("public-hero-stats").innerHTML = stats.map((s) => `
+    <div class="public-hero-stat">
+      <p class="public-hero-stat-value">${s.value}</p>
+      <p class="public-hero-stat-label">${s.label}</p>
+    </div>
+  `).join("");
+
+  const milestones = data.history.milestones || [];
+  $("public-hero-timeline").innerHTML = milestones.map((m) => `
+    <div class="public-hero-milestone">
+      <p class="public-hero-milestone-date">${m.date}</p>
+      <p class="public-hero-milestone-label">${m.label}</p>
+    </div>
+  `).join("");
+
+  card.hidden = false;
 }
 
 /** Everything below reads from `data`, captured in this closure so a
@@ -122,6 +180,7 @@ function initPerformanceCard(data) {
     renderAll() itself runs on every auth change - would have piled up a
     new listener each time instead of just re-running the same one.) */
 function renderAll(data) {
+  renderPublicHero(data);
   renderSnapshot($("kpi-grid"), buildKpiViewModels(data));
   initPerformanceCard(data);
   renderHoldingsTable($("holdings-table"), data.portfolio.holdings, data.portfolio.accounts);

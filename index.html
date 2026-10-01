@@ -7,15 +7,27 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=138">
-<link rel="stylesheet" href="css/layout.css?v=138">
-<link rel="stylesheet" href="css/components.css?v=138">
+<link rel="stylesheet" href="css/theme.css?v=139">
+<link rel="stylesheet" href="css/layout.css?v=139">
+<link rel="stylesheet" href="css/components.css?v=139">
+<link rel="stylesheet" href="css/overview.css?v=139">
 </head>
 <body>
 <div id="app">
 
   <main id="main">
     <header id="topbar" class="topbar"></header>
+
+    <!-- Signed-out only (see renderPublicHero in app.js): identity strip +
+         3 privacy-safe headline stats + a short real-milestones timeline.
+         Never shown in owner mode - Vera's own session already has every
+         one of these facts, and more, in the KPI grid below. -->
+    <section class="card glass" id="public-hero-card" hidden>
+      <p class="public-hero-kicker" id="public-hero-kicker"></p>
+      <p class="public-hero-sub">A real investment portfolio, tracked and analysed continuously. This page shows its long-term return - current holdings and exact balances stay private until sign-in.</p>
+      <div class="public-hero-stats" id="public-hero-stats"></div>
+      <div class="public-hero-timeline" id="public-hero-timeline"></div>
+    </section>
 
     <!-- Two-column hierarchy: LEFT = primary analytical views, RIGHT =
          supporting summary cards. See css/layout.css .overview-columns. -->
@@ -48,6 +60,7 @@
           </div>
           <div class="benchmark-toggle-row" id="benchmark-toggle-row"></div>
           <div id="linechart-container"></div>
+          <p class="chart-legend-note" id="perf-chart-caption"></p>
           <div id="perf-more-link"></div>
         </section>
 
@@ -113,22 +126,22 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=138"></script>
-<script src="js/supabaseClient.js?v=138"></script>
+<script src="js/supabaseConfig.js?v=139"></script>
+<script src="js/supabaseClient.js?v=139"></script>
 
-<script src="js/utils.js?v=138"></script>
-<script src="js/calculations.js?v=138"></script>
-<script src="js/repository.js?v=138"></script>
+<script src="js/utils.js?v=139"></script>
+<script src="js/calculations.js?v=139"></script>
+<script src="js/repository.js?v=139"></script>
 
-<script src="vendor/d3.min.js?v=138"></script>
-<script src="vendor/topojson-client.min.js?v=138"></script>
+<script src="vendor/d3.min.js?v=139"></script>
+<script src="vendor/topojson-client.min.js?v=139"></script>
 
-<script src="js/charts.js?v=138"></script>
-<script src="js/shell.js?v=138"></script>
-<script src="js/auth.js?v=138"></script>
-<script src="js/db.js?v=138"></script>
-<script src="js/analytics.js?v=138"></script>
-<script src="js/ui.js?v=138"></script>
-<script src="js/app.js?v=138"></script>
+<script src="js/charts.js?v=139"></script>
+<script src="js/shell.js?v=139"></script>
+<script src="js/auth.js?v=139"></script>
+<script src="js/db.js?v=139"></script>
+<script src="js/analytics.js?v=139"></script>
+<script src="js/ui.js?v=139"></script>
+<script src="js/app.js?v=139"></script>
 </body>
 </html>
