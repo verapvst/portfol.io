@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=139">
-<link rel="stylesheet" href="css/layout.css?v=139">
-<link rel="stylesheet" href="css/components.css?v=139">
-<link rel="stylesheet" href="css/performance.css?v=139">
+<link rel="stylesheet" href="css/theme.css?v=140">
+<link rel="stylesheet" href="css/layout.css?v=140">
+<link rel="stylesheet" href="css/components.css?v=140">
+<link rel="stylesheet" href="css/performance.css?v=140">
 </head>
 <body>
 <div id="app">
@@ -24,6 +24,14 @@
          invisible "silently showing stale/mock data" state visible
          instead of looking identical to a real, current, flat chart. -->
     <div id="perf-data-warning"></div>
+
+    <!-- Investment approach - a short, plain-language statement of the
+         strategy this performance should be judged against. Static,
+         owner-authored text (not derived from data). -->
+    <section class="card glass perf-strategy-card" id="perf-strategy-card">
+      <span class="perf-strategy-kicker">Strategy</span>
+      <p class="perf-strategy-text">Beginner investor with a long-term objective, building a globally diversified portfolio over time.</p>
+    </section>
 
     <!-- Scope selector: Portfolio / Accounts / Strategies / Securities,
          plus a second pill row for the specific entries within whichever
@@ -115,18 +123,18 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=139"></script>
-<script src="js/supabaseClient.js?v=139"></script>
+<script src="js/supabaseConfig.js?v=140"></script>
+<script src="js/supabaseClient.js?v=140"></script>
 
-<script src="js/utils.js?v=139"></script>
-<script src="js/calculations.js?v=139"></script>
-<script src="js/repository.js?v=139"></script>
+<script src="js/utils.js?v=140"></script>
+<script src="js/calculations.js?v=140"></script>
+<script src="js/repository.js?v=140"></script>
 
-<script src="js/charts.js?v=139"></script>
-<script src="js/shell.js?v=139"></script>
-<script src="js/auth.js?v=139"></script>
-<script src="js/db.js?v=139"></script>
-<script src="js/analytics.js?v=139"></script>
-<script src="js/performance.js?v=139"></script>
+<script src="js/charts.js?v=140"></script>
+<script src="js/shell.js?v=140"></script>
+<script src="js/auth.js?v=140"></script>
+<script src="js/db.js?v=140"></script>
+<script src="js/analytics.js?v=140"></script>
+<script src="js/performance.js?v=140"></script>
 </body>
 </html>

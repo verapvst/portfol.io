@@ -155,18 +155,6 @@ function barRowHTML({ label, weight, tone, drillType, drillId, valueLabel }) {
     </div>`;
 }
 
-function signinNoteHTML(label) {
-  return `
-    <div class="costs-signin-note">
-      Sign in to see ${label}.
-      <br/>
-      <button type="button" class="alloc-signin-cta">Sign In</button>
-    </div>`;
-}
-function wireSigninCTAs(container) {
-  container.querySelectorAll(".alloc-signin-cta").forEach((btn) => btn.addEventListener("click", () => window.openAuthModal()));
-}
-
 /* ---------- Top Concentrations - scope-aware ---------- */
 
 function computeConcentration(holdings) {
@@ -190,13 +178,6 @@ function concentrationTileHTML(label, value, note) {
 function renderConcentration(data, holdings) {
   const { sorted, top1, top3, top5 } = computeConcentration(holdings);
 
-  if (!sorted.length && !currentUser()) {
-    $("concentration-stats").innerHTML = "";
-    $("concentration-list").innerHTML = signinNoteHTML("individual holdings");
-    wireSigninCTAs($("concentration-list"));
-    return;
-  }
-
   $("concentration-stats").innerHTML = [
     concentrationTileHTML("Top 1 Holding", top1, sorted[0] ? sorted[0].name : "—"),
     concentrationTileHTML("Top 3 Holdings", top3, "combined weight"),
@@ -212,11 +193,6 @@ function renderConcentration(data, holdings) {
 
 function renderSecurityAllocation(holdings) {
   const items = [...holdings].sort((a, b) => b.weight - a.weight);
-  if (!items.length && !currentUser()) {
-    $("security-allocation-body").innerHTML = signinNoteHTML("the full security-by-security breakdown");
-    wireSigninCTAs($("security-allocation-body"));
-    return;
-  }
   $("security-allocation-body").innerHTML = items.map((h) => barRowHTML({
     label: `${h.name}${h.ticker !== "—" ? ` · ${h.ticker}` : ""}`, weight: h.weight, tone: h.tone,
     drillType: "holding", drillId: h.id,
@@ -249,11 +225,6 @@ function renderAccountAllocation(data) {
   if (currentScope !== "all") { $("account-allocation-body").innerHTML = scopeUnavailableHTML("Account Allocation"); return; }
   const owner = isOwnerMode();
   const items = [...data.analytics.accountAllocation].sort((a, b) => b.weight - a.weight);
-  if (!items.length && !currentUser()) {
-    $("account-allocation-body").innerHTML = signinNoteHTML("account-level allocation");
-    wireSigninCTAs($("account-allocation-body"));
-    return;
-  }
   $("account-allocation-body").innerHTML = items.map((a) => barRowHTML({
     label: a.name, weight: a.weight, tone: a.tone,
     drillType: "account", drillId: a.name,
@@ -277,6 +248,19 @@ function renderGeographicExposure(data) {
 }
 
 function renderAll(data) {
+  // Signed out: only the aggregate views (asset class + geography) are
+  // public. Everything position-level collapses into ONE locked block,
+  // not a lock repeated inside each card.
+  const signedIn = !!currentUser();
+  document.body.classList.toggle("signed-in", signedIn);
+  document.querySelector(".portfolio-top-row").classList.toggle("is-public", !signedIn);
+  if (!signedIn) {
+    $("holdings-locked-slot").innerHTML = lockedHTML({ hint: "Individual holdings, concentrations, and account-level allocation." });
+    renderAssetClass(data);
+    renderGeographicExposure(data);
+    return;
+  }
+
   renderScopeSelector(data);
   const holdings = scopedHoldings(data);
 

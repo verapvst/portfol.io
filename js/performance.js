@@ -604,7 +604,7 @@ async function init() {
 
   renderTopbar($("topbar"), user, {
     heading: "Performance",
-    subtitle: "How has your portfolio performed - not any single holding's market price. Looking for contributions or portfolio value over time? See Capital.",
+    subtitle: "How the portfolio has performed. For contributions and value over time, see Capital.",
   });
   initNavigation(user);
   initAuthModal();

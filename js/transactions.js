@@ -41,24 +41,55 @@ function fmtNum(n) {
   return n === null || n === undefined ? "—" : Number(n).toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
+const TXN_FILTERS = [
+  { key: "all", label: "All", types: null },
+  { key: "buys", label: "Buys", types: ["buy"] },
+  { key: "sells", label: "Sells", types: ["sell"] },
+  { key: "dividends", label: "Dividends", types: ["dividend"] },
+  { key: "cash", label: "Cash", types: ["deposit", "withdrawal"] },
+  { key: "fees", label: "Fees", types: ["fee"] },
+];
+let txnFilterKey = "all";
+
+function fmtTxnDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function renderTxnToolbar(container) {
+  const row = $("txn-type-pills");
+  row.innerHTML = TXN_FILTERS.map((f) =>
+    `<button class="filter-pill${f.key === txnFilterKey ? " active" : ""}" data-filter="${f.key}" type="button">${f.label}</button>`
+  ).join("");
+  row.querySelectorAll(".filter-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      txnFilterKey = btn.dataset.filter;
+      renderTxnToolbar(container);
+      renderTransactionsTable(container);
+    });
+  });
+}
+
 function renderTransactionsTable(container) {
-  const rows = showVoided ? transactionsCache : transactionsCache.filter((t) => !t.voided);
+  const filter = TXN_FILTERS.find((f) => f.key === txnFilterKey);
+  const rows = (showVoided ? transactionsCache : transactionsCache.filter((t) => !t.voided))
+    .filter((t) => !filter.types || filter.types.includes(t.type));
 
   if (!rows.length) {
-    container.innerHTML = `<p class="transactions-empty">${showVoided ? "No transactions yet." : "No active transactions yet — add your first one, or check \"Show voided\" if you expect one here."}</p>`;
+    container.innerHTML = `<p class="transactions-empty">${transactionsCache.length ? "No transactions match this filter." : "No transactions yet — add your first one."}</p>`;
     return;
   }
 
   const html = rows.map((t) => `
     <tr class="${t.voided ? "is-voided" : ""}">
-      <td>${t.date}</td>
-      <td>${t.accounts ? t.accounts.name : "—"}</td>
-      <td>${t.securities ? t.securities.name : "—"}</td>
-      <td><span class="type-badge ${t.type}">${t.type}</span></td>
+      <td class="txn-date">${fmtTxnDate(t.date)}</td>
+      <td>
+        <p class="txn-security">${t.securities ? t.securities.name : (t.type === "deposit" || t.type === "withdrawal" ? "Cash" : "—")}</p>
+        <p class="txn-account">${t.accounts ? t.accounts.name : ""}</p>
+      </td>
+      <td><span class="type-badge ${t.type}">${t.type}</span>${t.voided ? `<span class="voided-tag">voided${t.corrected_by ? " · corrected" : ""}</span>` : ""}</td>
       <td class="amount-cell">${fmtNum(t.units)}</td>
-      <td class="amount-cell">${fmtNum(t.amount)} ${t.currency}</td>
-      <td class="amount-cell">${fmtNum(t.fees)}</td>
-      <td>${t.voided ? `<span class="voided-tag">voided${t.corrected_by ? " · corrected" : ""}</span>` : ""}</td>
+      <td class="amount-cell"><span class="txn-amount">${fmtNum(t.amount)}</span> <span class="txn-currency">${t.currency}</span></td>
+      <td class="amount-cell txn-fees">${t.fees ? fmtNum(t.fees) : "—"}</td>
       <td>
         <div class="row-actions">
           ${t.voided ? "" : `
@@ -73,12 +104,13 @@ function renderTransactionsTable(container) {
     <div class="transactions-table-scroll">
       <table class="transactions-table">
         <thead><tr>
-          <th>Date</th><th>Account</th><th>Security</th><th>Type</th>
-          <th>Units</th><th>Amount</th><th>Fees</th><th></th><th></th>
+          <th>Date</th><th>Security</th><th>Type</th>
+          <th class="amount-cell">Units</th><th class="amount-cell">Amount</th><th class="amount-cell">Fees</th><th></th>
         </tr></thead>
         <tbody>${html}</tbody>
       </table>
-    </div>`;
+    </div>
+    <p class="transactions-count">${rows.length} transaction${rows.length === 1 ? "" : "s"}</p>`;
 
   container.querySelectorAll("[data-edit]").forEach((btn) => {
     btn.addEventListener("click", () => openTransactionModal(btn.dataset.edit));
@@ -451,14 +483,9 @@ function openTransactionModal(transactionId) {
 function renderSignedOutState() {
   const container = $("transactions-table-container");
   container.innerHTML = `
-    <div class="transactions-gated-state">
-      <span class="transactions-gated-icon">${icon("lock")}</span>
-      <h3 class="transactions-gated-title">Transactions</h3>
-      <p class="transactions-gated-message">Your transaction history is private.</p>
-      <button type="button" id="transactions-signin-cta" class="transactions-gated-cta">Login to access</button>
-    </div>`;
-  $("transactions-signin-cta").addEventListener("click", () => window.openAuthModal());
+    ${lockedHTML({ hint: "Every buy, sell, dividend and cash movement - dated and sourced." })}`;
   $("add-transaction-btn").disabled = true;
+  $("transactions-toolbar").style.display = "none";
 }
 
 function renderNoAccountsState() {
@@ -501,6 +528,8 @@ async function loadTransactionsPage() {
 
     $("add-transaction-btn").disabled = false;
     await loadTransactions();
+    $("transactions-toolbar").style.display = "";
+    renderTxnToolbar(container);
     renderTransactionsTable(container);
   } catch (err) {
     container.innerHTML = `<p class="transactions-error">${err.message || "Failed to load transactions."}</p>`;

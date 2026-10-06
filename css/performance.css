@@ -105,3 +105,9 @@
 @media (max-width: 900px) {
   .perf-stats-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Strategy strip ---------- */
+.perf-strategy-card { display: flex; align-items: baseline; gap: var(--sp-4); padding: var(--sp-4) var(--sp-6); margin-bottom: var(--sp-6); }
+.perf-strategy-kicker { flex-shrink: 0; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--coral-2); font-weight: 600; }
+.perf-strategy-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
+@media (max-width: 640px) { .perf-strategy-card { flex-direction: column; gap: var(--sp-1); } }

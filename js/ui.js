@@ -161,13 +161,7 @@ function holdingsRowHTML(h, accountName) {
     holding (accountId) and every account (data.portfolio.accounts). */
 function renderHoldingsTable(container, holdings, accounts = []) {
   if (!holdings.length && !currentUser()) {
-    container.innerHTML = `
-      <div class="costs-signin-note">
-        Sign in to see individual holdings.
-        <br/>
-        <button type="button" id="holdings-signin-cta">Sign In</button>
-      </div>`;
-    $("holdings-signin-cta").addEventListener("click", () => window.openAuthModal());
+    container.innerHTML = lockedHTML({ hint: "Individual positions are private." });
     return;
   }
   const accountNameById = Object.fromEntries(accounts.map((a) => [a.id, a.name]));
@@ -346,7 +340,10 @@ function renderExposure(elements, data) {
   if (!data.analytics.countries.length) { renderExposureAggregateOnly(elements, data); return; }
 
   const { tabsEl, vizEl, hintEl, titleEl } = elements;
-  const keys = Object.keys(EXPOSURE_GROUPINGS);
+  // Currency is settlement currency per account (BPI = EUR, T212 = USD) -
+  // that's the account split in disguise, so it's absent whenever the
+  // data path deliberately doesn't expose accounts (signed out).
+  const keys = Object.keys(EXPOSURE_GROUPINGS).filter((k) => k !== "currency" || data.analytics.currency.length);
 
   tabsEl.innerHTML = keys.map((key, i) =>
     `<button class="tab-btn${i === 0 ? " active" : ""}" data-tab="${key}" role="tab" aria-selected="${i === 0}">${EXPOSURE_GROUPINGS[key].label}</button>`

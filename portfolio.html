@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=139">
-<link rel="stylesheet" href="css/layout.css?v=139">
-<link rel="stylesheet" href="css/components.css?v=139">
-<link rel="stylesheet" href="css/portfolio.css?v=139">
+<link rel="stylesheet" href="css/theme.css?v=140">
+<link rel="stylesheet" href="css/layout.css?v=140">
+<link rel="stylesheet" href="css/components.css?v=140">
+<link rel="stylesheet" href="css/portfolio.css?v=140">
 </head>
 <body>
 <div id="app">
@@ -26,7 +26,7 @@
          UI consolidation, not a data migration. NEVER shows a return %
          or "Insufficient history" - that's Performance's job, kept
          strictly separate (see that audit's §7). -->
-    <section class="card glass interactive" id="scope-card">
+    <section class="card glass interactive private-card" id="scope-card">
       <div class="portfolio-scope-row" id="portfolio-scope-row"></div>
       <p class="section-hint" id="portfolio-summary"></p>
     </section>
@@ -40,7 +40,7 @@
          Allocation's donut doesn't need full width to read clearly.
          Collapses to one column on tablet/mobile (css/portfolio.css). -->
     <div class="portfolio-top-row">
-      <section class="card glass interactive" id="holdings-detail-card">
+      <section class="card glass interactive private-card" id="holdings-detail-card">
         <div class="card-header">
           <div class="card-header-title" data-info="portfolio" tabindex="0" role="button" aria-label="About this page">
             <h2 class="section-title">Holdings</h2>
@@ -60,7 +60,7 @@
       </section>
     </div>
 
-    <section class="card glass interactive" id="concentration-card">
+    <section class="card glass interactive private-card" id="concentration-card">
       <div class="card-header">
         <div class="card-header-title" data-info="allocation-concentration" tabindex="0" role="button" aria-label="About this metric">
           <h2 class="section-title">Top Concentrations</h2>
@@ -70,7 +70,7 @@
       <div id="concentration-list"></div>
     </section>
 
-    <section class="card glass interactive" id="security-allocation-card">
+    <section class="card glass interactive private-card" id="security-allocation-card">
       <div class="card-header">
         <div class="card-header-title" data-info="allocation-security" tabindex="0" role="button" aria-label="About this metric">
           <h2 class="section-title">Security Allocation</h2>
@@ -80,7 +80,7 @@
       <div id="security-allocation-body"></div>
     </section>
 
-    <section class="card glass interactive" id="account-allocation-card">
+    <section class="card glass interactive private-card" id="account-allocation-card">
       <div class="card-header">
         <div class="card-header-title" data-info="allocation-account" tabindex="0" role="button" aria-label="About this metric">
           <h2 class="section-title">Account Allocation</h2>
@@ -101,27 +101,35 @@
       <div id="exposure-viz"></div>
     </section>
 
+    <!-- Signed out only: ONE locked block standing in for everything
+         position-level (holdings table, concentrations, security and
+         account allocation), instead of a lock repeated in every card. -->
+    <section class="card glass" id="holdings-locked-card">
+      <div class="card-header"><h2 class="section-title">Position-level detail</h2></div>
+      <div id="holdings-locked-slot"></div>
+    </section>
+
   </main>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=139"></script>
-<script src="js/supabaseClient.js?v=139"></script>
+<script src="js/supabaseConfig.js?v=140"></script>
+<script src="js/supabaseClient.js?v=140"></script>
 
-<script src="js/utils.js?v=139"></script>
-<script src="js/calculations.js?v=139"></script>
-<script src="js/repository.js?v=139"></script>
+<script src="js/utils.js?v=140"></script>
+<script src="js/calculations.js?v=140"></script>
+<script src="js/repository.js?v=140"></script>
 
-<script src="vendor/d3.min.js?v=139"></script>
-<script src="vendor/topojson-client.min.js?v=139"></script>
+<script src="vendor/d3.min.js?v=140"></script>
+<script src="vendor/topojson-client.min.js?v=140"></script>
 
-<script src="js/charts.js?v=139"></script>
-<script src="js/shell.js?v=139"></script>
-<script src="js/auth.js?v=139"></script>
-<script src="js/db.js?v=139"></script>
-<script src="js/analytics.js?v=139"></script>
-<script src="js/ui.js?v=139"></script>
-<script src="js/portfolio.js?v=139"></script>
+<script src="js/charts.js?v=140"></script>
+<script src="js/shell.js?v=140"></script>
+<script src="js/auth.js?v=140"></script>
+<script src="js/db.js?v=140"></script>
+<script src="js/analytics.js?v=140"></script>
+<script src="js/ui.js?v=140"></script>
+<script src="js/portfolio.js?v=140"></script>
 </body>
 </html>

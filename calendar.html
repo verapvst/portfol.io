@@ -7,10 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=139">
-<link rel="stylesheet" href="css/layout.css?v=139">
-<link rel="stylesheet" href="css/components.css?v=139">
-<link rel="stylesheet" href="css/calendar.css?v=139">
+<link rel="stylesheet" href="css/theme.css?v=140">
+<link rel="stylesheet" href="css/layout.css?v=140">
+<link rel="stylesheet" href="css/components.css?v=140">
+<link rel="stylesheet" href="css/calendar.css?v=140">
 </head>
 <body>
 <div id="app">
@@ -18,89 +18,90 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <div id="cal-signedout-slot"></div>
+    <!-- Same page for everyone: the structure is public (so a visitor
+         sees what this feature does), anything private is replaced by
+         the shared lock (shell.js lockedHTML). -->
 
-    <!-- Signed-in only - same real-data gate every other CRUD-adjacent
-         page uses (Costs, Transactions, Accounts); a Showcase variant
-         would either fabricate an activity history or leak real dates/
-         amounts, neither acceptable. -->
-    <div id="cal-signedin" hidden>
-
-      <!-- "Today" - a small contextual strip, deliberately not another
-             KPI dashboard (design brief §9/§18 - "the Calendar is
-             primarily about chronology"). Independent of whichever
-             month is currently being browsed below. -->
-      <section class="card glass" id="cal-today-card">
-        <div class="cal-today-row">
-          <div class="cal-today-block">
-            <span class="cal-today-kicker">Today</span>
-            <span class="cal-today-date" id="cal-today-date"></span>
-          </div>
-          <div class="cal-today-block cal-today-stat">
-            <span class="cal-today-kicker">Portfolio value</span>
-            <span class="cal-today-date" id="cal-today-value"></span>
-          </div>
-          <div class="cal-today-block cal-today-stat">
-            <span class="cal-today-kicker">Today's activity</span>
-            <span class="cal-today-date" id="cal-today-activity"></span>
-          </div>
+    <section class="card glass" id="cal-today-card">
+      <div class="cal-today-row">
+        <div class="cal-today-block">
+          <span class="cal-today-kicker">Today</span>
+          <span class="cal-today-date" id="cal-today-date"></span>
         </div>
-      </section>
-
-      <!-- Filters - event type (primary) + account (secondary, few
-             enough real accounts to be worth a row of its own; no
-             per-security filter - too many to stay compact). -->
-      <section class="card glass interactive" id="cal-filters-card">
-        <div class="filter-pills glass-quiet" id="cal-filter-pills"></div>
-        <div class="filter-pills glass-quiet" id="cal-account-pills"></div>
-      </section>
-
-      <!-- Monthly summary - lightweight, for the currently visible
-             month only (design brief §15). -->
-      <div class="cal-summary-row" id="cal-summary-row"></div>
-
-      <!-- The calendar itself - the main feature. Hand-built grid, not
-             a third-party calendar component (design brief §7/§18: no
-             library default styling). -->
-      <section class="card glass interactive" id="cal-main-card">
-        <div class="cal-nav-row">
-          <button type="button" class="cal-nav-btn" id="cal-prev-btn" aria-label="Previous month"></button>
-          <div class="cal-nav-center">
-            <span class="cal-month-label" id="cal-month-label"></span>
-            <button type="button" class="cal-today-btn" id="cal-today-btn">Today</button>
-          </div>
-          <button type="button" class="cal-nav-btn" id="cal-next-btn" aria-label="Next month"></button>
+        <div class="cal-today-block cal-today-stat">
+          <span class="cal-today-kicker">Portfolio value</span>
+          <span class="cal-today-date" id="cal-today-value"></span>
         </div>
-        <div id="cal-grid"></div>
-      </section>
+        <div class="cal-today-block cal-today-stat">
+          <span class="cal-today-kicker">Today's activity</span>
+          <span class="cal-today-date" id="cal-today-activity"></span>
+        </div>
+      </div>
+    </section>
 
-      <!-- Selected-day detail panel - same list/card patterns as
-             everywhere else in this app (contribution-row/bar-row
-             family), not a new visual language. -->
-      <section class="card glass interactive" id="cal-detail-card">
-        <div id="cal-day-detail"></div>
-      </section>
+    <!-- Monthly update check: did I record this month's values (and the
+         BPI report)? Public in shape (dates only, no amounts/names). -->
+    <section class="card glass" id="cal-check-card">
+      <div class="card-header">
+        <div class="card-header-title">
+          <h2 class="section-title">Monthly update check</h2>
+        </div>
+      </div>
+      <p class="section-hint" id="cal-check-hint">Has each month's portfolio data been recorded?</p>
+      <div class="cal-check-strip" id="cal-check-strip"></div>
+      <p class="cal-check-message" id="cal-check-message"></p>
+    </section>
 
-    </div>
+    <section class="card glass" id="cal-filters-card" hidden>
+      <div class="filter-pills glass-quiet" id="cal-filter-pills"></div>
+      <div class="filter-pills glass-quiet" id="cal-account-pills"></div>
+    </section>
+
+    <section class="card glass" id="cal-main-card">
+      <div class="cal-nav-row">
+        <button type="button" class="cal-nav-btn" id="cal-prev-btn" aria-label="Previous month"></button>
+        <div class="cal-nav-center">
+          <span class="cal-month-label" id="cal-month-label"></span>
+          <button type="button" class="cal-today-btn" id="cal-today-btn">Today</button>
+        </div>
+        <button type="button" class="cal-nav-btn" id="cal-next-btn" aria-label="Next month"></button>
+      </div>
+      <div id="cal-grid"></div>
+    </section>
+
+    <!-- Month entries (fixed + variable) and selected-day detail. One
+         lock, not one per card, when signed out. -->
+    <section class="card glass" id="cal-entries-card">
+      <div class="card-header">
+        <div class="card-header-title">
+          <h2 class="section-title" id="cal-entries-title">This month</h2>
+        </div>
+      </div>
+      <div id="cal-entries"></div>
+    </section>
+
+    <section class="card glass" id="cal-detail-card">
+      <div id="cal-day-detail"></div>
+    </section>
 
   </main>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=139"></script>
-<script src="js/supabaseClient.js?v=139"></script>
+<script src="js/supabaseConfig.js?v=140"></script>
+<script src="js/supabaseClient.js?v=140"></script>
 
-<script src="js/utils.js?v=139"></script>
-<script src="js/calculations.js?v=139"></script>
-<script src="js/repository.js?v=139"></script>
+<script src="js/utils.js?v=140"></script>
+<script src="js/calculations.js?v=140"></script>
+<script src="js/repository.js?v=140"></script>
 
-<script src="js/charts.js?v=139"></script>
-<script src="js/shell.js?v=139"></script>
-<script src="js/auth.js?v=139"></script>
-<script src="js/db.js?v=139"></script>
-<script src="js/analytics.js?v=139"></script>
-<script src="js/calendar-events.js?v=139"></script>
-<script src="js/calendar.js?v=139"></script>
+<script src="js/charts.js?v=140"></script>
+<script src="js/shell.js?v=140"></script>
+<script src="js/auth.js?v=140"></script>
+<script src="js/db.js?v=140"></script>
+<script src="js/analytics.js?v=140"></script>
+<script src="js/calendar-events.js?v=140"></script>
+<script src="js/calendar.js?v=140"></script>
 </body>
 </html>

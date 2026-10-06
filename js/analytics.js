@@ -987,6 +987,7 @@ async function getPortfolioDataPublic() {
     .map((r) => ({ name: r.category, weight: r.weight_pct, tone: REGION_TONE[r.category] || "grey" }));
 
   const benchmarks = await loadBenchmarkSeries();
+  const staticGeo = getMockPortfolioData().analytics;
 
   const cashBucket = assetClassAllocation.find((a) => a.name === "Cash");
   const health = {
@@ -1012,9 +1013,18 @@ async function getPortfolioDataPublic() {
       assetClassAllocation,
       productAllocation: [],
       accountAllocation: [],
-      regions,
-      countries: [],
-      notCountrySpecificWeight: 100,
+      // Geography: the same real, researched portfolio-level look-through
+      // the signed-in view uses (repository.js - MSCI/Avantis factsheet
+      // country weights, never per-security) - these are aggregate
+      // percentages only, no security identity, account or euro amount,
+      // so they sit on the safe side of the privacy boundary. Replaces
+      // the DB-side US/EU/EM-only split, which dumped ~57% into "Other"
+      // for every fund without a composition row. `regions` (the RPC
+      // result above) is kept only as the fallback if the static data
+      // is ever empty.
+      regions: staticGeo.regions.length ? staticGeo.regions : regions,
+      countries: staticGeo.countries,
+      notCountrySpecificWeight: staticGeo.countries.length ? staticGeo.notCountrySpecificWeight : 100,
       currency: [],
       health,
       // Costs are never computed for the signed-out/public path - a

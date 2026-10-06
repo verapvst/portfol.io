@@ -92,3 +92,7 @@
 @media (max-width: 767px) {
   .product-table { min-width: 460px; }
 }
+
+/* "Held" filter lives top-right of the card header: tabs when signed in,
+   the shared inline lock when signed out. */
+.product-held-slot { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }

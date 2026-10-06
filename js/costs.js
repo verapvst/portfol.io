@@ -519,13 +519,8 @@ function renderSignedOutState() {
   $("costs-signedout-slot").innerHTML = `
     <section class="card glass" id="costs-signedout-card">
       <h2 class="section-title">Costs</h2>
-      <div class="costs-signin-note">
-        Sign in to see what your portfolio costs.
-        <br/>
-        <button type="button" id="costs-signin-cta">Sign In</button>
-      </div>
+      ${lockedHTML({ hint: "What the portfolio costs - fees, commissions and fund charges." })}
     </section>`;
-  $("costs-signin-cta").addEventListener("click", () => window.openAuthModal());
 }
 
 /** Full page render, given a fresh getPortfolioDataAuto() result (the

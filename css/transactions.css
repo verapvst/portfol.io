@@ -81,7 +81,8 @@
 .transactions-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--sp-3);
   margin-top: var(--sp-4);
   font-size: 12.5px;
@@ -228,3 +229,17 @@
 @media (max-width: 560px) {
   .txn-form-field.half, .txn-form-field.third { grid-column: span 2; }
 }
+
+/* ---------- Table polish: stacked security/account, tidy numerics ---------- */
+.transactions-table th.amount-cell { text-align: right; }
+.transactions-table td { padding: 14px var(--sp-4) 14px 0; vertical-align: middle; }
+.transactions-table tbody tr:hover { background: color-mix(in oklab, white 55%, transparent); }
+.txn-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+.txn-security { font-weight: 500; color: var(--ink); }
+.txn-account { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.txn-amount { font-weight: 500; }
+.txn-currency { font-size: 11.5px; color: var(--muted); }
+.txn-fees { color: var(--muted); }
+.transactions-table td:last-child { padding-right: 0; }
+.transactions-table .row-actions { justify-content: flex-end; }
+.transactions-count { margin-top: var(--sp-4); font-size: 12px; color: var(--muted); }

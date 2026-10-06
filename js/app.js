@@ -129,6 +129,7 @@ function initPerformanceCard(data) {
     Performance card right below it - showing this too would just be a
     duplicate, staler copy competing for the same space. */
 function renderPublicHero(data) {
+  $("about-card").style.display = currentUser() ? "none" : "";
   const card = $("public-hero-card");
   if (isOwnerMode()) { card.hidden = true; return; }
 

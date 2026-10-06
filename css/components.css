@@ -448,7 +448,8 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 /* Logo/menu trigger + heading text as one unit (see renderTopbar() in
    shell.js) - keeps them adjacent even when .topbar wraps to a column
    on mobile, matching "LOGO | PAGE TITLE" staying together. */
-.topbar-heading-group { display: flex; align-items: center; gap: var(--sp-4); min-width: 0; }
+.topbar-heading-group { display: flex; align-items: center; gap: var(--sp-4); min-width: 0; flex: 1 1 320px; }
+.topbar-actions { margin-left: auto; }
 
 .topbar-heading .greeting { font-size: 14px; color: var(--muted); }
 
@@ -1138,3 +1139,40 @@ th[data-info]:focus-visible {
 /* ---------- Drill-down affordance on non-card clickable rows ---------- */
 .drill-row { cursor: pointer; transition: background 0.15s ease; border-radius: var(--r-md); }
 .drill-row:hover { background: color-mix(in oklab, white 55%, transparent); }
+
+
+/* ========== Locked content (shared - shell.js lockedHTML) ==========
+   The single "private, log in" treatment across the app. Deliberately
+   quiet: a thin lock + one line, never a big call-to-action. */
+.locked-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: var(--sp-8) var(--sp-6);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-lg);
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.locked-state svg { width: 18px; height: 18px; }
+.locked-state-text { font-size: 13px; font-weight: 500; }
+.locked-state-hint { font-size: 12px; font-weight: 300; max-width: 42ch; }
+.locked-state:hover, .locked-inline:hover { color: var(--ink); }
+.locked-state:focus-visible, .locked-inline:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
+
+.locked-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.locked-inline svg { width: 14px; height: 14px; }
+
+.nav-accordion-note { font-size: 10.5px; font-weight: 300; color: var(--muted); letter-spacing: 0.02em; margin-left: 4px; }

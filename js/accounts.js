@@ -225,12 +225,7 @@ function accountModalKeyHandler(e) {
 function renderSignedOutState() {
   const container = $("accounts-table-container");
   container.innerHTML = `
-    <div class="accounts-signin-note">
-      Sign in to view and manage your accounts.
-      <br/>
-      <button type="button" id="accounts-signin-cta">Sign In</button>
-    </div>`;
-  $("accounts-signin-cta").addEventListener("click", () => window.openAuthModal());
+    ${lockedHTML({ hint: "Your accounts and their balances are private." })}`;
   $("add-account-btn").disabled = true;
 }
 

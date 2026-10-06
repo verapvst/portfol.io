@@ -75,7 +75,11 @@ function isOwnerMode() {
     .innerHTML) need to switch to .innerHTML to render this correctly
     instead of the tag as literal text. */
 function formatMoney(value, opts) {
-  return isOwnerMode() ? fmtEUR(value, opts) : `<span class="money-mask">${MONEY_MASK}</span>`;
+  if (isOwnerMode()) return fmtEUR(value, opts);
+  // Signed out: the shared lock (private, log in). Signed in with values
+  // hidden via the topbar eye toggle: the plain dot mask.
+  if (!currentUser()) return lockedHTML({ variant: "inline" });
+  return `<span class="money-mask">${MONEY_MASK}</span>`;
 }
 
 /** The topbar toggle itself - only rendered when actually signed in
@@ -192,28 +196,12 @@ const NAV_CATEGORIES = [
     key: "investments",
     label: "Investments",
     icon: "wallet",
-    private: true,
+    // Every item is visible signed out (so a visitor sees what exists);
+    // each page itself shows the shared locked state for private data.
     items: [
       { label: "Accounts", href: "accounts.html" },
-      // discoverable: this category itself stays visible signed out (so
-      // a visitor can open it and find Transactions) even though the
-      // category as a whole is private - Accounts/Costs still don't
-      // appear in its panel until signed in. See
-      // transactions.js:renderSignedOutState() for the gated-preview
-      // page this leads to. No standalone Valuations entry - portfolio
-      // value updates live at Data Hub -> Update Portfolio (Manual
-      // Update / Trading 212 CSV / BPI Screenshot) and at each holding's
-      // own Update button on Portfolio Detail, both writing through the
-      // same recordValuations() (db.js) into the same table.
-      { label: "Transactions", href: "transactions.html", discoverable: true },
+      { label: "Transactions", href: "transactions.html" },
       { label: "Costs", href: "costs.html" },
-    ],
-  },
-  {
-    key: "research",
-    label: "Research",
-    icon: "search",
-    items: [
       { label: "Securities", href: "products.html" },
       { label: "Broker Comparison", href: "brokers.html" },
     ],
@@ -221,6 +209,7 @@ const NAV_CATEGORIES = [
   {
     key: "analysis",
     label: "Analysis",
+    note: "coming soon",
     icon: "barChart3",
     items: [
       { label: "Risk", href: "coming-soon.html?feature=risk" },
@@ -322,7 +311,7 @@ function navCategoryHTML(category, expandedKey) {
     <div class="nav-accordion-group">
       <button class="nav-accordion-header${hasActivePage ? " has-active" : ""}" type="button" data-category-toggle="${category.key}" aria-expanded="${isExpanded}">
         <span class="nav-accordion-icon">${icon(category.icon)}</span>
-        <span class="nav-accordion-label">${category.label}</span>
+        <span class="nav-accordion-label">${category.label}${category.note ? ` <small class="nav-accordion-note">${category.note}</small>` : ""}</span>
         <span class="nav-accordion-chevron${isExpanded ? " expanded" : ""}">${icon("chevronDown")}</span>
       </button>
       <div class="nav-accordion-body"${isExpanded ? "" : " hidden"}>
@@ -490,7 +479,7 @@ function renderTopbar(container, user, { heading = "Portfolio Overview", subtitl
       <div class="search-box glass-quiet">${icon("search")}<span>Search anything…</span><kbd>⌘K</kbd></div>
       <div id="values-toggle-slot"></div>
       <div id="auth-slot"></div>
-      <button class="icon-btn glass-quiet" aria-label="Notifications">${icon("bell")}</button>
+      <a class="icon-btn glass-quiet" href="index.html" aria-label="Home - Overview" title="Home">${icon("home")}</a>
     </div>`;
 }
 
@@ -1242,6 +1231,29 @@ function initDrillDown() {
   });
 }
 
+/** ONE locked-content treatment for the whole app: a minimal lock icon +
+    "Log in to access". Anything private that a signed-out visitor can see
+    the SHAPE of (a feature that exists) but not the data of uses this -
+    never a per-page variant. `variant`: "block" (dashed placeholder
+    filling a card/section), "inline" (small lock + text inside a row).
+    Clicking anywhere on it opens the sign-in modal (delegated below). */
+function lockedHTML({ variant = "block", label = "Log in to access", hint = "" } = {}) {
+  if (variant === "inline") {
+    return `<button type="button" class="locked-inline" data-open-auth>${icon("lock")}<span>${label}</span></button>`;
+  }
+  return `
+    <button type="button" class="locked-state" data-open-auth>
+      ${icon("lock")}
+      <span class="locked-state-text">${label}</span>
+      ${hint ? `<span class="locked-state-hint">${hint}</span>` : ""}
+    </button>`;
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-open-auth]") && window.openAuthModal) window.openAuthModal();
+});
+
+window.lockedHTML = lockedHTML;
 window.isOwnerMode = isOwnerMode;
 window.formatMoney = formatMoney;
 window.initNavigation = initNavigation;

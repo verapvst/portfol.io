@@ -72,7 +72,9 @@ function renderFeature() {
   $("coming-soon-icon").innerHTML = icon(f.icon);
   $("coming-soon-title").textContent = f.title;
   $("coming-soon-description").textContent = f.description;
-  $("coming-soon-gated").hidden = !(key === "settings" && !currentUser());
+  const gated = key === "settings" && !currentUser();
+  $("coming-soon-gated").hidden = !gated;
+  $("coming-soon-gated").innerHTML = gated ? lockedHTML({ hint: "Account, currency and timezone preferences." }) : "";
 }
 
 function init() {
@@ -87,7 +89,6 @@ function init() {
   initNavigation(user);
   initAuthModal();
   initAuthButton($("auth-slot"));
-  $("coming-soon-gated-cta").addEventListener("click", () => window.openAuthModal());
 
   renderFeature();
   onAuthChange(renderFeature);

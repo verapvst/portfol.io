@@ -173,6 +173,7 @@ async function loadProductLibraryPage() {
   $("product-search").disabled = false;
   $("product-provider-filter").disabled = false;
   $("product-held-tabs").hidden = !user;
+  $("product-held-locked").innerHTML = user ? "" : lockedHTML({ variant: "inline" });
   if (!user && currentHeldFilter) {
     currentHeldFilter = "";
     renderHeldTabs($("product-held-tabs"));
