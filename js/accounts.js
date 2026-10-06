@@ -75,7 +75,8 @@ async function toggleAccountStatus(id) {
   if (!account) return;
   const nextStatus = account.status === "active" ? "closed" : "active";
   const { error } = await window.db.from("accounts").update({ status: nextStatus }).eq("id", id);
-  if (error) { alert(error.message); return; }
+  showInlineError($("accounts-table-container"), error ? error.message : "");
+  if (error) return;
   await refreshAccounts();
 }
 

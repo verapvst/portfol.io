@@ -1253,6 +1253,23 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-open-auth]") && window.openAuthModal) window.openAuthModal();
 });
 
+/** Inline error banner just above `anchorEl` (replaces native alert()).
+    One banner per anchor - a new message replaces the old one; pass an
+    empty message to clear it. Dismissible, never blocks the page. */
+function showInlineError(anchorEl, message) {
+  const existing = anchorEl.previousElementSibling;
+  if (existing && existing.classList.contains("inline-error")) existing.remove();
+  if (!message) return;
+  const el = document.createElement("div");
+  el.className = "inline-error";
+  el.setAttribute("role", "alert");
+  el.innerHTML = `<span></span><button type="button" aria-label="Dismiss">&times;</button>`;
+  el.firstElementChild.textContent = message;
+  el.querySelector("button").addEventListener("click", () => el.remove());
+  anchorEl.before(el);
+}
+
+window.showInlineError = showInlineError;
 window.lockedHTML = lockedHTML;
 window.isOwnerMode = isOwnerMode;
 window.formatMoney = formatMoney;

@@ -1750,8 +1750,6 @@ function initBpiScreenshotModal() {
       // tell whether OCR misread the name or the screenshot was the
       // wrong page entirely.
       state.bpiDebug = { lines: lines.map((l) => l.text), candidates };
-      console.log("[BPI Screenshot OCR] raw lines:", state.bpiDebug.lines);
-      console.log("[BPI Screenshot OCR] candidates:", candidates);
 
       // Silently drop anything that doesn't match a real security -
       // per Vera's own explicit rule for this method specifically

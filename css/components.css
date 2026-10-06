@@ -489,7 +489,7 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 }
 
 .search-box svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
-.search-box span { flex: 1; }
+.search-box span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .search-box kbd {
   font-size: 10px;
@@ -520,8 +520,12 @@ body.nav-open #nav-drawer { transform: translateX(0); }
 
 @media (max-width: 767px) {
   .topbar { flex-direction: column; align-items: stretch; gap: var(--sp-4); }
+  /* flex-basis is a HEIGHT once the topbar is a column - reset it. */
+  .topbar-heading-group { flex: 0 0 auto; }
+  /* A 4-row-tall sticky header eats a quarter of a phone screen. */
+  .topbar { position: static; }
   .topbar-actions { width: 100%; }
-  .search-box { width: 100%; }
+  .search-box { width: auto; flex: 1; min-width: 0; }
 }
 
 /* ========== Cards ========== */
@@ -1176,3 +1180,26 @@ th[data-info]:focus-visible {
 .locked-inline svg { width: 14px; height: 14px; }
 
 .nav-accordion-note { font-size: 10.5px; font-weight: 300; color: var(--muted); letter-spacing: 0.02em; margin-left: 4px; }
+
+/* ========== Inline error banner (shell.js showInlineError) ========== */
+.inline-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg);
+  background: color-mix(in oklab, var(--coral-1) 14%, white);
+  border: 1px solid color-mix(in oklab, var(--coral-2) 30%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.inline-error button { color: var(--muted); font-size: 18px; line-height: 1; }
+.inline-error button:hover { color: var(--ink); }
+
+/* Phone width: pill groups wrap instead of overflowing the page. */
+@media (max-width: 560px) {
+  .filter-pills { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-lg); }
+}

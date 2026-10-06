@@ -123,7 +123,8 @@ function renderTransactionsTable(container) {
 async function voidTransaction(id) {
   if (!confirm("Void this transaction? It stays in the record, just marked cancelled - nothing is deleted.")) return;
   const { error } = await window.db.from("transactions").update({ voided: true }).eq("id", id);
-  if (error) { alert(error.message); return; }
+  showInlineError($("transactions-table-container"), error ? error.message : "");
+  if (error) return;
   await refreshTransactions();
 }
 
