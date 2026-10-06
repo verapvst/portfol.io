@@ -150,8 +150,9 @@ const TOKENS = {
   assetClass: {
     Equities: "orange",
     Bonds: "pink",
-    Cash: "grey",
+    Cash: "blue",
     Alternatives: "purple",
+    Other: "purple",
   },
 };
 
