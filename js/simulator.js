@@ -94,7 +94,7 @@ async function loadPrivateData() {
   state.data = await getPortfolioDataAuto();
   setCurrentPortfolioData(state.data);
   const [secRes, brokerRes] = await Promise.all([
-    db.from("securities").select("id, name, type, isin, currency, asset_class, theme, sub_theme, data_provider_symbol, security_details(ter_pct, aum_eur_millions, last_verified, return_1y_pct, launched_date)").order("name"),
+    db.from("securities").select("id, name, type, isin, currency, asset_class, theme, sub_theme, data_provider_symbol, price_currency, security_details(ter_pct, aum_eur_millions, last_verified, return_1y_pct, launched_date)").order("name"),
     db.from("brokers").select("id, name, etf_commission, fx_fee_pct, fractional_etfs").order("name"),
   ]);
   if (secRes.error) throw secRes.error;
@@ -158,7 +158,7 @@ function renderFreshness() {
   actions.innerHTML = `
     <button type="button" class="sim-btn" id="sim-refresh-yields">Refresh Treasury yields</button>
     <button type="button" class="sim-btn" id="sim-refresh-cpi">Refresh inflation</button>`;
-  $("sim-refresh-yields").addEventListener("click", () => refreshFunction("fetch-risk-free-rate", { maturities: TREASURY_BUCKETS.map((b) => b.key) }, "Treasury yields", "This takes about a minute (the data provider limits calls per minute)."));
+  $("sim-refresh-yields").addEventListener("click", refreshYields);
   $("sim-refresh-cpi").addEventListener("click", () => refreshFunction("fetch-inflation", {}, "Inflation", ""));
 }
 
@@ -179,6 +179,30 @@ async function refreshFunction(name, body, label, slowNote) {
     msg.textContent = `Couldn't refresh ${label}: ${err.message || err}. (The edge function may not be deployed yet.)`;
     document.querySelectorAll("#sim-fresh-actions .sim-btn").forEach((b) => { b.disabled = false; });
   }
+}
+
+/** One request per maturity: a single request for all five exceeds the Edge
+    Function compute limit, and the data provider also rate-limits per minute. */
+async function refreshYields() {
+  const msg = $("sim-fresh-msg");
+  msg.className = "sim-note";
+  document.querySelectorAll("#sim-fresh-actions .sim-btn").forEach((b) => { b.disabled = true; });
+  const failed = [];
+  for (let i = 0; i < TREASURY_BUCKETS.length; i++) {
+    const b = TREASURY_BUCKETS[i];
+    msg.textContent = `Refreshing Treasury yields: ${b.label} (${i + 1} of ${TREASURY_BUCKETS.length})… the data provider limits calls per minute, so this takes about a minute.`;
+    try {
+      const { data, error } = await window.db.functions.invoke("fetch-risk-free-rate", { body: { maturities: [b.key] } });
+      if (error) throw error;
+      const r = data?.results?.[0];
+      if (r && r.status !== "ok") throw new Error(r.error || r.status);
+    } catch (err) { failed.push(`${b.label}: ${err.message || err}`); }
+    if (i < TREASURY_BUCKETS.length - 1) await new Promise((res) => setTimeout(res, 13000));
+  }
+  await loadMarketData();
+  renderFreshness(); renderRates();
+  $("sim-fresh-msg").className = failed.length ? "sim-note is-error" : "sim-note";
+  $("sim-fresh-msg").textContent = failed.length ? `Some yields couldn't be refreshed - ${failed.join("; ")}` : "Treasury yields refreshed.";
 }
 
 function renderRates() {
@@ -245,7 +269,11 @@ function cashHolding() {
 function lastPriceRow(rows) {
   return rows && rows.length ? rows[rows.length - 1] : null;
 }
-function listingCurrency(symbol) {
+function listingCurrency(symbol, priceCurrency = null) {
+  // The currency the price is QUOTED in is stored when the symbol is verified
+  // (securities.price_currency, migration 0042); the exchange suffix is only
+  // a fallback for rows verified before that column existed.
+  if (priceCurrency) return priceCurrency;
   const ex = (symbol || "").split(".").pop();
   if (["XETRA", "F", "PA", "AS", "MI", "MC", "LS", "BR", "HE"].includes(ex)) return "EUR";
   if (ex === "LSE") return "GBX";
@@ -506,7 +534,7 @@ async function simulate(p, { quiet = false } = {}) {
   const inflPct = state.inflation?.yoyPct ?? 0;
   const projection = E.projectValue({ amount: applied, muPct: exp.pct, sigmaPct: Math.sqrt(varX) * 100, years: p.years, inflationPct: inflPct });
   const broker = state.brokers.find((b) => b.id === p.brokerId);
-  const lc = listingCurrency(sec.data_provider_symbol);
+  const lc = listingCurrency(sec.data_provider_symbol, sec.price_currency);
   const costs = E.tradeCosts({
     amount: applied, years: p.years, terPct: sec.details?.ter_pct != null ? Number(sec.details.ter_pct) : 0,
     commissionPct: broker?.etf_commission != null ? Number(broker.etf_commission) : 0,

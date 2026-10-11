@@ -39,6 +39,14 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // POSTing {"maturities": ["10year"]} (e.g. the Simulator's "refresh").
 const ALL_MATURITIES = ["3month", "2year", "5year", "10year", "30year"].map((m) => ({ key: m, param: m }));
 
+// Alpha Vantage returns the WHOLE history (back to the 1950s) on every call.
+// Upserting ~18k rows for each of five maturities in one request exceeds the
+// Edge Function compute limit (WORKER_RESOURCE_LIMIT, seen 2026-10-12), and
+// the app only ever needs recent yields plus the 3-month history that is
+// already stored. So only the last HISTORY_DAYS are written.
+const HISTORY_DAYS = 800;
+const cutoffDate = () => new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString().slice(0, 10);
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -98,7 +106,7 @@ Deno.serve(async (req) => {
         results.push({ maturity: m.key, status: "missing", error: logRow.error_message });
       } else {
         const upsertRows = data
-          .filter((r) => r.value !== "." && r.value != null && !Number.isNaN(Number(r.value)))
+          .filter((r) => r.date >= cutoffDate() && r.value !== "." && r.value != null && !Number.isNaN(Number(r.value)))
           .map((r) => ({
             maturity: m.key,
             date: r.date,

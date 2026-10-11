@@ -54,7 +54,13 @@ Deno.serve(async (req) => {
   const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   let query = db.from("securities").select("id, name, isin, data_provider_symbol").not("isin", "is", null);
   if (body.isins?.length) query = query.in("isin", body.isins);
-  else if (!body.force) query = query.is("data_provider_symbol", null);
+  else {
+    // Default scope: the Simulator's research universe (securities with a
+    // theme, set by migration 0039). Older research products are only
+    // touched when asked for by ISIN - every lookup costs an API call.
+    query = query.not("theme", "is", null);
+    if (!body.force) query = query.is("data_provider_symbol", null);
+  }
   const { data: securities, error } = await query.limit(body.limit ?? 8);
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: CORS });
 
@@ -79,7 +85,8 @@ Deno.serve(async (req) => {
       } else {
         const symbol = `${best.Code}.${best.Exchange}`;
         if (!body.dry_run) {
-          const { error: updError } = await db.from("securities").update({ data_provider_symbol: symbol }).eq("id", sec.id);
+          const { error: updError } = await db.from("securities")
+            .update({ data_provider_symbol: symbol, price_currency: best.Currency ?? null }).eq("id", sec.id);
           if (updError) throw new Error(updError.message);
         }
         results.push({
