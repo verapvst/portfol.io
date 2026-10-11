@@ -209,13 +209,12 @@ const NAV_CATEGORIES = [
   {
     key: "analysis",
     label: "Analysis",
-    note: "coming soon",
     icon: "barChart3",
     items: [
-      { label: "Risk", href: "coming-soon.html?feature=risk" },
-      { label: "Benchmarks", href: "coming-soon.html?feature=benchmarks" },
-      { label: "Market Data", href: "coming-soon.html?feature=market-data" },
-      { label: "Simulator", href: "coming-soon.html?feature=simulator" },
+      { label: "Simulator", href: "simulator.html" },
+      { label: "Risk", href: "coming-soon.html?feature=risk", badge: "soon" },
+      { label: "Benchmarks", href: "coming-soon.html?feature=benchmarks", badge: "soon" },
+      { label: "Market Data", href: "coming-soon.html?feature=market-data", badge: "soon" },
     ],
   },
 ];

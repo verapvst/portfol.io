@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfol.io — Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css?v=158">
+<link rel="stylesheet" href="css/layout.css?v=158">
+<link rel="stylesheet" href="css/components.css?v=158">
+<link rel="stylesheet" href="css/simulator.css?v=158">
+</head>
+<body>
+<div id="app">
+
+  <main id="main">
+    <header id="topbar" class="topbar"></header>
+
+    <!-- The Simulator answers "what would this trade do to MY portfolio?".
+         Everything it uses carries the date it was last updated, and the
+         top card says plainly how fresh each input is. Market facts
+         (yields, outlook) are public; the trade ticket and the guided
+         recommendation need the private portfolio, so visitors see one
+         lock there. -->
+
+    <section class="card glass" id="sim-fresh-card">
+      <div class="card-header sim-header">
+        <div class="card-header-title"><h2 class="section-title">Data freshness</h2></div>
+        <span class="sim-badge" id="sim-fresh-badge"></span>
+      </div>
+      <p class="section-hint">Every number below comes from an input listed here, with the date it was last updated.</p>
+      <div id="sim-fresh-body"><p class="sim-empty">Loading…</p></div>
+      <div class="sim-actions" id="sim-fresh-actions"></div>
+      <p class="sim-note" id="sim-fresh-msg"></p>
+    </section>
+
+    <section class="card glass" id="sim-rates-card">
+      <div class="card-header"><div class="card-header-title"><h2 class="section-title">US rates</h2></div></div>
+      <p class="section-hint">Treasury yields (short, medium and long maturity) and inflation - the building blocks of the risk-free rate and of real returns.</p>
+      <div id="sim-rates-body"><p class="sim-empty">Loading…</p></div>
+    </section>
+
+    <section class="card glass" id="sim-outlook-card">
+      <div class="card-header"><div class="card-header-title"><h2 class="section-title">Robotics market outlook</h2></div></div>
+      <p class="section-hint">Published projections, each with its source, date and how it was obtained. Projections are opinions, not facts, and they measure different things.</p>
+      <div id="sim-outlook-body"><p class="sim-empty">Loading…</p></div>
+    </section>
+
+    <section class="card glass" id="sim-ticket-card">
+      <div class="card-header"><div class="card-header-title"><h2 class="section-title">Simulate a trade</h2></div></div>
+      <div id="sim-ticket-body"></div>
+    </section>
+
+    <section class="card glass" id="sim-result-card" hidden>
+      <div class="card-header"><div class="card-header-title"><h2 class="section-title" id="sim-result-title">Result</h2></div></div>
+      <div id="sim-result-body"></div>
+    </section>
+
+    <section class="card glass" id="sim-reco-card">
+      <div class="card-header"><div class="card-header-title"><h2 class="section-title">Guided suggestions</h2></div></div>
+      <p class="section-hint">Answer a few questions and the model ranks the securities in the database for your portfolio. Model output for research, not personal advice.</p>
+      <div id="sim-reco-body"></div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabaseConfig.js?v=158"></script>
+<script src="js/supabaseClient.js?v=158"></script>
+
+<script src="js/utils.js?v=158"></script>
+<script src="js/calculations.js?v=158"></script>
+<script src="js/repository.js?v=158"></script>
+
+<script src="js/charts.js?v=158"></script>
+<script src="js/shell.js?v=158"></script>
+<script src="js/auth.js?v=158"></script>
+<script src="js/db.js?v=158"></script>
+<script src="js/analytics.js?v=158"></script>
+<script src="js/simulator-engine.js?v=158"></script>
+<script src="js/simulator.js?v=158"></script>
+</body>
+</html>
