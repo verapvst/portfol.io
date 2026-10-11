@@ -194,6 +194,20 @@ const COUNTRY_TO_REGION = {
   // country - "World" is the nearest honest fit (this weight comes from
   // AVWS's own real global small-cap holdings, not an Oceania mandate).
   "Australia": "World",
+  "Italy": "Europe",
+  "Mexico": "Emerging Markets",
+};
+
+/** ISO 3166 numeric codes for every country the exposure map can paint.
+    A geography row whose country is NOT here (Europe, World, Global,
+    Unknown, "Other (not itemised)", ...) is a region-level fact with no
+    country to paint, and is reported as "not attributable to a single
+    country" instead. */
+const COUNTRY_ISO = {
+  "United States": 840, "Japan": 392, "Spain": 724, "Germany": 276, "United Kingdom": 826,
+  "China": 156, "Taiwan": 158, "Canada": 124, "South Korea": 410, "Portugal": 620,
+  "France": 250, "India": 356, "Australia": 36, "Netherlands": 528, "Sweden": 752,
+  "Switzerland": 756, "Brazil": 76, "Italy": 380, "Mexico": 484,
 };
 
 function regionForCountry(name) {
@@ -331,6 +345,7 @@ window.interpolatePrimaryGradient = interpolatePrimaryGradient;
 window.TOKENS = TOKENS;
 window.tokenColor = tokenColor;
 window.COUNTRY_TO_REGION = COUNTRY_TO_REGION;
+window.COUNTRY_ISO = COUNTRY_ISO;
 window.regionForCountry = regionForCountry;
 window.fmtEUR = fmtEUR;
 window.fmtPct = fmtPct;

@@ -153,13 +153,19 @@ const SECURITY_ASSET_CLASS_SPLIT = {
     approximation. A holding with no known composition contributes to
     "Unclassified" instead of a guess - same honesty rule as everywhere
     else in this app. */
-function computeAssetClassAllocation(holdings) {
+function computeAssetClassAllocation(holdings, dbComposition = {}) {
   const CLASSES = ["Equities", "Bonds", "Alternatives", "Cash"];
   const perClass = Object.fromEntries(CLASSES.map((c) => [c, { total: 0, byHolding: [] }]));
   const unclassified = { total: 0, byHolding: [] };
 
   for (const h of holdings) {
-    const known = SECURITY_ASSET_CLASS_SPLIT[h.ticker] || SECURITY_ASSET_CLASS_SPLIT[h.name];
+    // security_details (the same rows the public RPC reads, kept current by
+    // the Ficha Mensal import) wins over the hard-coded fallback table, so
+    // signed-in and signed-out always show the same split. A Cash-type
+    // holding is 100% Cash by definition.
+    const known = h.type === "Cash"
+      ? { source: "Cash holding", split: { Equities: 0, Bonds: 0, Alternatives: 0, Cash: 100 } }
+      : (dbComposition[h.id] || SECURITY_ASSET_CLASS_SPLIT[h.ticker] || SECURITY_ASSET_CLASS_SPLIT[h.name]);
     if (!known) {
       unclassified.total = Math.round((unclassified.total + h.weight) * 100) / 100;
       unclassified.byHolding.push({ name: h.name, weight: h.weight, source: "No known composition yet" });
@@ -189,6 +195,47 @@ function computeAssetClassAllocation(holdings) {
     });
   }
   return out;
+}
+
+/** public_portfolio_geography() rows ({country, region, weight_pct}, cash
+    excluded, weights sum to ~100 of the INVESTED portfolio) -> the shape
+    the Exposure card reads: real countries (with their map code), a
+    region roll-up, and the weight that has no single country. */
+const GEO_REGION_TONE = {
+  World: "purple", Europe: "blue", "North America": "orange", Unknown: "grey",
+  "Emerging Markets": "green", Asia: "coral", Global: "amber",
+};
+function geographyFromRows(rows) {
+  const byCountry = new Map();
+  const byRegion = new Map();
+  let notCountrySpecificWeight = 0;
+  for (const r of rows) {
+    const w = Number(r.weight_pct) || 0;
+    byRegion.set(r.region, (byRegion.get(r.region) || 0) + w);
+    const iso = window.COUNTRY_ISO[r.country];
+    if (iso) byCountry.set(r.country, { name: r.country, iso, weight: (byCountry.get(r.country)?.weight || 0) + w });
+    else notCountrySpecificWeight += w;
+  }
+  const round2 = (n) => Math.round(n * 100) / 100;
+  return {
+    countries: [...byCountry.values()].map((c) => ({ ...c, weight: round2(c.weight) })).sort((a, b) => b.weight - a.weight),
+    regions: [...byRegion.entries()]
+      .map(([name, weight]) => ({ name, weight: round2(weight), tone: GEO_REGION_TONE[name] || "grey" }))
+      .sort((a, b) => b.weight - a.weight),
+    notCountrySpecificWeight: round2(notCountrySpecificWeight),
+  };
+}
+
+/** Current geography from the database (one function for both signed in
+    and out). Falls back to repository.js's frozen snapshot only if the
+    RPC is unavailable (migration 0035 not run / network) so the card
+    never goes blank. */
+async function loadGeography(fallback) {
+  try {
+    const { data, error } = await window.db.rpc("public_portfolio_geography");
+    if (!error && data && data.length) return { ...geographyFromRows(data), live: true };
+  } catch (err) { /* fall through */ }
+  return { countries: fallback.countries, regions: fallback.regions, notCountrySpecificWeight: fallback.notCountrySpecificWeight, live: false };
 }
 
 /** Real, privacy-safe "Investment journey" milestones for the public
@@ -230,13 +277,27 @@ async function getPortfolioDataLive() {
   const portfolioId = await ensurePortfolio();
   if (!portfolioId) throw new Error("No portfolio for the current user.");
 
-  const [accountsRows, securitiesRows, txnRows, valRows, costRows] = await Promise.all([
+  const [accountsRows, securitiesRows, txnRows, valRows, costRows, compositionRes] = await Promise.all([
     loadAccountsForPortfolio(portfolioId),
     loadSecurities(),
     window.db.from("transactions").select("*").eq("portfolio_id", portfolioId).eq("voided", false),
     window.db.from("valuations").select("*").eq("portfolio_id", portfolioId),
     getCosts(portfolioId),
+    window.db.from("security_details").select("security_id, alloc_stocks_pct, alloc_bonds_pct, alloc_other_pct, alloc_cash_pct, last_verified"),
   ]);
+  // Per-security asset-class split from security_details. Only used when it
+  // is a complete picture (adds up to ~100%); anything partial falls back
+  // to the hard-coded table / "Unclassified", never a half-filled guess.
+  const dbComposition = {};
+  for (const d of compositionRes.data || []) {
+    const parts = [d.alloc_stocks_pct, d.alloc_bonds_pct, d.alloc_other_pct, d.alloc_cash_pct].map((n) => Number(n) || 0);
+    const total = parts.reduce((a, b) => a + b, 0);
+    if (d.alloc_stocks_pct == null || Math.abs(total - 100) > 1.5) continue;
+    dbComposition[d.security_id] = {
+      source: `security_details${d.last_verified ? `, verified ${d.last_verified}` : ""}`,
+      split: { Equities: parts[0], Bonds: parts[1], Alternatives: parts[2], Cash: parts[3] },
+    };
+  }
   const transactionsRaw = txnRows.data || [];
   const valuationsRaw = valRows.data || [];
   if (txnRows.error) throw txnRows.error;
@@ -741,7 +802,8 @@ async function getPortfolioDataLive() {
 
   // Live-computed now (computeAssetClassAllocation() above), not
   // staticReal.assetClassAllocation - see that function's own comment.
-  const assetClassAllocation = computeAssetClassAllocation(holdings);
+  const assetClassAllocation = computeAssetClassAllocation(holdings, dbComposition);
+  const geo = await loadGeography(staticReal);
 
   // ---------- Costs Engine (calculations.js - see that file's own
   // "Costs Engine" header comment for the full product-vs-cash-cost,
@@ -764,7 +826,7 @@ async function getPortfolioDataLive() {
     holdingsCount: holdings.length,
     accountsCount: accounts.length,
     transactionsCount: transactions.length,
-    countriesCount: staticReal.countries.length,
+    countriesCount: geo.countries.length,
     assetClassesCount: assetClassAllocation.length,
     currenciesCount: currency.length,
     largestPosition: largest ? { name: largest.name, weight: largest.weight } : { name: "—", weight: 0 },
@@ -814,9 +876,9 @@ async function getPortfolioDataLive() {
       assetClassAllocation,
       productAllocation,
       accountAllocation,
-      regions: staticReal.regions,
-      countries: staticReal.countries,
-      notCountrySpecificWeight: staticReal.notCountrySpecificWeight,
+      regions: geo.regions,
+      countries: geo.countries,
+      notCountrySpecificWeight: geo.notCountrySpecificWeight,
       currency,
       health,
       // currentCost/costEvolution/historicalCashCosts:
@@ -987,7 +1049,7 @@ async function getPortfolioDataPublic() {
     .map((r) => ({ name: r.category, weight: r.weight_pct, tone: REGION_TONE[r.category] || "grey" }));
 
   const benchmarks = await loadBenchmarkSeries();
-  const staticGeo = getMockPortfolioData().analytics;
+  const geo = await loadGeography(getMockPortfolioData().analytics);
 
   const cashBucket = assetClassAllocation.find((a) => a.name === "Cash");
   const health = {
@@ -1013,18 +1075,12 @@ async function getPortfolioDataPublic() {
       assetClassAllocation,
       productAllocation: [],
       accountAllocation: [],
-      // Geography: the same real, researched portfolio-level look-through
-      // the signed-in view uses (repository.js - MSCI/Avantis factsheet
-      // country weights, never per-security) - these are aggregate
-      // percentages only, no security identity, account or euro amount,
-      // so they sit on the safe side of the privacy boundary. Replaces
-      // the DB-side US/EU/EM-only split, which dumped ~57% into "Other"
-      // for every fund without a composition row. `regions` (the RPC
-      // result above) is kept only as the fallback if the static data
-      // is ever empty.
-      regions: staticGeo.regions.length ? staticGeo.regions : regions,
-      countries: staticGeo.countries,
-      notCountrySpecificWeight: staticGeo.countries.length ? staticGeo.notCountrySpecificWeight : 100,
+      // Geography: public_portfolio_geography() (0035) - aggregate % only,
+      // from each security's own current composition, no security
+      // identity, account or euro amount.
+      regions: geo.regions.length ? geo.regions : regions,
+      countries: geo.countries,
+      notCountrySpecificWeight: geo.countries.length ? geo.notCountrySpecificWeight : 100,
       currency: [],
       health,
       // Costs are never computed for the signed-out/public path - a

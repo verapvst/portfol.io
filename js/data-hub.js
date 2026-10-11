@@ -632,6 +632,35 @@ async function loadCostsToDatabase(groupKey) {
         if (error) throw error;
         loaded.push(`${fm.top_holdings.holdings.length} top holding(s)`);
       }
+
+      // Asset-class split (Liquidez / Obrigações / Ações / Outros) from the
+      // same report - the app reads security_details.alloc_*_pct for the
+      // Asset Class Allocation, and nothing was ever writing it on import,
+      // so it stayed frozen at whatever was typed in once. Only saved when
+      // the parse is confident AND the four buckets add up to ~100%.
+      const dist = fm.asset_class_distribution;
+      if (dist && dist.confidence !== "none" && dist.categories.length) {
+        const bucket = { stocks: 0, bonds: 0, cash: 0, other: 0 };
+        for (const c of dist.categories) {
+          const name = normalizeName(c.category || "");
+          const pct = Number(c.weight_pct) || 0;
+          if (name.startsWith("liquidez")) bucket.cash += pct;
+          else if (name.startsWith("obriga")) bucket.bonds += pct;
+          else if (name.startsWith("aco")) bucket.stocks += pct;
+          else bucket.other += pct;
+        }
+        const total = bucket.stocks + bucket.bonds + bucket.cash + bucket.other;
+        if (Math.abs(total - 100) <= 1.5) {
+          const { error } = await window.db.from("security_details").upsert({
+            security_id: securityId,
+            alloc_stocks_pct: bucket.stocks, alloc_bonds_pct: bucket.bonds,
+            alloc_cash_pct: bucket.cash, alloc_other_pct: bucket.other,
+            last_verified: date, source: sourceLabel,
+          }, { onConflict: "security_id" });
+          if (error) throw error;
+          loaded.push("asset-class split");
+        }
+      }
     }
 
     // Full current holdings list (0012_security_full_holdings.sql) - the
@@ -662,6 +691,17 @@ async function loadCostsToDatabase(groupKey) {
       // re-derivation, no second classification pass.
       const geo = state.groupGeo.get(groupKey);
       const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : v);
+      // The Carteira Detalhada states positions for a reference amount and
+      // no explicit weight column, so r[9] is empty on a real import (every
+      // stored row had weight_pct NULL). A position's weight is its share
+      // of the report's own total market value - derived, never invented.
+      const mvTotal = (geo ? geo.rows : []).reduce((s, r) => s + (Number(r[8]) || 0), 0);
+      const weightOf = (r) => {
+        const explicit = numOrNull(r[9]);
+        if (explicit !== null) return explicit;
+        const mv = numOrNull(r[8]);
+        return mv !== null && mvTotal ? Math.round((Number(mv) / mvTotal) * 1000000) / 10000 : null;
+      };
       const snapshotRows = (geo ? geo.rows : []).map((r) => ({
         security_id: securityId,
         report_date: hrDate,
@@ -672,7 +712,7 @@ async function loadCostsToDatabase(groupKey) {
         price: numOrNull(r[6]),
         price_type: r[7] || null,
         market_value: numOrNull(r[8]),
-        weight_pct: numOrNull(r[9]),
+        weight_pct: weightOf(r),
         exposure_country: r[10] || null,
         exposure_region: r[11] || null,
         source: sourceLabel,

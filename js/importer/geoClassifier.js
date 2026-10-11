@@ -170,6 +170,18 @@ const SECURITY_DICTIONARY = {
  */
 const PATTERN_RULES = [
   { test: /GOLD/, country: "Global", region: "Global" },
+  // Added 2026-10 (BPI Universal's formerly-Unknown ETFs). Each is
+  // classified from the instrument's OWN stated index/mandate, never from
+  // the fund family: a US small-cap index, a Mexico country fund, USD
+  // Treasury/TIPS/USD money-market paper, a EUR-corporate/EUR-HY bond
+  // fund, a diversified-commodity swap (no country, like gold above), and
+  // global thematic / global-bank-capital mandates.
+  { test: /RUSSELL 2000/, country: "United States", region: "North America" },
+  { test: /MSCI MEXICO/, country: "Mexico", region: "Emerging Markets" },
+  { test: /USD TREASURY|USD TIPS|MONEY MARKET USD/, country: "United States", region: "North America" },
+  { test: /COMMODITY/, country: "Global", region: "Global" },
+  { test: /EUR HIGH YIELD|EUR CORPORATE/, country: "Europe", region: "Europe" },
+  { test: /DIGITAL SECURITY|USD AT1/, country: "World", region: "World" },
   { test: /S&P\s?500|NASDAQ|US SMALL|US VALUE|US MUN\b/, country: "United States", region: "North America" },
   { test: /EMERGING|\bEM\b/, country: "Emerging Markets", region: "Emerging Markets" },
   { test: /ASIA/, country: "Asia", region: "Asia" },
@@ -277,7 +289,7 @@ const ALLOWED_VALUES_TO_REGION = {
   Denmark: "Europe", Finland: "Europe", Ireland: "Europe", "United Kingdom": "Europe", Europe: "Europe",
   "United States": "North America", Canada: "North America",
   Japan: "Asia", China: "Asia", India: "Asia", Asia: "Asia",
-  Brazil: "South America", Australia: "Oceania",
+  Brazil: "South America", Australia: "Oceania", Mexico: "Emerging Markets",
   "Emerging Markets": "Emerging Markets", Global: "Global", World: "World",
 };
 
