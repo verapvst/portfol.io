@@ -237,15 +237,18 @@ function renderCountryLegend(container, mapEl, data) {
   const countryRows = data.analytics.countries.map((c) => `
     <div class="legend-row drill-row" data-drill-type="country" data-drill-id="${c.iso}" data-code="${String(c.iso).padStart(3, "0")}" tabindex="0" role="button">
       <span class="legend-dot" style="background:var(--gradient-brand)"></span>
-      <span class="legend-name">${c.name}</span>
+      <span class="legend-name">${c.name}${c.proxy > 0.005 ? `<span class="legend-est" title="${c.proxy.toFixed(2)}% of this is estimated by proxy">est.</span>` : ""}</span>
       <span class="legend-value">${c.weight.toFixed(2)}%</span>
     </div>`).join("");
-  const restRow = `
+  // Every euro is attributed to a country now; the row only exists for the
+  // frozen fallback snapshot (which still has an un-attributed remainder).
+  const rest = data.analytics.notCountrySpecificWeight;
+  const restRow = rest > 0.005 ? `
     <div class="legend-row">
       <span class="legend-dot" style="background:${familyGradientCSS("grey")}"></span>
       <span class="legend-name">Not attributable to a single country</span>
-      <span class="legend-value">${data.analytics.notCountrySpecificWeight.toFixed(2)}%</span>
-    </div>`;
+      <span class="legend-value">${rest.toFixed(2)}%</span>
+    </div>` : "";
   container.innerHTML = countryRows + restRow;
 
   container.querySelectorAll(".legend-row[data-code]").forEach((row) => {
@@ -309,7 +312,7 @@ const EXPOSURE_GROUPINGS = {
   },
   currency: {
     label: "Currency", info: "exposure-currency",
-    hint: "The same exposure, by settlement currency",
+    hint: "The same exposure, by the currency of the countries it is invested in (hedging not modelled)",
     mapData: exposureCountryData,
     legend: (container, _mapEl, data) => renderCurrencyLegend(container, data),
   },
@@ -351,7 +354,10 @@ function renderExposure(elements, data) {
 
   const draw = (key) => {
     const grouping = EXPOSURE_GROUPINGS[key];
-    hintEl.textContent = grouping.hint;
+    const proxy = data.analytics.proxyWeight || 0;
+    hintEl.textContent = grouping.hint + (proxy > 0.05
+      ? `. About ${proxy.toFixed(0)}% is estimated: weight with no single country (World, Europe, ...) is spread over the countries the rest of the portfolio is reported in.`
+      : "");
     titleEl.dataset.info = grouping.info;
 
     vizEl.innerHTML = `

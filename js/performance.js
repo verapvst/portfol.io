@@ -45,10 +45,24 @@ function windowStartFor(range, asOfDate) {
     honesty rule this app applies everywhere else. */
 function windowedReturnFromDailySeries(dailySeries, windowStart) {
   if (!dailySeries || dailySeries.length < 2) return null;
-  const filtered = windowStart ? dailySeries.filter((p) => p.date >= windowStart) : dailySeries;
-  if (filtered.length < 2 || !filtered[0].value) return null;
-  const first = filtered[0], last = filtered[filtered.length - 1];
-  return Math.round((last.value / first.value - 1) * 10000) / 100;
+  // Only REAL observations count. The daily series interpolates every day
+  // between two real valuation dates, so a "1W" or "1M" return read off
+  // interpolated points is just a slice of a monthly move - a number that
+  // looks measured but never was. A window needs at least two real
+  // observations inside it, otherwise it is "insufficient history".
+  const allReal = dailySeries.filter((p) => p.real);
+  let real = allReal.filter((p) => !windowStart || p.date >= windowStart);
+  // Year-to-date is anchored on the last real observation on/before Jan 1
+  // (the year-end value), not the first one after it - otherwise January's
+  // move is dropped and this tile disagrees with the same year in Annual
+  // Returns. Rolling windows (3M, 6M, 1Y) start at their first real point.
+  if (windowStart && windowStart.endsWith("-01-01")) {
+    const anchor = [...allReal].reverse().find((p) => p.date <= windowStart);
+    if (anchor) real = [anchor, ...real.filter((p) => p.date > anchor.date)];
+  }
+  if (real.length < 2 || !real[0].value) return null;
+  const first = real[0], last = real[real.length - 1];
+  return { pct: Math.round((last.value / first.value - 1) * 10000) / 100, from: first.date, to: last.date };
 }
 
 /** Compact "Mon 'YY" x-axis tick label - the tooltip keeps the full ISO
@@ -147,14 +161,15 @@ function renderStats(data, scopeType, scopeId) {
   // computed from what anon is ever given.
   const isSinceInception = currentScopedRange === "Since Inception";
   const asOfDate = bundle?.dailySeries?.length ? bundle.dailySeries[bundle.dailySeries.length - 1].date : null;
-  const windowedPct = isSinceInception
-    ? bundle?.totalReturnPct
+  const windowed = isSinceInception
+    ? null
     : windowedReturnFromDailySeries(bundle?.dailySeries, windowStartFor(currentScopedRange, asOfDate));
-  const totalReturnAvailable = isSinceInception ? !!bundle?.totalReturnAvailable : windowedPct != null;
+  const windowedPct = isSinceInception ? bundle?.totalReturnPct : windowed?.pct;
+  const totalReturnAvailable = isSinceInception ? !!bundle?.totalReturnAvailable : windowed != null;
   const totalReturnValue = totalReturnAvailable ? fmtPct(windowedPct) : "Insufficient history";
   const totalReturnNote = totalReturnAvailable
-    ? (isSinceInception ? `since ${bundle.firstDate}` : `over ${currentScopedRange}`)
-    : "not enough dated valuations in this period";
+    ? (isSinceInception ? `since ${bundle.firstDate}` : `${windowed.from} to ${windowed.to}`)
+    : "fewer than two recorded valuations in this period";
 
   if (scopeType === "portfolio") {
     const perf = data.analytics.performance;
@@ -234,7 +249,11 @@ function renderAnnualReturns(data, scopeType, scopeId) {
 
   const currentYear = new Date().getFullYear();
   const rows = entries.map(([year, y]) => {
-    const label = Number(year) === currentYear ? `${year} YTD` : year;
+    // The first year starts at the first observation, not Jan 1 - say so, or
+    // a part-year figure reads as a full year.
+    const startsLate = y.rangeStart && !y.rangeStart.endsWith("-01-01");
+    const startLabel = startsLate ? new Date(`${y.rangeStart}T00:00:00`).toLocaleDateString("en-GB", { month: "short" }) : "";
+    const label = Number(year) === currentYear ? `${year} YTD` : startsLate ? `${year} (from ${startLabel})` : year;
     if (!y.hasObservationInYear) {
       return `
         <div class="annual-return-row">
@@ -283,7 +302,10 @@ function renderBenchmarkSection(data, scopeType, scopeId) {
   const asOfDate = bundle?.dailySeries?.length ? bundle.dailySeries[bundle.dailySeries.length - 1].date : null;
   const windowStart = windowStartFor(currentScopedRange, asOfDate);
   const scopedSeries = windowStart ? (bundle?.dailySeries || []).filter((p) => p.date >= windowStart) : bundle?.dailySeries;
-  const hasPerformanceSeries = scopedSeries && scopedSeries.length >= 2;
+  // Same rule as the stat tile: a window with fewer than two REAL
+  // observations is not a measured return, however many interpolated
+  // daily points sit in it.
+  const hasPerformanceSeries = scopedSeries && scopedSeries.filter((p) => p.real).length >= 2;
   const availableBenchmarks = (data.history.benchmarks || [])
     .map((b) => ({ ...b, series: windowStart ? b.series.filter((p) => p.date >= windowStart) : b.series }))
     .filter((b) => b.series && b.series.length >= 2);
@@ -547,6 +569,18 @@ function renderScopeSelector(data) {
       });
     });
   };
+
+  // Signed out: accounts, strategies and securities are private, so only
+  // "Portfolio" is selectable and the rest are one shared lock - not three
+  // tabs that open onto an empty "Nothing here yet".
+  if (!currentUser()) {
+    currentScopeType = "portfolio";
+    currentScopeId = null;
+    typeRow.innerHTML = `<button class="filter-pill active" data-type="portfolio" type="button">Portfolio</button>${lockedHTML({ variant: "inline", label: "Accounts, strategies & securities: log in" })}`;
+    subRow.innerHTML = "";
+    subRow.hidden = true;
+    return;
+  }
 
   typeRow.innerHTML = SCOPE_TYPES.map((t) =>
     `<button class="filter-pill${t.type === currentScopeType ? " active" : ""}" data-type="${t.type}" type="button">${t.label}</button>`

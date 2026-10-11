@@ -196,6 +196,22 @@ const COUNTRY_TO_REGION = {
   "Australia": "World",
   "Italy": "Europe",
   "Mexico": "Emerging Markets",
+  "Belgium": "Europe",
+  "Denmark": "Europe",
+  "Finland": "Europe",
+  "Ireland": "Europe",
+  "Norway": "Europe",
+};
+
+/** Currency each country's economic exposure is denominated in - used to
+    turn the country look-through into a currency look-through (hedging is
+    not modelled). Euro-area members all map to EUR. */
+const COUNTRY_CURRENCY = {
+  "United States": "USD", "Canada": "CAD", "United Kingdom": "GBP", "Switzerland": "CHF",
+  "Japan": "JPY", "Australia": "AUD", "Sweden": "SEK", "Norway": "NOK", "Denmark": "DKK",
+  "Germany": "EUR", "France": "EUR", "Spain": "EUR", "Portugal": "EUR", "Italy": "EUR",
+  "Netherlands": "EUR", "Belgium": "EUR", "Finland": "EUR", "Ireland": "EUR",
+  "China": "CNY", "Taiwan": "TWD", "South Korea": "KRW", "India": "INR", "Brazil": "BRL", "Mexico": "MXN",
 };
 
 /** ISO 3166 numeric codes for every country the exposure map can paint.
@@ -208,6 +224,7 @@ const COUNTRY_ISO = {
   "China": 156, "Taiwan": 158, "Canada": 124, "South Korea": 410, "Portugal": 620,
   "France": 250, "India": 356, "Australia": 36, "Netherlands": 528, "Sweden": 752,
   "Switzerland": 756, "Brazil": 76, "Italy": 380, "Mexico": 484,
+  "Belgium": 56, "Denmark": 208, "Finland": 246, "Ireland": 372, "Norway": 578,
 };
 
 function regionForCountry(name) {
@@ -346,6 +363,7 @@ window.TOKENS = TOKENS;
 window.tokenColor = tokenColor;
 window.COUNTRY_TO_REGION = COUNTRY_TO_REGION;
 window.COUNTRY_ISO = COUNTRY_ISO;
+window.COUNTRY_CURRENCY = COUNTRY_CURRENCY;
 window.regionForCountry = regionForCountry;
 window.fmtEUR = fmtEUR;
 window.fmtPct = fmtPct;

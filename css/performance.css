@@ -111,3 +111,5 @@
 .perf-strategy-kicker { flex-shrink: 0; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--coral-2); font-weight: 600; }
 .perf-strategy-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
 @media (max-width: 640px) { .perf-strategy-card { flex-direction: column; gap: var(--sp-1); } }
+
+.filter-pills .locked-inline { padding: 0 var(--sp-3); font-size: 12.5px; }

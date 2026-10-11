@@ -601,8 +601,8 @@ const METRIC_DOCS = {
   },
   "exposure-country": {
     definition: "Which countries the portfolio's holdings are exposed to - fully real, no illustrative or placeholder entries. Two layers: each security's own Exposure Country (Detailed Portfolio), plus a real look-through decomposition for securities whose mandate is a broad index (World / Emerging Markets) rather than one country. This is look-through exposure, not a security's own stated region/mandate (a separate field, docs/migration-plan.md §2.2's securities.region - not shown here) - the two answer different questions and are deliberately never merged into one number, per docs/migration-plan.md §2.2.",
-    calculation: "Each invested security's own country composition, weighted by its current share of the invested (non-cash) portfolio. BPI funds use their latest Carteira Detalhada snapshot (share of market value per country); ETFs use the index's published country weights, where only the top countries are itemised and the rest stays an honest 'not attributable to a single country' row. Fund-of-fund positions whose mandate is a region or the whole world (Europe, World, Global) have no single country to paint, so they appear in that same row and in the Region tab; positions that couldn't be classified are marked Unknown, never guessed.",
-    source: "public_portfolio_geography() (migration 0035): detailed_portfolio_holdings (latest BPI report per fund) + security_country_exposure (MSCI/justETF country weights, as-of date stored per row). Same function feeds the signed-out and signed-in views."
+    calculation: "Each invested security's own country composition, weighted by its current share of the invested (non-cash) portfolio. BPI funds use their latest Carteira Detalhada snapshot (share of market value per country); ETFs use the index's published country weights, where only the top countries are itemised. Weight that only has a region-level label (a World or Europe fund, an ETF's un-itemised remainder, an Unknown) is spread by an explicit proxy over the countries the rest of the portfolio is reported in, so every euro has a country; the share that is estimated is shown as \"est.\" and itemised per security in each country's detail.",
+    source: "public_portfolio_geography() (migrations 0035/0036): detailed_portfolio_holdings (latest BPI report per fund) + security_country_exposure (MSCI/justETF country weights, as-of date stored per row). Same function feeds the signed-out and signed-in views."
   },
   "exposure-region": {
     definition: "The same portfolio, classified by region instead of country - not derived from the Country tab, from the same Detailed Portfolio source at its own (coarser) dimension. This is still look-through Exposure Region (Detailed Portfolio), not each security's own stated region/mandate (securities.region, a separate field per docs/migration-plan.md §2.2, not shown here) - despite the shared word \"region\", these are never merged.",
@@ -610,9 +610,9 @@ const METRIC_DOCS = {
     source: "analytics.regions, aggregated from 02_Portfolio Workbook.xlsx's Detailed Portfolio (Exposure Region column).",
   },
   "exposure-currency": {
-    definition: "Which settlement currencies the portfolio is exposed to - not the same as the underlying economic currency exposure of what each fund actually holds.",
-    calculation: "BPI Dinâmico is EUR-denominated; the Trading212 ETF sleeve is USD. Weighted by each account's share of the portfolio. A world-equity ETF traded in EUR still has real USD/JPY/GBP exposure through its underlying holdings - that finer breakdown isn't in the workbook, so this tab deliberately answers \"what currency would I receive if I sold\", not \"what currencies move this portfolio's value\".",
-    source: "analytics.currency, derived from portfolio.accounts.",
+    definition: "Which currencies the portfolio's money is economically exposed to: each country's weight in that country's currency. A world-equity ETF priced in EUR still shows its USD, JPY and GBP exposure here.",
+    calculation: "The Country tab's weights (invested, non-cash holdings), each assigned the currency of its country (euro-area countries -> EUR). Currency hedging is not modelled, so a hedged bond fund still shows its underlying currencies.",
+    source: "analytics.currency, derived from analytics.countries (public_portfolio_geography()).",
   },
   "cost-basis": {
     definition: "What was actually paid for a position, still attributable to the units currently held - not what the position is worth today (see Market Value), and not the total ever paid in (a sold portion's cost leaves with it).",
@@ -1105,6 +1105,42 @@ function accountDrill(name, data) {
   };
 }
 
+/** "Which securities are exposed here?" - the per-security country rows
+    (analytics.geographyDetail, owner only) filtered by matchFn, summed per
+    security, largest first. Percentages are shares of the invested
+    (non-cash) portfolio, split into what the security's own data reports
+    and what is estimated by proxy. Signed out: private. */
+function geographyContributorsHTML(data, matchFn) {
+  if (!currentUser()) {
+    return `<div class="drawer-section"><p class="drawer-hint">Which securities drive this exposure</p>${lockedHTML()}</div>`;
+  }
+  const detail = data.analytics.geographyDetail || [];
+  const nameById = Object.fromEntries((data.portfolio.allHoldings || data.portfolio.holdings).map((h) => [h.id, h.name]));
+  const bySecurity = new Map();
+  for (const r of detail) {
+    if (!matchFn(r)) continue;
+    const e = bySecurity.get(r.security_id) || { reported: 0, proxy: 0 };
+    e[r.method === "proxy" ? "proxy" : "reported"] += Number(r.weight_pct) || 0;
+    bySecurity.set(r.security_id, e);
+  }
+  const rows = [...bySecurity.entries()]
+    .map(([id, e]) => ({ name: nameById[id] || "Security", ...e, total: e.reported + e.proxy }))
+    .filter((r) => r.total > 0.005)
+    .sort((a, b) => b.total - a.total);
+  if (!rows.length) return `<p class="drawer-hint">No per-security breakdown available.</p>`;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return `
+    <div class="drawer-section">
+      <p class="drawer-hint">Securities exposed here (% of invested portfolio)</p>
+      <div class="drawer-rows">${rows.map((r) => `
+        <div class="drawer-row drawer-row-stack">
+          <span>${esc(r.name)}<small class="drawer-sub">${r.reported > 0.005 ? `${r.reported.toFixed(2)}% reported` : ""}${r.reported > 0.005 && r.proxy > 0.005 ? " · " : ""}${r.proxy > 0.005 ? `${r.proxy.toFixed(2)}% estimated` : ""}</small></span>
+          <span>${r.total.toFixed(2)}%</span>
+        </div>`).join("")}</div>
+      <p class="drawer-hint">"Estimated" is weight the security reports only at region level (World, Europe, ...), spread over the countries the rest of the portfolio is reported in.</p>
+    </div>`;
+}
+
 function regionDrill(name, data) {
   const region = data.analytics.regions.find((r) => r.name === name);
   // regionForCountry lives in utils.js - shared with ui.js so the two
@@ -1122,9 +1158,7 @@ function regionDrill(name, data) {
   // never country-specific) is NOT a missing feature, so it doesn't use
   // comingSoon()'s "Not built yet" framing - it's a plain explanatory
   // hint about what this region's weight actually represents.
-  const bodyHTML = countries.length
-    ? `<div class="drawer-rows">${countries.map((c) => rowHTML(c.name, `${c.weight.toFixed(1)}%`)).join("")}</div>${comingSoon(["Which products contribute here"])}`
-    : `<p class="drawer-hint">This region's real weight comes from holdings that were never country-specific (e.g. a global tracker) - see the Detailed Portfolio sheet.</p>`;
+  const bodyHTML = `${countries.length ? `<div class="drawer-rows">${countries.map((c) => rowHTML(c.name, `${c.weight.toFixed(1)}%`)).join("")}</div>` : ""}${geographyContributorsHTML(data, (r) => r.region === name)}`;
   return {
     icon: "globe", title: name, subtitle: region ? `${region.weight.toFixed(2)}% of the portfolio` : "",
     bodyHTML,
@@ -1142,23 +1176,24 @@ function countryDrill(isoCode, data) {
   // geographic data exists anywhere in the schema.
   return {
     icon: "globe", title: country ? country.name : "Country", subtitle: country ? `${country.weight.toFixed(1)}% exposure` : "Not yet mapped",
-    bodyHTML: comingSoon(["Which products hold this country", "Historical evolution"]),
+    bodyHTML: country
+      ? `${country.proxy > 0.005 ? `<p class="drawer-hint">${country.proxy.toFixed(2)}% of this ${country.weight.toFixed(2)}% is estimated by proxy.</p>` : ""}${geographyContributorsHTML(data, (r) => r.country === country.name)}`
+      : comingSoon(["Which products hold this country"]),
   };
 }
 
 function currencyDrill(code, data) {
   const cur = data.analytics.currency.find((c) => c.code === code);
-  // Same fix as accountDrill above: matched by each account's own real
-  // currency field, not hardcoded to "EUR means BPI, anything else
-  // means Trading212" - that only ever happened to work for the mock's
-  // exact two accounts.
-  const accountIds = new Set(data.portfolio.accounts.filter((a) => (a.currency || "EUR") === code).map((a) => a.id));
-  const holdings = data.portfolio.holdings.filter((h) => accountIds.has(h.accountId));
+  // Currency is a look-through now: each country's weight in that country's
+  // currency (hedging not modelled). The contributing securities are the
+  // per-security country rows whose country uses this currency.
+  const countries = data.analytics.countries.filter((c) => window.COUNTRY_CURRENCY[c.name] === code);
   return {
-    icon: "wallet", title: `${code} Exposure`, subtitle: cur ? `${cur.weight.toFixed(2)}% of portfolio` : "",
+    icon: "wallet", title: `${code} Exposure`, subtitle: cur ? `${cur.weight.toFixed(2)}% of invested portfolio` : "",
     bodyHTML: `
-      <div class="drawer-rows">${holdings.map((h) => rowHTML(h.name, `${h.weight.toFixed(1)}%`)).join("")}</div>
-      ${comingSoon(["Historical currency evolution", "Hedge information"])}`,
+      ${countries.length ? `<div class="drawer-rows">${countries.map((c) => rowHTML(c.name, `${c.weight.toFixed(1)}%`)).join("")}</div>` : ""}
+      ${geographyContributorsHTML(data, (r) => window.COUNTRY_CURRENCY[r.country] === code)}
+      <p class="drawer-hint">Currency is the currency of the countries the money is invested in, not the currency a fund is priced in. Currency hedging isn't modelled.</p>`,
   };
 }
 

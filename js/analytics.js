@@ -205,37 +205,73 @@ const GEO_REGION_TONE = {
   World: "purple", Europe: "blue", "North America": "orange", Unknown: "grey",
   "Emerging Markets": "green", Asia: "coral", Global: "amber",
 };
+const CURRENCY_TONE = { EUR: "coral", USD: "blue", JPY: "pink", GBP: "green", CHF: "purple", CAD: "amber", AUD: "orange" };
 function geographyFromRows(rows) {
   const byCountry = new Map();
   const byRegion = new Map();
-  let notCountrySpecificWeight = 0;
+  let proxyWeight = 0;
   for (const r of rows) {
     const w = Number(r.weight_pct) || 0;
+    const proxy = Number(r.proxy_pct) || 0;
+    proxyWeight += proxy;
     byRegion.set(r.region, (byRegion.get(r.region) || 0) + w);
     const iso = window.COUNTRY_ISO[r.country];
-    if (iso) byCountry.set(r.country, { name: r.country, iso, weight: (byCountry.get(r.country)?.weight || 0) + w });
-    else notCountrySpecificWeight += w;
+    if (!iso) continue;
+    const prev = byCountry.get(r.country) || { weight: 0, proxy: 0 };
+    byCountry.set(r.country, { name: r.country, iso, weight: prev.weight + w, proxy: prev.proxy + proxy });
   }
   const round2 = (n) => Math.round(n * 100) / 100;
+  const countries = [...byCountry.values()]
+    .map((c) => ({ ...c, weight: round2(c.weight), proxy: round2(c.proxy) }))
+    .sort((a, b) => b.weight - a.weight);
+
+  // Currency look-through: each country's weight in that country's currency.
+  const byCurrency = new Map();
+  for (const c of countries) {
+    const code = window.COUNTRY_CURRENCY[c.name] || "Other";
+    byCurrency.set(code, (byCurrency.get(code) || 0) + c.weight);
+  }
   return {
-    countries: [...byCountry.values()].map((c) => ({ ...c, weight: round2(c.weight) })).sort((a, b) => b.weight - a.weight),
+    countries,
     regions: [...byRegion.entries()]
       .map(([name, weight]) => ({ name, weight: round2(weight), tone: GEO_REGION_TONE[name] || "grey" }))
       .sort((a, b) => b.weight - a.weight),
-    notCountrySpecificWeight: round2(notCountrySpecificWeight),
+    // Every euro is attributed to a country now (see migration 0036); what
+    // used to be "not attributable" is spread by an explicit proxy, and
+    // proxyWeight says how much of the total that is.
+    notCountrySpecificWeight: 0,
+    proxyWeight: round2(proxyWeight),
+    currency: [...byCurrency.entries()]
+      .map(([code, weight]) => ({ code, weight: round2(weight), tone: CURRENCY_TONE[code] || "grey" }))
+      .sort((a, b) => b.weight - a.weight),
   };
 }
 
 /** Current geography from the database (one function for both signed in
     and out). Falls back to repository.js's frozen snapshot only if the
-    RPC is unavailable (migration 0035 not run / network) so the card
-    never goes blank. */
+    RPC is unavailable (migration not run / network) so the card never goes
+    blank. */
 async function loadGeography(fallback) {
   try {
     const { data, error } = await window.db.rpc("public_portfolio_geography");
     if (!error && data && data.length) return { ...geographyFromRows(data), live: true };
   } catch (err) { /* fall through */ }
-  return { countries: fallback.countries, regions: fallback.regions, notCountrySpecificWeight: fallback.notCountrySpecificWeight, live: false };
+  return {
+    countries: fallback.countries, regions: fallback.regions,
+    notCountrySpecificWeight: fallback.notCountrySpecificWeight, proxyWeight: 0,
+    currency: [], live: false,
+  };
+}
+
+/** Per-security country rows ({security_id, country, weight_pct, method}) -
+    owner only (the RPC returns nothing otherwise). Powers "which
+    securities are exposed to Portugal". */
+async function loadGeographyDetail() {
+  try {
+    const { data, error } = await window.db.rpc("portfolio_geography_detail");
+    if (!error && data) return data;
+  } catch (err) { /* optional */ }
+  return [];
 }
 
 /** Real, privacy-safe "Investment journey" milestones for the public
@@ -803,7 +839,7 @@ async function getPortfolioDataLive() {
   // Live-computed now (computeAssetClassAllocation() above), not
   // staticReal.assetClassAllocation - see that function's own comment.
   const assetClassAllocation = computeAssetClassAllocation(holdings, dbComposition);
-  const geo = await loadGeography(staticReal);
+  const [geo, geographyDetail] = await Promise.all([loadGeography(staticReal), loadGeographyDetail()]);
 
   // ---------- Costs Engine (calculations.js - see that file's own
   // "Costs Engine" header comment for the full product-vs-cash-cost,
@@ -828,7 +864,7 @@ async function getPortfolioDataLive() {
     transactionsCount: transactions.length,
     countriesCount: geo.countries.length,
     assetClassesCount: assetClassAllocation.length,
-    currenciesCount: currency.length,
+    currenciesCount: (geo.currency.length ? geo.currency : currency).length,
     largestPosition: largest ? { name: largest.name, weight: largest.weight } : { name: "—", weight: 0 },
     cashRatio: totalValue ? Math.round((cash / totalValue) * 10000) / 100 : 0,
   };
@@ -856,6 +892,15 @@ async function getPortfolioDataLive() {
   } catch (err) {
     console.warn("Public performance snapshot publish failed:", err);
   }
+  // Risk metrics (0037) in a SEPARATE write: if that column doesn't exist
+  // yet this fails on its own and can never block the core snapshot above.
+  try {
+    await window.db.from("public_performance_snapshot")
+      .update({ quant_metrics: { ...portfolioQuant, regressionBenchmarkId: regressionBenchmark?.id || null } })
+      .eq("portfolio_id", portfolioId);
+  } catch (err) {
+    console.warn("Public quant metrics publish failed:", err);
+  }
 
   return {
     portfolio: { holdings, allHoldings, accounts, cash, transactions },
@@ -879,7 +924,12 @@ async function getPortfolioDataLive() {
       regions: geo.regions,
       countries: geo.countries,
       notCountrySpecificWeight: geo.notCountrySpecificWeight,
-      currency,
+      proxyWeight: geo.proxyWeight,
+      geographyDetail,
+      // Look-through by country of exposure (hedging not modelled). Falls
+      // back to the old account-currency split only if the geography RPC
+      // is unavailable.
+      currency: geo.currency.length ? geo.currency : currency,
       health,
       // currentCost/costEvolution/historicalCashCosts:
       // calculations.js's Costs Engine - see that section's own header
@@ -1081,7 +1131,12 @@ async function getPortfolioDataPublic() {
       regions: geo.regions.length ? geo.regions : regions,
       countries: geo.countries,
       notCountrySpecificWeight: geo.countries.length ? geo.notCountrySpecificWeight : 100,
-      currency: [],
+      proxyWeight: geo.proxyWeight,
+      geographyDetail: [],
+      // Currency look-through is derived from the country mix, not from
+      // which account holds what, so unlike the old account-currency split
+      // it reveals nothing about the account split and can be public.
+      currency: geo.currency,
       health,
       // Costs are never computed for the signed-out/public path - a
       // security-level % rate isn't privacy-sensitive on its own, but
@@ -1098,6 +1153,10 @@ async function getPortfolioDataPublic() {
         totalReturnPct, totalReturnAvailable,
         investorReturnPct, investorReturnAvailable,
         yearlyReturns,
+        // Risk metrics published by the signed-in client (0037); undefined
+        // until that migration has run and Vera has signed in once.
+        quant: perfRow?.quant_metrics || undefined,
+        regressionBenchmarkId: perfRow?.quant_metrics?.regressionBenchmarkId || null,
         // Real amounts (contributions/withdrawals/cash) stay deliberately
         // never exposed to anon (public_cash_flow_dates() returns
         // date+type only, no amount, and 0031's snapshot is percentages/
