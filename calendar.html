@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfol.io — Calendar</title>
+<title>Portfol.io — Activity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=148">
-<link rel="stylesheet" href="css/layout.css?v=148">
-<link rel="stylesheet" href="css/components.css?v=148">
-<link rel="stylesheet" href="css/calendar.css?v=148">
+<link rel="stylesheet" href="css/theme.css?v=151">
+<link rel="stylesheet" href="css/layout.css?v=151">
+<link rel="stylesheet" href="css/components.css?v=151">
+<link rel="stylesheet" href="css/calendar.css?v=151">
 </head>
 <body>
 <div id="app">
@@ -18,70 +18,24 @@
   <main id="main">
     <header id="topbar" class="topbar"></header>
 
-    <!-- Same page for everyone: the structure is public (so a visitor
-         sees what this feature does), anything private is replaced by
-         the shared lock (shell.js lockedHTML). -->
-
-    <section class="card glass" id="cal-today-card">
-      <div class="cal-today-row">
-        <div class="cal-today-block">
-          <span class="cal-today-kicker">Today</span>
-          <span class="cal-today-date" id="cal-today-date"></span>
-        </div>
-        <div class="cal-today-block cal-today-stat">
-          <span class="cal-today-kicker">Portfolio value</span>
-          <span class="cal-today-date" id="cal-today-value"></span>
-        </div>
-        <div class="cal-today-block cal-today-stat">
-          <span class="cal-today-kicker">Today's activity</span>
-          <span class="cal-today-date" id="cal-today-activity"></span>
-        </div>
+    <!-- Activity: the monthly routine (what's due) + a plain feed of what
+         was recorded. Same page for everyone - the structure is public,
+         anything private is replaced by the shared lock. -->
+    <section class="card glass" id="act-due-card">
+      <div class="card-header act-header">
+        <div class="card-header-title"><h2 class="section-title">Updates due</h2></div>
+        <span class="act-badge" id="act-due-badge"></span>
       </div>
+      <p class="section-hint" id="act-due-hint"></p>
+      <div id="act-due-body"><p class="act-empty">Loading…</p></div>
     </section>
 
-    <!-- Monthly update check: did I record this month's values (and the
-         BPI report)? Public in shape (dates only, no amounts/names). -->
-    <section class="card glass" id="cal-check-card">
-      <div class="card-header">
-        <div class="card-header-title">
-          <h2 class="section-title">Monthly update check</h2>
-        </div>
+    <section class="card glass" id="act-feed-card">
+      <div class="card-header act-header">
+        <div class="card-header-title"><h2 class="section-title">Recent activity</h2></div>
+        <div class="filter-pills glass-quiet" id="act-feed-pills"></div>
       </div>
-      <p class="section-hint" id="cal-check-hint">Has each month's portfolio data been recorded?</p>
-      <div class="cal-check-strip" id="cal-check-strip"></div>
-      <p class="cal-check-message" id="cal-check-message"></p>
-    </section>
-
-    <section class="card glass" id="cal-filters-card" hidden>
-      <div class="filter-pills glass-quiet" id="cal-filter-pills"></div>
-      <div class="filter-pills glass-quiet" id="cal-account-pills"></div>
-    </section>
-
-    <section class="card glass" id="cal-main-card">
-      <div class="cal-nav-row">
-        <button type="button" class="cal-nav-btn" id="cal-prev-btn" aria-label="Previous month"></button>
-        <div class="cal-nav-center">
-          <span class="cal-month-label" id="cal-month-label"></span>
-          <button type="button" class="cal-today-btn" id="cal-today-btn">Today</button>
-        </div>
-        <button type="button" class="cal-nav-btn" id="cal-next-btn" aria-label="Next month"></button>
-      </div>
-      <div id="cal-grid"></div>
-    </section>
-
-    <!-- Month entries (fixed + variable) and selected-day detail. One
-         lock, not one per card, when signed out. -->
-    <section class="card glass" id="cal-entries-card">
-      <div class="card-header">
-        <div class="card-header-title">
-          <h2 class="section-title" id="cal-entries-title">This month</h2>
-        </div>
-      </div>
-      <div id="cal-entries"></div>
-    </section>
-
-    <section class="card glass" id="cal-detail-card">
-      <div id="cal-day-detail"></div>
+      <div id="act-feed"></div>
     </section>
 
   </main>
@@ -89,19 +43,19 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/supabaseConfig.js?v=148"></script>
-<script src="js/supabaseClient.js?v=148"></script>
+<script src="js/supabaseConfig.js?v=151"></script>
+<script src="js/supabaseClient.js?v=151"></script>
 
-<script src="js/utils.js?v=148"></script>
-<script src="js/calculations.js?v=148"></script>
-<script src="js/repository.js?v=148"></script>
+<script src="js/utils.js?v=151"></script>
+<script src="js/calculations.js?v=151"></script>
+<script src="js/repository.js?v=151"></script>
 
-<script src="js/charts.js?v=148"></script>
-<script src="js/shell.js?v=148"></script>
-<script src="js/auth.js?v=148"></script>
-<script src="js/db.js?v=148"></script>
-<script src="js/analytics.js?v=148"></script>
-<script src="js/calendar-events.js?v=148"></script>
-<script src="js/calendar.js?v=148"></script>
+<script src="js/charts.js?v=151"></script>
+<script src="js/shell.js?v=151"></script>
+<script src="js/auth.js?v=151"></script>
+<script src="js/db.js?v=151"></script>
+<script src="js/analytics.js?v=151"></script>
+<script src="js/calendar-events.js?v=151"></script>
+<script src="js/calendar.js?v=151"></script>
 </body>
 </html>

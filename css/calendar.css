@@ -1,243 +1,174 @@
 /* ============================================================
-   calendar.css - the Calendar page. Hand-built grid, not a third-party
-   calendar component - every visual choice here comes from this app's
-   own existing tokens (theme.css/components.css: --sp-*/--r-*/
-   --card-border/--glass-quiet-bg/--coral-2/--muted/--ink), never a new
-   colour or spacing system introduced for this one page. Minimal,
-   calm, financial - generous whitespace, subtle borders, one restrained
-   accent (coral) for "today"/"selected", never a rainbow of event
-   colours (design brief §10/§19).
+   calendar.css - the Activity page (calendar.html): "Updates due" +
+   "Recent activity". Plain lists built from the app's own tokens
+   (theme.css/components.css) - one restrained accent system:
+   green = done, amber = due, coral/red = overdue.
    ============================================================ */
 
-#cal-signedout-card { padding: var(--sp-8); }
+#act-due-card,
+#act-feed-card { margin-bottom: var(--sp-6); }
 
-#cal-today-card,
-#cal-check-card,
-#cal-filters-card,
-#cal-main-card,
-#cal-entries-card,
-#cal-detail-card { margin-bottom: var(--sp-6); }
+.act-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); }
 
-/* ---------- Today strip - a fact, not a KPI dashboard ---------- */
-.cal-today-row {
+.act-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+}
+.act-badge.is-done { color: var(--positive); background: color-mix(in oklab, var(--positive) 14%, transparent); }
+.act-badge.is-overdue { color: var(--negative); background: color-mix(in oklab, var(--negative) 12%, transparent); }
+.act-badge:empty { display: none; }
+
+.act-empty { font-size: 13.5px; color: var(--muted); margin-top: var(--sp-3); line-height: 1.5; }
+
+/* ---------- Updates due ---------- */
+.act-item {
   display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  flex-wrap: wrap;
-}
-.cal-today-block { display: flex; flex-direction: column; gap: 2px; }
-.cal-today-block.cal-today-stat { padding-left: var(--sp-8); border-left: 1px solid var(--card-border); }
-.cal-today-kicker { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-.cal-today-date { font-size: 16px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-@media (max-width: 640px) {
-  .cal-today-row { gap: var(--sp-4); }
-  .cal-today-block.cal-today-stat { padding-left: 0; border-left: none; }
-}
-
-/* ---------- Filters ---------- */
-#cal-filters-card { padding: var(--sp-4) var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); }
-#cal-account-pills:empty { display: none; }
-
-/* ---------- Monthly summary ---------- */
-.cal-summary-row {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-6);
-}
-.cal-summary-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: var(--r-lg);
-  background: var(--glass-quiet-bg);
-  border: 1px solid var(--glass-quiet-border);
-}
-.cal-summary-label { font-size: 11px; color: var(--muted); }
-.cal-summary-value { font-size: 15px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-@media (max-width: 767px) {
-  .cal-summary-row { grid-template-columns: repeat(3, 1fr); }
-  .cal-summary-tile:nth-child(4), .cal-summary-tile:nth-child(5) { display: none; }
-}
-@media (max-width: 480px) {
-  .cal-summary-row { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* ---------- Month navigation ---------- */
-.cal-nav-row {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--sp-5);
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--card-border);
 }
-.cal-nav-btn {
+.act-item:first-child { border-top: none; padding-top: 0; }
+.act-item.needs-action { border-left: 3px solid var(--negative); padding-left: var(--sp-4); margin-left: calc(-1 * var(--sp-4)); }
+.act-item-main { flex: 1; min-width: 0; }
+.act-item-title { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.act-item-sub { margin-top: 2px; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.act-item-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); flex-shrink: 0; }
+
+.act-pill {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.act-pill.is-done { color: var(--positive); background: color-mix(in oklab, var(--positive) 14%, transparent); }
+.act-pill.is-due { color: color-mix(in oklab, var(--amber-2) 80%, var(--ink)); background: color-mix(in oklab, var(--amber-1) 28%, transparent); }
+.act-pill.is-overdue { color: var(--negative); background: color-mix(in oklab, var(--negative) 12%, transparent); }
+
+.act-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: var(--muted);
-  border: 1px solid var(--glass-quiet-border);
-  background: var(--glass-quiet-bg);
-  transition: color 0.15s ease, transform 0.15s ease;
-}
-.cal-nav-btn svg { width: 16px; height: 16px; }
-.cal-nav-btn:hover { color: var(--ink); transform: scale(1.05); }
-.cal-nav-center { display: flex; align-items: center; gap: var(--sp-3); }
-.cal-month-label { font-size: 17px; font-weight: 600; color: var(--ink); min-width: 160px; text-align: center; }
-.cal-today-btn {
-  font-size: 12px;
+  padding: 7px 14px;
+  min-height: 34px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
   font-weight: 500;
-  color: var(--muted);
-  padding: 5px 12px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--glass-quiet-border);
-  background: var(--glass-quiet-bg);
-}
-.cal-today-btn:hover { color: var(--ink); }
-
-/* ---------- Grid ---------- */
-.cal-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  margin-bottom: var(--sp-2);
-}
-.cal-weekdays span {
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding-bottom: var(--sp-2);
-}
-
-.cal-cells {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-}
-
-.cal-cell {
-  position: relative;
-  height: 60px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border-radius: var(--r-md);
-  border: 1px solid transparent;
-  background: transparent;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.cal-cell-outside { color: var(--card-border); opacity: 0.55; }
-.cal-cell-outside .cal-cell-day { color: inherit; }
-
-button.cal-cell { cursor: pointer; }
-button.cal-cell:hover { background: var(--glass-quiet-bg); }
-
-.cal-cell-day { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink); }
-
-.cal-cell.is-today { border-color: var(--card-border); background: var(--glass-quiet-bg); }
-.cal-cell.is-today .cal-cell-day { font-weight: 700; }
-
-.cal-cell.is-selected { background: color-mix(in oklab, var(--coral-2) 10%, transparent); border-color: var(--coral-2); }
-.cal-cell.is-selected .cal-cell-day { font-weight: 600; }
-
-.cal-cell-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--coral-2);
-}
-.cal-cell-count {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: var(--r-pill);
-  background: color-mix(in oklab, var(--coral-2) 16%, transparent);
   color: var(--coral-2);
+  background: color-mix(in oklab, var(--coral-2) 8%, white);
+  border: 1px solid color-mix(in oklab, var(--coral-2) 35%, transparent);
+  white-space: nowrap;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
+.act-btn:hover { transform: translateY(-1px); background: color-mix(in oklab, var(--coral-2) 14%, white); }
 
-@media (max-width: 560px) {
-  .cal-cell-day { font-size: 12px; }
-  .cal-cells { gap: 2px; }
-  .cal-month-label { min-width: 0; font-size: 15px; }
+.act-missing { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.act-missing-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.act-missing-name { font-size: 13.5px; color: var(--ink); min-width: 0; }
+
+.act-more { margin-top: var(--sp-4); font-size: 13px; color: var(--coral-2); font-weight: 500; }
+.act-more:hover { text-decoration: underline; }
+
+/* Signed-out month strip */
+.act-strip { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.act-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 52px; padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md); background: var(--glass-quiet-bg);
+  font-size: 12px; color: var(--muted);
 }
+.act-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grey-2); }
+.act-chip.is-done .act-chip-dot { background: var(--positive); }
+.act-chip.is-overdue .act-chip-dot { background: var(--negative); }
 
-/* ---------- Selected-day detail panel ---------- */
-.cal-detail-date {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  margin: 0 0 var(--sp-4);
-}
-.cal-detail-empty { font-size: 13.5px; color: var(--muted); }
-
-.cal-event-group { margin-bottom: var(--sp-5); }
-.cal-event-group:last-child { margin-bottom: 0; }
-.cal-event-group-label {
+/* ---------- Recent activity feed ---------- */
+.act-feed-month {
+  margin: var(--sp-5) 0 var(--sp-2);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 var(--sp-2);
 }
-.cal-event-row {
-  display: flex;
+.act-feed-month:first-child { margin-top: var(--sp-2); }
+.act-feed-row {
+  display: grid;
+  grid-template-columns: 52px 92px 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-2) 0;
+  gap: var(--sp-3);
+  padding: 10px 0;
   border-top: 1px solid var(--card-border);
   font-size: 13.5px;
 }
-.cal-event-row:first-of-type { border-top: none; padding-top: 0; }
-.cal-event-name { color: var(--ink); flex: 1; min-width: 0; }
-.cal-event-value { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cal-event-row.cal-event-total { border-top: 1px solid var(--card-border); margin-top: 2px; }
-.cal-event-row.cal-event-total .cal-event-name,
-.cal-event-row.cal-event-total .cal-event-value { color: var(--ink); font-weight: 600; }
-
-
-/* ---------- Monthly update check ---------- */
-.cal-check-strip { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.cal-check-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-width: 52px;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-md);
-  border: 1px solid transparent;
-  background: var(--glass-quiet-bg);
+.act-feed-month + .act-feed-row { border-top: none; }
+.act-feed-date { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.act-feed-type {
+  justify-self: start;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
   color: var(--muted);
-  font-size: 12px;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  background: color-mix(in oklab, var(--muted) 12%, transparent);
 }
-.cal-check-chip:hover { color: var(--ink); }
-.cal-check-chip.is-viewed { border-color: var(--coral-2); color: var(--ink); }
-.cal-check-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grey-2); }
-.cal-check-chip.is-ok .cal-check-dot { background: var(--positive); }
-.cal-check-chip.is-warn .cal-check-dot { background: var(--amber-2); }
-.cal-check-chip.is-pending .cal-check-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--amber-2); }
-.cal-check-chip.is-none .cal-check-dot { background: var(--grey-1); }
+.act-feed-type.type-buy, .act-feed-type.type-deposit { color: var(--positive); background: color-mix(in oklab, var(--positive) 14%, transparent); }
+.act-feed-type.type-sell, .act-feed-type.type-withdrawal { color: var(--negative); background: color-mix(in oklab, var(--negative) 12%, transparent); }
+.act-feed-name { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-feed-amount { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.cal-check-message { margin-top: var(--sp-4); font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: var(--sp-2); }
-.cal-check-message:empty { display: none; }
-.cal-check-alert {
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-md);
-  background: color-mix(in oklab, var(--amber-1) 22%, transparent);
-  color: var(--ink);
+@media (max-width: 560px) {
+  .act-item { flex-direction: column; gap: var(--sp-3); }
+  .act-item-side { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .act-feed-row { grid-template-columns: 44px 1fr auto; row-gap: 2px; }
+  .act-feed-type { grid-column: 2; grid-row: 1; }
+  .act-feed-name { grid-column: 2; grid-row: 2; }
+  .act-feed-date { grid-row: 1 / span 2; }
+  .act-feed-amount { grid-column: 3; grid-row: 1 / span 2; }
 }
-.cal-check-viewed.is-warn { color: var(--ink); }
 
-/* ---------- Month entries ---------- */
-.cal-event-date { width: 56px; flex-shrink: 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.cal-event-group-count { margin-left: 6px; font-weight: 400; color: var(--muted); }
-.cal-event-more { margin-top: var(--sp-2); font-size: 12px; color: var(--muted); }
+/* ---------- Add-value modal ---------- */
+#act-modal-root { position: fixed; inset: 0; z-index: 120; pointer-events: none; }
+#act-modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(23, 21, 26, 0.32);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity 0.25s ease;
+}
+#act-modal {
+  position: absolute; top: 50%; left: 50%;
+  width: min(400px, 92vw);
+  max-height: 90vh; overflow-y: auto;
+  padding: var(--sp-8);
+  border-radius: var(--r-3xl);
+  opacity: 0; transform: translate(-50%, -46%);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#act-modal-root.open { pointer-events: auto; }
+#act-modal-root.open #act-modal-backdrop { opacity: 1; }
+#act-modal-root.open #act-modal { opacity: 1; transform: translate(-50%, -50%); }
+
+.act-modal-context { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-2xl); margin: var(--sp-4) 0 var(--sp-2); }
+.act-modal-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.act-modal-hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+
+.act-form-field { margin-top: var(--sp-4); }
+.act-form-field label { display: block; font-size: 13px; color: var(--muted); }
+.act-form-field input {
+  margin-top: var(--sp-2); width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-quiet-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px; font-family: inherit;
+}
+.act-form-field input:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 1px; }
+.act-form-actions { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
+.act-form-cancel, .act-form-submit { flex: 1; padding: 12px; border-radius: var(--r-lg); font-weight: 500; font-size: 14px; }
+.act-form-cancel { background: var(--glass-quiet-bg); border: 1px solid var(--glass-quiet-border); color: var(--ink); }
+.act-form-submit { background: var(--ink); color: #fff; }
+.act-form-submit:disabled { opacity: 0.5; }
+.act-form-error { margin-top: var(--sp-3); font-size: 12.5px; color: var(--negative); min-height: 16px; }

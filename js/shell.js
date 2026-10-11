@@ -189,7 +189,7 @@ const NAV_CATEGORIES = [
       // and when" - the other pages each answer a different, non-
       // chronological question about the same underlying data). A
       // DERIVED view (calendar-events.js), never a new source of truth.
-      { label: "Calendar", href: "calendar.html" },
+      { label: "Activity", href: "calendar.html" },
     ],
   },
   {
