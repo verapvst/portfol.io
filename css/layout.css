@@ -9,7 +9,7 @@
 /* overflow-x:hidden on exactly one of html/body (not both - setting it on
    both, combined with height:100% on both, makes each its own independent
    scroll container and breaks normal single-scrollbar page scrolling). */
-html { overflow-x: hidden; }
+html { overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 
 body {
   font-family: var(--font);
@@ -110,6 +110,7 @@ svg.icon { stroke-width: 1.5; }
   margin: 0 auto;
   padding: var(--sp-6) clamp(16px, 3vw, 28px);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 #main {
@@ -173,7 +174,10 @@ svg.icon { stroke-width: 1.5; }
 
 /* Mobile: single column everywhere, tighter outer padding. */
 @media (max-width: 767px) {
-  #app { padding: var(--sp-4) var(--sp-3); }
+  /* Notch / rounded-corner safe areas (landscape phones). */
+  #app {
+    padding: var(--sp-4) max(var(--sp-3), env(safe-area-inset-right)) var(--sp-4) max(var(--sp-3), env(safe-area-inset-left));
+  }
   #main { padding-bottom: var(--sp-8); }
   .overview-columns, .overview-left, .overview-right { gap: var(--sp-4); }
 }

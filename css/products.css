@@ -92,6 +92,12 @@
 @media (max-width: 767px) {
   .product-table { min-width: 460px; }
 }
+/* Phones: show Product / TER / 1Y Return only (Rating and Data quality
+   live on the product page) - no sideways-scrolling table. */
+@media (max-width: 560px) {
+  .product-table { min-width: 0; }
+  .product-table th:nth-child(n+4), .product-table td:nth-child(n+4) { display: none; }
+}
 
 /* "Held" filter lives top-right of the card header: tabs when signed in,
    the shared inline lock when signed out. */

@@ -548,7 +548,10 @@ body.nav-open #nav-drawer { transform: translateX(0); }
    cards and the Performance card). Cards whose click targets are
    granular rows inside them (.drill-row) don't get a misleading
    pointer cursor over their empty padding. */
-.card.interactive:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+/* Hover lift only where hover exists - on touch it "sticks" after a tap. */
+@media (hover: hover) {
+  .card.interactive:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+}
 .card.interactive:focus-visible { outline: 2px solid var(--coral-2); outline-offset: 2px; }
 .card.interactive[data-drill-type] { cursor: pointer; }
 
@@ -649,7 +652,9 @@ th[data-info]:focus-visible {
 .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-6); }
 
 @media (max-width: 480px) {
-  .kpi-grid { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); }
+  .kpi-value { font-size: 1.375rem; }
+  .kpi-label { font-size: 12px; }
 }
 
 /* Icon sits immediately before the title, forming one horizontal header
@@ -1202,4 +1207,33 @@ th[data-info]:focus-visible {
 /* Phone width: pill groups wrap instead of overflowing the page. */
 @media (max-width: 560px) {
   .filter-pills { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-lg); }
+}
+
+
+/* ========== Mobile hardening (phones, ≤767px) ==========
+   One place for the cross-page phone rules. */
+@media (max-width: 767px) {
+  /* iOS Safari zooms the page on focus when an input's font is <16px. */
+  /* !important: page-specific form rules (14px) are more specific. */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Compact header: the greeting line is decoration, not information. */
+  .topbar { padding: var(--sp-4); }
+  .topbar-heading .greeting { display: none; }
+  .topbar-heading h1 { margin-top: 0; font-size: 1.5rem; }
+  .topbar-heading p { margin-top: 4px; font-size: 13px; }
+  .topbar-heading-group { gap: var(--sp-3); }
+
+  /* One padding for every card, so adjacent cards don't look mismatched. */
+  .card { padding: var(--sp-5); }
+  .kpi-card { padding: var(--sp-4); }
+
+  /* Wide control rows scroll sideways inside themselves, never clip. */
+  .tab-bar { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-btn, .filter-pill { white-space: nowrap; flex-shrink: 0; }
+
+  /* Comfortable touch targets. */
+  .tab-btn, .filter-pill { min-height: 36px; }
+  .icon-btn, .topbar-pill-btn { min-width: 44px; min-height: 44px; }
 }

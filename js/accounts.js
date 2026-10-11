@@ -227,7 +227,7 @@ function renderSignedOutState() {
   const container = $("accounts-table-container");
   container.innerHTML = `
     ${lockedHTML({ hint: "Your accounts and their balances are private." })}`;
-  $("add-account-btn").disabled = true;
+  $("add-account-btn").style.display = "none";
 }
 
 async function loadAccountsPage() {
@@ -246,6 +246,7 @@ async function loadAccountsPage() {
   }
 
   $("add-account-btn").disabled = false;
+  $("add-account-btn").style.display = "";
   container.innerHTML = `<p class="accounts-empty">Loading…</p>`;
 
   try {

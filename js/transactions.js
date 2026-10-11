@@ -484,8 +484,8 @@ function openTransactionModal(transactionId) {
 function renderSignedOutState() {
   const container = $("transactions-table-container");
   container.innerHTML = `
-    ${lockedHTML({ hint: "Every buy, sell, dividend and cash movement - dated and sourced." })}`;
-  $("add-transaction-btn").disabled = true;
+    ${lockedHTML({ hint: "Your transaction history is private." })}`;
+  $("add-transaction-btn").style.display = "none";
   $("transactions-toolbar").style.display = "none";
 }
 
@@ -528,6 +528,7 @@ async function loadTransactionsPage() {
     }
 
     $("add-transaction-btn").disabled = false;
+    $("add-transaction-btn").style.display = "";
     await loadTransactions();
     $("transactions-toolbar").style.display = "";
     renderTxnToolbar(container);
