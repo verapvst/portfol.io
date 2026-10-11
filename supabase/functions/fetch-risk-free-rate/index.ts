@@ -32,10 +32,17 @@ const ALPHAVANTAGE_API_KEY = Deno.env.get("ALPHAVANTAGE_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Only the standard Sharpe-ratio proxy maturity for now - a longer
-// maturity (e.g. '10year') is one more entry here, not a schema change
-// (risk_free_rates.maturity already supports it, 0021).
-const MATURITIES = [{ key: "3month", param: "3month" }];
+// 3-month is the Sharpe-ratio risk-free proxy; the rest are the US
+// Treasury curve points the Simulator shows as short / mid / long yields
+// (risk_free_rates.maturity already supports any of them, 0021 - one entry
+// here, not a schema change). A caller can fetch a subset on demand by
+// POSTing {"maturities": ["10year"]} (e.g. the Simulator's "refresh").
+const ALL_MATURITIES = ["3month", "2year", "5year", "10year", "30year"].map((m) => ({ key: m, param: m }));
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface AlphaVantageEconomicSeries {
   "Error Message"?: string;
@@ -53,10 +60,18 @@ async function fetchTreasuryYield(maturity: string): Promise<AlphaVantageEconomi
   return (await res.json()) as AlphaVantageEconomicSeries;
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (!ALPHAVANTAGE_API_KEY) {
-    return new Response(JSON.stringify({ error: "ALPHAVANTAGE_API_KEY not configured" }), { status: 500 });
+    return new Response(JSON.stringify({ error: "ALPHAVANTAGE_API_KEY not configured" }), { status: 500, headers: CORS });
   }
+
+  let requested: string[] | null = null;
+  try {
+    const body = await req.json();
+    if (Array.isArray(body?.maturities)) requested = body.maturities.map(String);
+  } catch (_) { /* no body (cron) = every maturity */ }
+  const MATURITIES = requested ? ALL_MATURITIES.filter((m) => requested!.includes(m.key)) : ALL_MATURITIES;
 
   const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const results: { maturity: string; status: string; rows?: number; error?: string }[] = [];
@@ -117,10 +132,12 @@ Deno.serve(async () => {
     }
 
     await db.from("benchmark_fetch_log").insert(logRow);
-    await new Promise((r) => setTimeout(r, 15000));
+    // Alpha Vantage's free tier limits calls per minute - space them out
+    // (skipped after the last one, so a single on-demand refresh is fast).
+    if (m !== MATURITIES[MATURITIES.length - 1]) await new Promise((r) => setTimeout(r, 13000));
   }
 
   return new Response(JSON.stringify({ processed: results.length, results }), {
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CORS, "Content-Type": "application/json" },
   });
 });
