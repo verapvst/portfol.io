@@ -50,8 +50,8 @@ function buildKpiViewModels(data) {
       // labelled as its own thing, never blended into the headline.
       key: "return", docKey: "investment-return", label: "Portfolio Return", icon: "trendingUp",
       value: returnPct,
-      deltaValue: owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : fmtPct(perf.unrealisedGainPct),
-      note: "unrealised gain",
+      deltaValue: owner ? fmtEUR(perf.unrealisedGain, { signed: true }) : null,
+      note: owner ? "unrealised gain" : "time-weighted, since inception",
       trend: sign(perf.totalReturnPct),
     },
     {
@@ -237,7 +237,7 @@ function renderCountryLegend(container, mapEl, data) {
   const countryRows = data.analytics.countries.map((c) => `
     <div class="legend-row drill-row" data-drill-type="country" data-drill-id="${c.iso}" data-code="${String(c.iso).padStart(3, "0")}" tabindex="0" role="button">
       <span class="legend-dot" style="background:var(--gradient-brand)"></span>
-      <span class="legend-name">${c.name}${c.proxy > 0.005 ? `<span class="legend-est" title="${c.proxy.toFixed(2)}% of this is estimated by proxy">est.</span>` : ""}</span>
+      <span class="legend-name">${c.name}${c.proxy / c.weight > 0.5 ? `<span class="legend-est" title="${c.proxy.toFixed(2)}% of this ${c.weight.toFixed(2)}% is estimated by proxy">est.</span>` : ""}</span>
       <span class="legend-value">${c.weight.toFixed(2)}%</span>
     </div>`).join("");
   // Every euro is attributed to a country now; the row only exists for the
@@ -328,7 +328,7 @@ const EXPOSURE_GROUPINGS = {
 function renderExposureAggregateOnly(elements, data) {
   const { tabsEl, vizEl, hintEl, titleEl } = elements;
   tabsEl.innerHTML = "";
-  hintEl.textContent = "Aggregated by region — sign in to see the full country-level map.";
+  hintEl.textContent = "Aggregated by region — log in to see which securities are behind each country.";
   titleEl.dataset.info = "exposure-region";
   vizEl.innerHTML = `<div class="legend-list" id="exposure-legend"></div>`;
   vizEl.querySelector("#exposure-legend").innerHTML = data.analytics.regions.map((r) => `

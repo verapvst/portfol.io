@@ -40,7 +40,7 @@ const FEATURES = {
   settings: {
     icon: "settings",
     title: "Settings",
-    description: "Manage your account, currency and timezone preferences, and how your data is imported and stored. Once this is a real page, it'll follow the same gated-preview pattern as Transactions - visible while signed out, private data hidden until you log in. This feature is currently under development.",
+    description: "Manage your account, currency and timezone preferences, and how your data is imported and stored. This feature is currently under development.",
   },
 };
 

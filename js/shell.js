@@ -462,6 +462,11 @@ function ensureTopbarCurtain() {
   document.body.appendChild(curtain);
 }
 
+/** The owner is greeted by name; a visitor just gets the time of day. */
+function greetingFor(user) {
+  return currentUser() ? `${timeGreeting()}, ${user.greetingName}` : timeGreeting();
+}
+
 function renderTopbar(container, user, { heading = "Portfolio Overview", subtitle = "Track, analyze and grow your wealth." } = {}) {
   ensureTopbarCurtain();
   container.innerHTML = `
@@ -470,7 +475,7 @@ function renderTopbar(container, user, { heading = "Portfolio Overview", subtitl
         <img src="assets/images/logo-icon.png" alt="Portfol.io">
       </button>
       <div class="topbar-heading">
-        <p class="greeting">${timeGreeting()}, ${user.greetingName}</p>
+        <p class="greeting">${greetingFor(user)}</p>
         <h1>${heading}</h1>
         <p>${subtitle}</p>
       </div>
@@ -481,6 +486,13 @@ function renderTopbar(container, user, { heading = "Portfolio Overview", subtitl
       <div id="auth-slot"></div>
       <a class="icon-btn glass-quiet" href="index.html" aria-label="Home - Overview" title="Home">${icon("home")}</a>
     </div>`;
+  // Auth resolves after first paint - re-greet when it does.
+  if (typeof onAuthChange === "function") {
+    onAuthChange(() => {
+      const el = container.querySelector(".greeting");
+      if (el) el.textContent = greetingFor(user);
+    });
+  }
 }
 
 /* ---------- Drill-down drawer ----------

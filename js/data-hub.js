@@ -380,8 +380,8 @@ function dbLoadBlockHTML(groupKey, group) {
   if (!currentUser()) {
     return `
       <div class="db-load-block">
-        <p class="db-load-signedout">Sign in to load this report straight into the database.
-          <button type="button" data-signin-cta>Sign In</button>
+        <p class="db-load-signedout">Log in to load this report straight into the database.
+          <button type="button" data-signin-cta>Log in</button>
         </p>
       </div>`;
   }
@@ -905,7 +905,7 @@ function initWeeklyCheckinModal() {
     const submitBtn = $("wc-form-submit");
     errorEl.textContent = "";
 
-    if (!currentUser()) { errorEl.textContent = "Sign in to save a check-in."; window.openAuthModal(); return; }
+    if (!currentUser()) { errorEl.textContent = "Log in to save a check-in."; window.openAuthModal(); return; }
 
     const date = $("wc-date").value;
     if (!date) { errorEl.textContent = "Date is required."; return; }
@@ -941,7 +941,7 @@ function initWeeklyCheckinModal() {
 async function openWeeklyCheckinModal() {
   const errorEl = $("wc-form-error");
   errorEl.textContent = "";
-  if (!currentUser()) { errorEl.textContent = "Sign in to use Weekly Check-in."; window.openAuthModal(); return; }
+  if (!currentUser()) { errorEl.textContent = "Log in to use Weekly Check-in."; window.openAuthModal(); return; }
 
   $("wc-date").value = mostRecentSunday();
   $("wc-table").innerHTML = `<tr><td>Loading…</td></tr>`;
@@ -1041,7 +1041,7 @@ function initWeeklyBenchmarkModal() {
     const submitBtn = $("wb-form-submit");
     errorEl.textContent = "";
 
-    if (!currentUser()) { errorEl.textContent = "Sign in to save benchmark levels."; window.openAuthModal(); return; }
+    if (!currentUser()) { errorEl.textContent = "Log in to save benchmark levels."; window.openAuthModal(); return; }
 
     const date = $("wb-date").value;
     if (!date) { errorEl.textContent = "Checkpoint date is required."; return; }
@@ -1102,7 +1102,7 @@ function initWeeklyBenchmarkModal() {
 async function openWeeklyBenchmarkModal() {
   const errorEl = $("wb-form-error");
   errorEl.textContent = "";
-  if (!currentUser()) { errorEl.textContent = "Sign in to use Weekly Benchmark Update."; window.openAuthModal(); return; }
+  if (!currentUser()) { errorEl.textContent = "Log in to use Weekly Benchmark Update."; window.openAuthModal(); return; }
 
   $("wb-date").value = mostRecentSunday();
   $("wb-table").innerHTML = `<tr><td>Loading…</td></tr>`;
@@ -1155,6 +1155,14 @@ function benchmarkTrackingMethodologyText(benchmarks) {
 async function renderBenchmarkTrackingCard() {
   const methodologyEl = $("benchmark-tracking-methodology");
   const tableEl = $("benchmark-tracking-table");
+
+  // Which weeks MY portfolio was checked in is private (every row would
+  // read "Missing" to a visitor, which looks broken, not private).
+  if (!currentUser()) {
+    methodologyEl.textContent = "";
+    tableEl.innerHTML = `<tr><td>${lockedHTML()}</td></tr>`;
+    return;
+  }
 
   const benchmarks = await loadBenchmarks();
   methodologyEl.textContent = benchmarkTrackingMethodologyText(benchmarks);
@@ -1250,7 +1258,7 @@ function initManualUpdateModal() {
     // does (same "make the limitation visible, not hidden" principle
     // as the rest of Data Hub) - only the actual write gates on
     // sign-in, and does so with a real prompt, not a silent RLS error.
-    if (!currentUser()) { errorEl.textContent = "Sign in to save updates."; window.openAuthModal(); return; }
+    if (!currentUser()) { errorEl.textContent = "Log in to save updates."; window.openAuthModal(); return; }
 
     const securityId = $("mu-security").value;
     const date = $("mu-date").value;
@@ -1539,7 +1547,7 @@ function initT212Modal() {
     const submitBtn = $("t212-confirm-btn");
     errorEl.textContent = "";
 
-    if (!currentUser()) { errorEl.textContent = "Sign in to save updates."; window.openAuthModal(); return; }
+    if (!currentUser()) { errorEl.textContent = "Log in to save updates."; window.openAuthModal(); return; }
 
     const date = $("t212-date").value;
     if (!date) { errorEl.textContent = "Choose a valuation date."; return; }
@@ -1846,7 +1854,7 @@ function initBpiScreenshotModal() {
     const submitBtn = $("bpi-confirm-btn");
     errorEl.textContent = "";
 
-    if (!currentUser()) { errorEl.textContent = "Sign in to save updates."; window.openAuthModal(); return; }
+    if (!currentUser()) { errorEl.textContent = "Log in to save updates."; window.openAuthModal(); return; }
 
     const date = $("bpi-date").value;
     if (!date) { errorEl.textContent = "Choose a valuation date."; return; }
@@ -1903,7 +1911,10 @@ function init() {
   initWeeklyBenchmarkModal();
   renderBenchmarkTrackingCard().catch((err) => console.warn("Benchmark tracking card unavailable:", err));
 
-  onAuthChange(() => loadDbContext().then(renderGroups));
+  onAuthChange(() => {
+    loadDbContext().then(renderGroups);
+    renderBenchmarkTrackingCard().catch((err) => console.warn("Benchmark tracking card unavailable:", err));
+  });
   initAuth().then(loadDbContext);
 }
 

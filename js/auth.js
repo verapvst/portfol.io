@@ -62,14 +62,14 @@ function initAuthButton(container) {
     const u = currentUser();
     btn.innerHTML = u
       ? `👤 <span class="label">${u.email}</span>`
-      : `👤 <span class="label">Sign In</span>`;
-    btn.setAttribute("aria-label", u ? "Sign out" : "Sign in");
+      : `👤 <span class="label">Log in</span>`;
+    btn.setAttribute("aria-label", u ? "Log out" : "Log in");
   };
   render();
 
   btn.addEventListener("click", () => {
     if (currentUser()) {
-      if (confirm(`Signed in as ${currentUser().email}. Sign out?`)) signOutUser();
+      if (confirm(`Logged in as ${currentUser().email}. Log out?`)) signOutUser();
     } else {
       window.openAuthModal();
     }
@@ -99,14 +99,14 @@ function initAuthModal() {
   root.id = "auth-modal-root";
   root.innerHTML = `
     <div id="auth-modal-backdrop"></div>
-    <div id="auth-modal" class="glass" role="dialog" aria-modal="true" aria-label="Sign in">
-      <h2 class="owner-modal-title" id="auth-modal-title">Sign In</h2>
+    <div id="auth-modal" class="glass" role="dialog" aria-modal="true" aria-label="Log in">
+      <h2 class="owner-modal-title" id="auth-modal-title">Log in</h2>
       <p class="owner-modal-label">Email</p>
       <input id="auth-email-input" class="owner-modal-input" type="email" autocomplete="username" spellcheck="false"/>
       <p class="owner-modal-label">Password</p>
       <input id="auth-password-input" class="owner-modal-input" type="password" autocomplete="current-password"/>
       <p class="owner-modal-error" id="auth-modal-error"></p>
-      <button id="auth-modal-submit" class="owner-modal-submit" type="button">Sign In</button>
+      <button id="auth-modal-submit" class="owner-modal-submit" type="button">Log in</button>
     </div>`;
   document.body.appendChild(root);
 

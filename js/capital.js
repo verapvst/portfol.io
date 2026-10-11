@@ -83,6 +83,11 @@ function renderValueChart(data) {
       formatAxisValue: owner ? undefined : (v) => String(Math.round(v)),
       formatDateLabel: formatDateTick,
     });
+    // Visitors see the SHAPE of the total (indexed to 100 at the start of
+    // this window), not euro amounts - and it moves with deposits, unlike
+    // the return curve on Performance. Say so.
+    $("cap-chart-caption").textContent = owner ? ""
+      : "Indexed to 100 at the start of this window - not euro amounts. Unlike the return curve on Performance, this moves with deposits and withdrawals.";
   };
   draw(activeRange);
 
@@ -122,7 +127,12 @@ function renderValueChart(data) {
 function renderContributions(data) {
   const card = $("contributions-card");
   const perf = data.analytics.performance;
-  if (perf.totalValue == null) { card.hidden = true; return; }
+  if (perf.totalValue == null) {
+    // Visitors: one lock in place of the money-in/money-out figures.
+    card.hidden = false;
+    $("contributions-body").innerHTML = lockedHTML({ hint: "Money in, money out, invested capital and gains." });
+    return;
+  }
   card.hidden = false;
   const owner = isOwnerMode();
 
