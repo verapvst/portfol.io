@@ -1604,6 +1604,16 @@ function riskFreeRateAsOf(riskFreeRates, date) {
   return best ? best.rate_pct : null;
 }
 
+/** Mean annualised risk-free rate over [from, to] (inclusive), from the
+    real observations inside that window; null if there are none. A
+    since-inception Sharpe/Alpha measured against TODAY's rate (4.2%) when
+    the average over the nine years was far lower understates both. */
+function riskFreeRateAverage(riskFreeRates, from, to) {
+  const inWindow = riskFreeRates.filter((r) => r.date >= from && r.date <= to && r.rate_pct != null);
+  if (!inWindow.length) return null;
+  return Math.round((inWindow.reduce((s, r) => s + Number(r.rate_pct), 0) / inWindow.length) * 100) / 100;
+}
+
 /** Sharpe = (annualised return - risk-free) / annualised volatility -
     null (never a divide-by-zero or a fabricated ratio) when any input
     is missing or volatility is exactly 0. */
@@ -1685,6 +1695,14 @@ function alignedReturnPairs(dailySeries, benchmarkSeries) {
   const pairs = [];
   for (let i = 1; i < inRange.length; i++) {
     const prevB = inRange[i - 1], currB = inRange[i];
+    // Never divide across the seam between the frozen real-index segment
+    // (SPX/NDX, ~7,800) and the later SPY/QQQ proxy segment (~770): that
+    // "return" is -90%, a scale change not a market move, and a single
+    // such pair is enough to flip Beta/Correlation/Alpha to ~0 or negative
+    // (found 2026-10: Beta -0.01, true value ~0.24). Same per-point
+    // segment test indexValueSeries() uses for the comparison chart.
+    const segment = (p) => p.instrumentType || p.symbol || null;
+    if (segment(prevB) !== segment(currB)) continue;
     const prevP = valueAt(prevB.date), currP = valueAt(currB.date);
     if (prevP == null || currP == null || prevP <= 0) continue;
     if (!prevB.value || !currB.value || prevB.value <= 0) continue;
@@ -1764,7 +1782,11 @@ function scopedQuantMetrics({ perf, benchmarkHistory = [], riskFreeRates = [], t
   const maxDrawdown = scopedMaxDrawdown(perf.subPeriods, thresholds);
   const totalDays = daysBetweenDates(perf.firstDate, perf.lastDate);
   const annualizedReturnPct = annualizeReturnPct(perf.totalReturnPct, totalDays, thresholds);
-  const riskFreeRatePct = riskFreeRates.length ? riskFreeRateAsOf(riskFreeRates, perf.lastDate) : null;
+  // Average over the period being measured, falling back to the latest
+  // observation only if the window has no rate data of its own.
+  const riskFreeRatePct = riskFreeRates.length
+    ? (riskFreeRateAverage(riskFreeRates, perf.firstDate, perf.lastDate) ?? riskFreeRateAsOf(riskFreeRates, perf.lastDate))
+    : null;
 
   const sharpe = sharpeRatio(annualizedReturnPct, volatility?.annualisedVolatilityPct ?? null, riskFreeRatePct);
   const sortino = scopedSortino(perf.subPeriods, annualizedReturnPct, riskFreeRatePct, thresholds);
@@ -1813,6 +1835,7 @@ window.scopedVolatility = scopedVolatility;
 window.scopedMaxDrawdown = scopedMaxDrawdown;
 window.annualizeReturnPct = annualizeReturnPct;
 window.riskFreeRateAsOf = riskFreeRateAsOf;
+window.riskFreeRateAverage = riskFreeRateAverage;
 window.sharpeRatio = sharpeRatio;
 window.scopedSortino = scopedSortino;
 window.alignedReturnPairs = alignedReturnPairs;

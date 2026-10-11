@@ -474,7 +474,7 @@ function renderQuantMetrics(data, scopeType, scopeId) {
     quantTileHTML({
       iconName: "target", label: "Sharpe Ratio", docKey: "quant-risk-metrics",
       value: quant.sharpe != null ? quant.sharpe.toFixed(2) : INSUFFICIENT,
-      note: quant.riskFreeRatePct != null ? `vs. ${fmtPct(quant.riskFreeRatePct, { signed: false })} risk-free` : "risk-free rate unavailable",
+      note: quant.riskFreeRatePct != null ? `vs. ${fmtPct(quant.riskFreeRatePct, { signed: false })} avg. risk-free` : "risk-free rate unavailable",
     }),
     quantTileHTML({
       iconName: "target", label: "Sortino Ratio", docKey: "quant-risk-metrics",
